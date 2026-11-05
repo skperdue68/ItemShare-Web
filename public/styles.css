@@ -1913,8 +1913,8 @@ th .sort-link {
   color: #ffffff;
 }
 
-/* The answer form: one whole number per row, then Save (green) beside it, and, on the
-   signed-in list, Not fulfilled (red) which is that same row saved as 0. */
+/* The answer form: one whole number per row, then Fulfilled (green) beside it, and, on
+   the signed-in list, Not fulfilled (red) which is that same row saved as 0. */
 .fulfill-shell {
   margin-top: 14px;
 }

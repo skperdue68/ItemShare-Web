@@ -1227,7 +1227,7 @@ async function answerOwnerRequest(form, submitter = null) {
     button.disabled = true;
   });
 
-  // Save and Not fulfilled are the same form, and which one was pressed is the whole
+  // Fulfilled and Not fulfilled are the same form, and which one was pressed is the whole
   // answer: a FormData built from the form alone leaves the submit button out.
   const body = new FormData(form);
 
