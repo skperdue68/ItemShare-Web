@@ -639,6 +639,7 @@ async function saveSomething(connection, person, guilds) {
     person: person.account,
     items: result.itemCount,
     where: describeLocations(person.items.map((_, index) => locationFor(person, index))),
+    held: (result.heldBack || []).length,
   };
 }
 
@@ -1035,7 +1036,13 @@ try {
           }
         } else {
           const done = await saveSomething(connection, person, guilds);
-          line = `${done.person} Inventory Refreshed - ${done.items} items: ${done.where}`;
+          line = `${done.person} Inventory Refreshed - ${done.items} items: ${done.where}${
+            done.held > 0
+              ? ` (${done.held} left as ${
+                  done.held === 1 ? 'it was' : 'they were'
+                }: requests still open)`
+              : ''
+          }`;
         }
 
         if (!line) {

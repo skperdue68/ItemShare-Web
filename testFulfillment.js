@@ -575,6 +575,49 @@ try {
   ok('Not fulfilled cancels the row', [notFulfilled.fulfilled, notFulfilled.cancelled], [0, 1]);
   ok('and the list is empty again', (await getOwnerRequests(connection, [OWNER])).length, 0);
 
+  console.log('\n11. An upload leaves an item alone while a request on it is open');
+  await uploadItems(connection, OWNER, [
+    { name: ITEM, count: 4 },
+    { name: SECOND, count: 9 },
+  ]);
+
+  const holdItem = (await getSharedItemsForViewer(connection, [ASKER])).find(
+    (row) => row.item_name === ITEM
+  );
+  await askFor(connection, askerId, Number(holdItem.id), 1);
+  await submitDrafts(connection, { userId: askerId });
+
+  const beforeHold = await availability(connection);
+  const refreshed = await uploadItems(connection, OWNER, [
+    { name: ITEM, count: 40 },
+    { name: SECOND, count: 6 },
+  ]);
+  const afterHold = await availability(connection);
+
+  ok('the asked-for item keeps the count it had', afterHold.total, beforeHold.total);
+  ok('its open request is still holding a copy', afterHold.reserved, 1);
+  ok(
+    'the upload names the item it left alone',
+    refreshed.heldBack.map((row) => [row.itemName, row.requests]),
+    [[ITEM, 1]]
+  );
+  ok(
+    'the rest of the file was refreshed',
+    Number(
+      (await getSharedItemsForViewer(connection, [ASKER])).find(
+        (row) => row.item_name === SECOND
+      ).item_count
+    ),
+    6
+  );
+
+  const heldHistory = await getRequesterRequests(connection, askerId);
+  ok(
+    'the request it protected is still waiting',
+    heldHistory.some((row) => row.status === 'pending' && row.item_name === ITEM),
+    true
+  );
+
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
 } catch (error) {

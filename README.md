@@ -958,6 +958,12 @@ pending, and the same link answers them later.
 - Free copies are `item_count - outstanding requests - copies mailed since the owner's last
   upload`. That last term is why a handover shows up at once, and why it is not subtracted
   twice: the next upload's own count already leaves those copies out.
+- **An upload never rewrites an item that still has an open request on it.** The file was
+  written before the owner answered, so its count no longer describes the bag those copies
+  will leave; taking it would re-offer what is promised and could cancel a request that is
+  answerable. The row keeps the numbers it had, everything else in the file refreshes, and
+  the upload says so: *Pending requests for Soul Gem (2), so its inventory was not refreshed.*
+  Answer the requests, upload again, and the new count arrives.
 
 `npm run test:fulfillment` walks exactly that sequence against a real database: it runs
 every migration, shares ten copies, asks for three, answers "two sent", then uploads eight

@@ -1337,6 +1337,19 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
   const uploadedItems = uploaded.reduce((sum, entry) => sum + (Number(entry.itemCount) || 0), 0);
   const uploadedAccounts = uploaded.map((entry) => entry.accountName).filter(Boolean);
 
+  // Rows an upload deliberately left alone, because somebody is still waiting on them.
+  const heldBack = uploaded.flatMap((entry) =>
+    (entry.heldBack || []).map((item) => ({ accountName: entry.accountName, ...item }))
+  );
+
+  if (heldBack.length > 0) {
+    console.warn(
+      `Upload: left ${heldBack.length} item${heldBack.length === 1 ? '' : 's'} as they were because requests are still open - ${heldBack
+        .map((item) => `${item.itemName} (${item.requests})`)
+        .join(', ')}`
+    );
+  }
+
   notifyItemsChanged(
     'upload',
     `${uploadedAccounts.join(', ') || 'An account'} uploaded ${uploadedItems} item${
@@ -1375,6 +1388,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
     alwaysShareCount: uploaded.reduce((sum, entry) => sum + entry.alwaysShareCount, 0),
     removedItems: uploaded.reduce((sum, entry) => sum + (entry.removedItems || 0), 0),
     cancelledRequests: uploaded.reduce((sum, entry) => sum + (entry.cancelledRequests || 0), 0),
+    heldBack,
     totalQuantity: uploaded.reduce((sum, entry) => sum + entry.totalQuantity, 0),
     guildCount: parsed.guilds.size,
     iconLookup,
