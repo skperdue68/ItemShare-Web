@@ -671,6 +671,20 @@ token, and its own log line names both fingerprints, so the comparison works fro
 end. The simulator also catches the quiet case where `dotenv` ignored `.env` because the
 variable was already exported in the shell.
 
+The site says the same thing about itself at start-up - which token it holds, when it read
+it, and from which file:
+
+```
+Live pushes: on - this site holds 4b1f0e93, loaded at 2026-11-05 17:20:31 UTC from /srv/itemshare/.env
+Live pushes: off - no SIMULATE_TOKEN in /srv/itemshare/.env when this site started at 2026-11-05 17:20:31 UTC; set one and restart to let npm run simulate refresh open pages
+```
+
+If `.env` is edited while the site is running, the next refused nudge says so instead of
+leaving you to wonder why the value on disk does not work: *`.env now holds 7229d63d, and
+this process loaded 4b1f0e93 at ... - the file changed afterwards, so restart the site`*.
+A token exported in the shell is reported as coming from the environment rather than from
+the file, because that is where the running value actually came from.
+
 The address it asks is `BASE_URL`, the same value the site builds its own links and
 sign-in redirects from, so a reverse proxy, another port or another host needs no extra
 setting - and if `BASE_URL` is unset it falls back to `http://127.0.0.1:$PORT`. Use

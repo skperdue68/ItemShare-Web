@@ -7,7 +7,7 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { tokenFingerprint } from './lib/simulateToken.js';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -72,6 +72,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, '.env');
 const hasEnvFile = existsSync(envPath);
 dotenv.config({ path: envPath });
+
+// When this process read .env. Every token in the log belongs to this moment, which is
+// what makes "I changed .env" visibly different from "this site is using it".
+const STARTED_LABEL = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
 const PORT = Number(process.env.PORT || 3000);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -1500,6 +1504,56 @@ async function backfillIcons(reason) {
 // the endpoint off unless someone deliberately set one.
 const SIMULATE_TOKEN = String(process.env.SIMULATE_TOKEN || '').trim();
 
+/** What `.env` holds for SIMULATE_TOKEN right now. '' when there is no file or no value. */
+function simulateTokenInFile() {
+  try {
+    return String(dotenv.parse(readFileSync(envPath)).SIMULATE_TOKEN || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** A fingerprint, or the words for "there is none" - never the token itself. */
+const describeToken = (value) => (value ? tokenFingerprint(value) : 'no token');
+
+// Where the running value came from, decided once. A value exported in the environment
+// wins over the file without dotenv saying so, and the log must not claim the file then.
+const SIMULATE_TOKEN_SOURCE = (() => {
+  const fromFile = simulateTokenInFile();
+
+  return fromFile && fromFile === SIMULATE_TOKEN ? envPath : 'the environment';
+})();
+
+/**
+ * Why the file and this process disagree, in the words that match the cause. A token
+ * exported in the shell outranks the file, and a file edited after start-up cannot be in
+ * this process - telling somebody "the file changed" when the file is right and the shell
+ * is wrong sends them to edit the wrong thing.
+ */
+function simulateTokenDrift() {
+  if (!hasEnvFile) {
+    return '';
+  }
+
+  const onDisk = simulateTokenInFile();
+
+  if (!onDisk || onDisk === SIMULATE_TOKEN) {
+    return '';
+  }
+
+  return SIMULATE_TOKEN_SOURCE === 'the environment'
+    ? ` ${envPath} holds ${describeToken(
+        onDisk
+      )}, but this process took ${describeToken(
+        SIMULATE_TOKEN
+      )} from the environment (dotenv never overwrites a variable that is already set), so the file was ignored. Unset SIMULATE_TOKEN for this process, or change it to match the file.`
+    : ` ${envPath} now holds ${describeToken(
+        onDisk
+      )}, and this process loaded ${describeToken(
+        SIMULATE_TOKEN
+      )} at ${STARTED_LABEL} - the file changed afterwards, so restart the site.`;
+}
+
 // The same fingerprint function the simulator uses (lib/simulateToken.js), so the two log
 // lines compare directly: same number, same token; different number, a second .env or a
 // site that was never restarted after the token was set.
@@ -1523,14 +1577,18 @@ function simulateTokenMatches(given) {
 function refuseSimulate(res, token) {
   if (!simulateRefusalLogged) {
     simulateRefusalLogged = true;
+    // The most confusing case is a token that was added or changed after this process
+    // read the file: the value in .env looks right and this process cannot see it yet.
+    const changed = simulateTokenDrift();
+
     console.warn(
       SIMULATE_TOKEN
         ? `[SIMULATE] nudge refused: the run sent ${
             token ? `token ${tokenFingerprint(token)}` : 'no token at all'
-          }, this site holds ${tokenFingerprint(
+          }, this site holds ${describeToken(
             SIMULATE_TOKEN
-          )}. Both must read the same SIMULATE_TOKEN, from the .env this site loaded when it started.`
-        : '[SIMULATE] nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden. Set it in .env and restart the site.'
+          )}, loaded at ${STARTED_LABEL} from ${SIMULATE_TOKEN_SOURCE}.${changed}`
+        : `[SIMULATE] nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden.${changed}`
     );
   }
 
@@ -1713,11 +1771,31 @@ httpServer.listen(PORT, () => {
       ? `Sign-in providers: ${enabledProviders.map((provider) => provider.label).join(', ')}`
       : 'Sign-in providers: none (set DISCORD_* or GOOGLE_* env vars)'
   );
-  console.log(
-    SIMULATE_TOKEN
-      ? `Live pushes: armed for npm run simulate (token ${tokenFingerprint(SIMULATE_TOKEN)})`
-      : 'Live pushes: off - set SIMULATE_TOKEN in .env and restart to let npm run simulate refresh open pages'
-  );
+  // What a simulator run will be met with, and where that value came from. "Armed" hid
+  // the two things a person actually needs: which file was read, and when - a token set
+  // afterwards cannot be in this process, and the warning below says so in words.
+  const tokenOnDisk = hasEnvFile ? simulateTokenInFile() : '';
+
+  if (SIMULATE_TOKEN) {
+    console.log(
+      `Live pushes: on - this site holds ${describeToken(
+        SIMULATE_TOKEN
+      )}, loaded at ${STARTED_LABEL} from ${SIMULATE_TOKEN_SOURCE}`
+    );
+  } else {
+    console.log(
+      `Live pushes: off - no SIMULATE_TOKEN ${
+        hasEnvFile ? `in ${envPath}` : `and no .env at ${envPath}`
+      } when this site started at ${STARTED_LABEL}; set one and restart to let npm run simulate refresh open pages`
+    );
+  }
+
+  const drift = simulateTokenDrift();
+
+  if (drift) {
+    console.warn(`Live pushes:${drift}`);
+  }
+
   console.log(`Env file: ${hasEnvFile ? envPath : `${envPath} not found - copy .env.example to .env`}`);
   console.log(`Sign-in stays active for ${SESSION_TTL_DAYS} days (SESSION_TTL_DAYS), stored in MariaDB`);
   console.log(
