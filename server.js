@@ -285,7 +285,9 @@ async function emailOwners({ user, submitted, contacts }) {
   }
 
   console.log(
-    `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${skipped ? `, ${skipped} failed` : ''}`
+    `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${
+      skipped ? `, ${skipped} failed` : ''
+    }${config.overrideTo ? ` (all to ${config.overrideTo}, from EMAIL_OVERRIDE_TO)` : ''}`
   );
 
   return { sent, skipped };

@@ -393,6 +393,19 @@ so a request to an unclaimed account sends nothing. With no transport configured
 site works normally and the log says
 `Email: N request emails not sent - set EMAIL_FROM ...`.
 
+Two settings keep testing out of a guildmate's inbox:
+
+- `EMAIL_OVERRIDE_TO=you@example.com` sends **every** message to that address instead of
+the owner's. The message is the real one - what lands in your inbox is what the owner
+would have read - with three additions saying where it would have gone: a dashed notice
+above it, a `[Test: owner@example.com]` subject prefix, and a first line in the plain-text
+copy. A misspelled address sends nothing at all and says so in the log, rather than
+falling back to the real owners.
+- `EMAIL_TRANSPORT=none` turns mail off entirely. Requests still record, and the owner
+still sees them on their own list; the log says `Email: N request emails not sent - mail
+is turned off with EMAIL_TRANSPORT=none`. Use it once mail is verified, until the site is
+live for people outside the testing.
+
 `npm run email:test -- you@example.com` sends one of these messages through exactly the
 configuration the site uses, printing the transport, sender and subject first, then the
 result. It opens no database connection and changes nothing, so it separates "the mail
@@ -751,9 +764,11 @@ Handing an item over in game is not recorded, so nothing here moves a request fr
 ### npm run email:test
 
 Sends one request email through exactly the configuration the site uses - `EMAIL_FROM`,
-`EMAIL_TRANSPORT`, `SENDMAIL_PATH` or `RESEND_API_KEY`. It prints the transport, sender
-and subject first, then the result, and it sends a two-item sample message so the quality
-colours and detail lines can be seen in a real inbox.
+`EMAIL_TRANSPORT`, `SENDMAIL_PATH`, `RESEND_API_KEY` and `EMAIL_OVERRIDE_TO`. It prints the
+transport, sender and subject first - and the redirect, when an override is set, because
+the address on the command line is then not where the message goes - then the result, and
+it sends a two-item sample message so the quality colours and detail lines can be seen in
+a real inbox.
 
 The address is a plain argument, not a flag, and it must contain an `@`:
 
@@ -919,9 +934,10 @@ address, not just `localhost`.
 once so the account and its guilds are known; `npm run seed:demo` gives the Request tab
 something in it before a second person uploads.
 
-**`Email: N request emails not sent`** - no transport. `EMAIL_FROM` is blank, or there is
-neither a `sendmail` on the host nor a `RESEND_API_KEY`. `npm run email:test -- you@example.com`
-reports which.
+**`Email: N request emails not sent`** - no transport, or mail turned off. `EMAIL_FROM` is
+blank, `EMAIL_TRANSPORT=none` is set, or there is neither a `sendmail` on the host nor a
+`RESEND_API_KEY`. `npm run email:test -- you@example.com` reports which, including an
+`EMAIL_OVERRIDE_TO` that is not an address.
 
 ## Answering a request
 
