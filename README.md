@@ -947,23 +947,29 @@ blank, `EMAIL_TRANSPORT=none` is set, or there is neither a `sendmail` on the ho
 
 ## Answering a request
 
-Every request email carries a form: one row per name, the number asked for already in its
-box, and a **Save** button on that row. The owner sets a row to what actually left their
-bag and saves it. `0` means nothing was sent from that row, and that request is cancelled.
+A request email is a note, not a form: the names asked for, how many of each, the ESO name
+to mail them to, and one link at the end. Gmail and several other webmail clients strip
+`<form>` elements out of HTML, so a Save button inside the message did nothing when it was
+pressed - the answer was lost with no error shown. Nothing in the message is submitted any
+more, and no number in it is editable.
+
+The link goes straight to `/requests/fulfill/:token`, the page that answers this message:
+no sign-in, no dashboard, nothing to search for. The owner sets a row to what actually
+left their bag, saves it, and `0` means nothing was sent from that row - which cancels it.
 
 A message is rarely answered in one go - half a stack today, the rest next week - so each
 row is submitted on its own. Saving one row records only that row: the others stay
 pending, and the same link answers them later.
 
-- The form posts to `/requests/fulfill/:token`, one row at a time. The token is
+- Each row saves on `/requests/fulfill/:token`, one row at a time. The token is
   unguessable, stored only as a SHA-256 hash, and expires after 30 days. It is cleared from
   the rows it answers, so the link keeps working for the rest of the message and stops
   working for a row already recorded - a double click or a link a mail client prefetched
   changes nothing.
-- A Save button posts that row's `row` and `quantity`. A page opened before per-row saving
-  still works: `quantity_<id>` fields are read the same way.
-- GET shows the form and POST records it. The link in the message exists because most mail
-  clients strip forms out of HTML, so the same form is also a page on the site.
+- A **Save** button on that page posts that row's `row` and `quantity`. A page opened
+  before per-row saving still works: `quantity_<id>` fields are read the same way.
+- GET shows the page and POST records a row. A mail client is never trusted with a form,
+  so this page is the only way a message gets answered.
 - The same answering is **Requests for me**, reachable from the account menu. It opens as
   a modal over the item list rather than replacing it, so answering costs one small
   request and the list underneath is still where it was; Escape, the large white close
@@ -983,9 +989,9 @@ pending, and the same link answers them later.
   its own date order; a grouped row shows the oldest ask, and its tooltip names the newest.
 - **Fulfilled** (green) records the number in the box as mailed. **Not fulfilled** (red)
   is the same form saved as `0`: nothing was sent, so the request is cancelled with the
-  owner's reason on it. Both sit beside the number rather than under it. The email form
-  calls the green button **Save**, because in a message it is a save of that row rather
-  than a claim about the whole stack.
+  owner's reason on it. Both sit beside the number rather than under it. The page a
+  request email links to calls the green button **Save**, because there it is a save of
+  that row rather than a claim about the whole stack.
 - **Requested** is the total asked for; **Amount Sent** is the number the owner typed.
 - The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
   was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the

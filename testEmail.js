@@ -42,12 +42,12 @@ const message = renderRequestEmail({
   ],
   siteUrl: config.siteUrl,
   // Real messages carry a token issued for their own rows; this one is a sample, so the
-  // form is here to look at but cannot record anything.
-  formUrl: config.siteUrl ? `${config.siteUrl}/requests/fulfill/${sampleToken}` : '',
+  // link is here to look at but opens a page that records nothing.
+  answerUrl: config.siteUrl ? `${config.siteUrl}/requests/fulfill/${sampleToken}` : '',
 });
 
 if (message.html.includes(sampleToken)) {
-  console.log('The Save buttons use a sample link: they open the form, but record nothing.');
+  console.log('The Answer button uses a sample link: it opens the page, but records nothing.');
 }
 
 console.log(
