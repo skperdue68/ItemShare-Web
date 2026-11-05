@@ -43,6 +43,7 @@ import {
   issueRequestEmailToken,
   linkAccountToUser,
   recordFulfillment,
+  recordOwnerGroupAnswer,
   recordOwnerAnswer,
   replaceAccounts,
   setBrowsingAccount,
@@ -699,6 +700,42 @@ function readAnsweredCounts(value) {
   return match ? { fulfilled: Number(match[1]), cancelled: Number(match[2]) } : null;
 }
 
+/**
+ * The answer posted by the owner's own list: one number for one item, and a `group`
+ * naming the oldest pending request for it, because that is the row the list put the
+ * rest of that item's asks under. `action=none` is the Not fulfilled button, which is
+ * the same form saved as 0.
+ */
+function readOwnerAnswer(body) {
+  const fields = body || {};
+  const anchorId = Number(String(fields.group ?? '').trim());
+  const typed = String(fields.quantity ?? '').trim();
+
+  if (!Number.isInteger(anchorId) || anchorId <= 0) {
+    return {
+      anchorId: 0,
+      sent: 0,
+      typed,
+      error: 'That form had nothing to record. Reload the list and try again.',
+    };
+  }
+
+  if (String(fields.action || '') === 'none') {
+    return { anchorId, sent: 0, typed, error: '' };
+  }
+
+  if (!/^\d+$/.test(typed)) {
+    return {
+      anchorId,
+      sent: 0,
+      typed,
+      error: 'That box needs a whole number: how many you sent, or 0 for none.',
+    };
+  }
+
+  return { anchorId, sent: Number(typed), typed, error: '' };
+}
+
 function signedOutOwnerPage(req, res) {
   sendPage(req, res, 401, {
     heading: 'Sign in to see what is waiting on your items',
@@ -756,7 +793,8 @@ app.post('/owner/requests', async (req, res) => {
     return;
   }
 
-  const { sent, error: invalid } = readSentQuantities(req.body);
+  const answer = readOwnerAnswer(req.body);
+  const invalid = answer.error;
 
   // The list is reloaded for every outcome, because an answer changes what is in it.
   const renderList = async (status, notice) => {
@@ -777,7 +815,7 @@ app.post('/owner/requests', async (req, res) => {
         accounts: data.accounts,
         rows: data.requests,
         notice,
-        values: sent,
+        values: answer.anchorId > 0 ? new Map([[answer.anchorId, answer.typed]]) : new Map(),
         user,
         providers: enabledProviders,
       })
@@ -802,9 +840,10 @@ app.post('/owner/requests', async (req, res) => {
     const outcome = await withDatabase(async (connection) => {
       const accounts = await getViewerAccounts(connection, user.id);
 
-      return recordOwnerAnswer(connection, {
+      return recordOwnerGroupAnswer(connection, {
         accountNames: accounts.map((row) => row.eso_account_name),
-        sentById: sent,
+        anchorId: answer.anchorId,
+        sent: answer.sent,
       });
     });
 
@@ -1298,6 +1337,19 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
   const uploadedItems = uploaded.reduce((sum, entry) => sum + (Number(entry.itemCount) || 0), 0);
   const uploadedAccounts = uploaded.map((entry) => entry.accountName).filter(Boolean);
 
+  // Rows an upload deliberately left alone, because somebody is still waiting on them.
+  const heldBack = uploaded.flatMap((entry) =>
+    (entry.heldBack || []).map((item) => ({ accountName: entry.accountName, ...item }))
+  );
+
+  if (heldBack.length > 0) {
+    console.warn(
+      `Upload: left ${heldBack.length} item${heldBack.length === 1 ? '' : 's'} as they were because requests are still open - ${heldBack
+        .map((item) => `${item.itemName} (${item.requests})`)
+        .join(', ')}`
+    );
+  }
+
   notifyItemsChanged(
     'upload',
     `${uploadedAccounts.join(', ') || 'An account'} uploaded ${uploadedItems} item${
@@ -1336,6 +1388,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
     alwaysShareCount: uploaded.reduce((sum, entry) => sum + entry.alwaysShareCount, 0),
     removedItems: uploaded.reduce((sum, entry) => sum + (entry.removedItems || 0), 0),
     cancelledRequests: uploaded.reduce((sum, entry) => sum + (entry.cancelledRequests || 0), 0),
+    heldBack,
     totalQuantity: uploaded.reduce((sum, entry) => sum + entry.totalQuantity, 0),
     guildCount: parsed.guilds.size,
     iconLookup,

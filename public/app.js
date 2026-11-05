@@ -90,6 +90,12 @@ async function uploadFile(file) {
           (account) =>
             `${account.accountName}: ${account.itemCount} item${account.itemCount === 1 ? '' : 's'}, quantity ${account.totalQuantity}`
         ),
+        // An item with requests still open was not refreshed from this file, so the
+        // count on screen is the one the requests were made against.
+        ...(result.heldBack || []).map(
+          (item) =>
+            `Pending requests for ${item.itemName} (${item.requests}), so its inventory was not refreshed.`
+        ),
         icons,
       ]
         .filter(Boolean)

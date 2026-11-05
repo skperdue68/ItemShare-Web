@@ -6,7 +6,7 @@
 //   npm run simulate -- --every 4000     one action every four seconds
 //   npm run simulate -- --rounds 12      stop after twelve actions
 //   npm run simulate -- --once           exactly one action, then exit
-//   npm run simulate -- --only requests  asking, sending, cancelling and timing out
+//   npm run simulate -- --only requests  asking, sending, answering, cancelling, timing out
 //   npm run simulate -- --only items     just people re-saving their files
 //   npm run simulate -- --reset          remove the simulated people and their data
 //   npm run simulate -- --url <address>  ask a different site to announce the changes
@@ -39,6 +39,7 @@ import {
   expireDueDrafts,
   getBasketRows,
   getSharedItemsForViewer,
+  recordOwnerGroupAnswer,
   replaceAccounts,
   submitDrafts,
 } from './lib/store.js';
@@ -408,14 +409,19 @@ async function sharedGuilds(connection, accounts) {
 }
 
 /**
- * Asks for something of the real owner's, the way someone browsing the Request tab
+ * Asks for something a guildmate has spare, the way someone browsing the Request tab
  * would: the copies that are free, a quantity that fits, and usually a send.
+ *
+ * Anything visible will do, and that includes the other simulated people's items - they
+ * are guildmates with spares like anyone else, and skipping them left every request
+ * landing on the one real owner. Only this person's own account is left out, because the
+ * store refuses a request for your own copy.
  */
-async function requestSomething(connection, person, mine, { send = Math.random() < 0.5 } = {}) {
-  const rows = await getSharedItemsForViewer(connection, [person.account], { limit: 200 });
+async function requestSomething(connection, person, { send = Math.random() < 0.5 } = {}) {
+  const rows = await getSharedItemsForViewer(connection, [person.account], { limit: 500 });
   const candidates = rows.filter(
     (row) =>
-      mine.includes(String(row.account_name)) &&
+      String(row.account_name) !== person.account &&
       Number(row.item_count) > Number(row.reserved || 0)
   );
 
@@ -459,13 +465,13 @@ async function requestSomething(connection, person, mine, { send = Math.random()
  * the site emails the owner about; here the sentence says who would have been
  * emailed rather than sending anything.
  */
-async function sendBasket(connection, person, mine) {
+async function sendBasket(connection, person) {
   let rows = (await getBasketRows(connection, person.userId)).filter(
     (row) => row.status === 'draft'
   );
 
   if (rows.length === 0) {
-    const asked = await requestSomething(connection, person, mine, { send: false });
+    const asked = await requestSomething(connection, person, { send: false });
 
     if (!asked || !asked.item) {
       return null;
@@ -523,8 +529,8 @@ async function removeFromBasket(connection, person) {
  * past its deadline and the site's own sweeper is run: the rows end up exactly as
  * they would for somebody who walked away and came back.
  */
-async function timeoutBasket(connection, person, mine) {
-  const asked = await requestSomething(connection, person, mine, { send: false });
+async function timeoutBasket(connection, person) {
+  const asked = await requestSomething(connection, person, { send: false });
 
   if (!asked || !asked.item) {
     return null;
@@ -540,6 +546,59 @@ async function timeoutBasket(connection, person, mine) {
   const expired = await expireDueDrafts(connection);
 
   return expired > 0 ? { person: person.account, item: asked.item } : null;
+}
+
+/**
+ * The owner's side of a request: answers something waiting on this person's own items,
+ * either sending part or all of it or saying there was nothing to send. Without this
+ * every simulated request stayed pending for ever, so a requester's history never showed
+ * a handover and the database only ever held asks nobody had touched.
+ *
+ * It goes through the same store function the signed-in list uses, oldest ask first, so
+ * the copies it sends leave the free count exactly as a real answer would.
+ */
+async function answerRequest(connection, person) {
+  const [rows] = await connection.execute(
+    `SELECT id, item_name, requester_account_name, quantity, quantity_requested
+       FROM itemshare_requests
+      WHERE status = 'pending' AND owner_account_name = ?
+      ORDER BY COALESCE(submitted_at, created_at) ASC, id ASC
+      LIMIT 1`,
+    [person.account]
+  );
+  const row = rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  const asked = Math.max(1, Number(row.quantity_requested) || Number(row.quantity) || 1);
+  const roll = Math.random();
+  // Sometimes nothing could be sent, sometimes part of it, sometimes all of it.
+  const sent =
+    roll < 0.25
+      ? 0
+      : roll < 0.65
+        ? 1 + Math.floor(Math.random() * Math.max(1, asked - 1))
+        : asked;
+  const outcome = await recordOwnerGroupAnswer(connection, {
+    accountNames: [person.account],
+    anchorId: Number(row.id),
+    sent,
+  });
+
+  if (!outcome || outcome.fulfilled + outcome.cancelled === 0) {
+    return null;
+  }
+
+  return {
+    person: person.account,
+    requester: String(row.requester_account_name || 'someone'),
+    item: String(row.item_name || 'an item'),
+    asked,
+    copies: outcome.copies,
+    sentNothing: outcome.copies === 0,
+  };
 }
 
 /** Names a few items for one log sentence without dumping a whole basket into it. */
@@ -580,6 +639,7 @@ async function saveSomething(connection, person, guilds) {
     person: person.account,
     items: result.itemCount,
     where: describeLocations(person.items.map((_, index) => locationFor(person, index))),
+    held: (result.heldBack || []).length,
   };
 }
 
@@ -754,12 +814,11 @@ async function nudge(summary) {
       });
     }
 
-    const result = await response.json().catch(() => ({}));
-    const clients = Number(result.clients) || 0;
-
-    return clients === 0
-      ? 'live: no pages open to refresh'
-      : `live: ${clients} open page${clients === 1 ? '' : 's'} told to refresh`;
+    // Delivered, and that is the whole of it. How many pages were open is a detail the
+    // site already prints on its own `Live:` line, because the site is the one holding
+    // the connections; repeating it here put a second line under every action for a
+    // number nobody acts on.
+    return '';
   } catch (error) {
     return `live: could not reach the site on ${SITE_URL} (${error.message})`;
   }
@@ -802,7 +861,13 @@ const rounds = once
   : Number.isFinite(wanted) && wanted > 0
     ? Math.trunc(wanted)
     : Number.POSITIVE_INFINITY;
-const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 30000));
+// `--every 0` means no pause, and 0 is falsy: treating an absent flag and a zero the
+// same way made the documented "0 runs with no pause" wait thirty seconds an action.
+const everyGiven = valueAfter('--every');
+const every = Math.max(
+  0,
+  everyGiven === '' ? (once ? 0 : 30000) : Number(everyGiven) || 0
+);
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
 const SITE = siteBaseUrl();
@@ -890,8 +955,8 @@ try {
         only === 'items'
           ? ['save']
           : only === 'requests'
-            ? ['request', 'send', 'cancel', 'timeout']
-            : ['request', 'send', 'cancel', 'timeout', 'save'];
+            ? ['request', 'send', 'answer', 'cancel', 'timeout']
+            : ['request', 'send', 'answer', 'cancel', 'timeout', 'save'];
 
       say(
         `Simulating ${PEOPLE.length} people into ${guilds.size} guild${
@@ -899,7 +964,7 @@ try {
         } alongside ${mine.join(', ')}.`
       );
       say(
-        `${only ? `Only ${only}` : 'A mix of asks, sends, cancels, timeouts and re-saves'}${
+        `${only ? `Only ${only}` : 'A mix of asks, sends, answers, cancels, timeouts and re-saves'}${
           Number.isFinite(rounds)
             ? `, ${rounds} action${rounds === 1 ? '' : 's'}`
             : ', running until you stop it'
@@ -920,7 +985,7 @@ try {
         let line = '';
 
         if (action === 'request') {
-          const done = await requestSomething(connection, person, mine);
+          const done = await requestSomething(connection, person);
 
           if (done && done.item) {
             line = `${done.person} asked ${done.owner} for ${done.quantity} x ${done.item}${
@@ -928,7 +993,7 @@ try {
             }`;
           }
         } else if (action === 'send') {
-          const done = await sendBasket(connection, person, mine);
+          const done = await sendBasket(connection, person);
 
           if (done) {
             line = `${done.person} sent ${done.sent} request${
@@ -949,16 +1014,35 @@ try {
             } before it was sent`;
           }
         } else if (action === 'timeout') {
-          const done = await timeoutBasket(connection, person, mine);
+          const done = await timeoutBasket(connection, person);
 
           if (done) {
             line = `${done.person} let the basket clock run out, so ${describeItems([
               done.item,
             ])} went back to being available`;
           }
+        } else if (action === 'answer') {
+          // The owner's half of the conversation: an ask on their own items is sent, part
+          // sent, or refused, so the requester's history shows an answer instead of an
+          // ask nobody ever touched.
+          const done = await answerRequest(connection, person);
+
+          if (done) {
+            line = done.sentNothing
+              ? `${done.person} had nothing to send, so ${done.requester}'s request for ${describeItems(
+                  [done.item]
+                )} was cancelled`
+              : `${done.person} sent ${done.copies} x ${done.item} to ${done.requester}`;
+          }
         } else {
           const done = await saveSomething(connection, person, guilds);
-          line = `${done.person} saved again: ${done.items} items - ${done.where}`;
+          line = `${done.person} Inventory Refreshed - ${done.items} items: ${done.where}${
+            done.held > 0
+              ? ` (${done.held} left as ${
+                  done.held === 1 ? 'it was' : 'they were'
+                }: requests still open)`
+              : ''
+          }`;
         }
 
         if (!line) {

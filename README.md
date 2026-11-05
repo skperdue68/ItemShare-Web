@@ -626,20 +626,25 @@ Drives three made-up people through the same store code the site uses, so a list
 one real owner has traffic on it. Every scenario a request can go through happens for
 real in the database, one at a time:
 
-- **asking** - something of yours goes into their basket, on the same clock
+- **asking** - something a guildmate has spare goes into their basket, on the same clock;
+  anybody visible is fair game, the other simulated people included, not just you
 - **sending** - the basket is committed, the moment a real person's send would email you;
   the log says who *would* have been emailed instead of sending anything
+- **answering** - an ask waiting on a simulated person's own items is sent, part sent or
+  refused, through the same code the signed-in list uses, so a requester's history shows
+  a handover instead of asking for ever
 - **cancelling** - either a request already waiting, or one taken back out of the basket
 - **timing out** - the basket's deadline is pushed past, and the site's own sweeper runs
 - **re-saving** - items move between bags, bank and furnishing vault, stacks change and
-  pending requests are re-settled against the new file
+  pending requests are re-settled against the new file; logged as `<name> Inventory
+  Refreshed` with where each item landed
 
 | Flag | Meaning |
 | --- | --- |
 | `--every <ms>` | Pause between actions in milliseconds. Default `30000`. `0` runs with no pause |
 | `--rounds <n>` | Stop after `n` actions instead of running until interrupted |
 | `--once` | Exactly one action, then exit. Implies no pause |
-| `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, cancelling, timing out) or `items` (just re-saving files) |
+| `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, answering, cancelling, timing out) or `items` (just re-saving files) |
 | `--reset` | Remove the simulated people and all their data, then exit |
 | `--url <address>` | The site to ask for the live push. Defaults to `BASE_URL`, falling back to `http://127.0.0.1:<PORT>`. A missing `http://` is filled in |
 
@@ -659,8 +664,9 @@ pause when combined with `--once`, so a single action is not followed by a thirt
 wait before exiting.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
-runs; without it the data still changes and you see it on the next refresh, and no live
-line is printed after an action because there is no delivery to report.
+runs; without it the data still changes and you see it on the next refresh. Either way
+the simulator prints only what it did: how many browsers received the push is the site's
+detail, because the site is the one holding the connections.
 
 Before the first action the simulator asks the site whether it will accept the token
 (`POST /simulate/check`, the same check the nudge uses, pushing nothing) and prints one
@@ -709,13 +715,15 @@ Their activity appears in the log as a sentence rather than a revision number:
 
 ```
 [SIMULATE] 19:42:08 @DemoTrader asked @YourAccount for 2 x Soul Gem (still in their basket)
-[SIMULATE] live: 1 open page told to refresh
 Live: [SIMULATE] @DemoTrader asked @YourAccount for 2 x Soul Gem - 1 open page told to refresh
 
 [SIMULATE] 19:42:38 @NightMarket cancelled their request for 2 x Dwemer Frame before it was sent
-[SIMULATE] live: no pages open to refresh
+
+[SIMULATE] 19:42:53 @QuietSmith sent 2 x Alinor Bookshelf, Grand to @DemoTrader
 
 [SIMULATE] 19:43:08 @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
+
+[SIMULATE] 19:43:38 @QuietSmith Inventory Refreshed - 3 items: 2 in Bank, 1 in Furnishing Vault
 ```
 
 Every line the simulator prints starts with `[SIMULATE]`, and so does anything the site
@@ -723,9 +731,10 @@ pushes because of it, so a simulated handover is never mistaken for one that hap
 action that found nothing to do - no free stock, an empty basket - prints nothing at all
 and announces nothing: a line about a no-op made the log look busier than the site was.
 
-"1 open page told to refresh" is the delivery detail: how many browsers were connected at
-that moment, each of which refetches its own list. It says nothing about how many people
-use the site - closing the page drops it to zero.
+The `Live:` line is the site's own and carries the delivery detail - `- 1 open page told
+to refresh`, or `- no pages open, so nothing was pushed` - because the site is what holds
+the connections. It says nothing about how many people use the site; closing the page
+drops it to zero. The simulator does not repeat it: it prints the action and moves on.
 
 The simulator never sends mail - the email module is only reached from the site's own send
 route - so a simulated send changes the data and says who would have been emailed.
@@ -926,23 +935,45 @@ pending, and the same link answers them later.
   still works: `quantity_<id>` fields are read the same way.
 - GET shows the form and POST records it. The link in the message exists because most mail
   clients strip forms out of HTML, so the same form is also a page on the site.
-- The same form is a signed-in page, `/owner/requests`, reachable from the account menu
-  as *Requests for me*. It lists what is waiting on the person's own ESO accounts, oldest
-  ask first, and posts to itself before redirecting, so the rows just answered disappear
-  from the list instead of being answerable twice.
+- The same answering is a signed-in page, `/owner/requests`, reachable from the account
+  menu as *Requests for me*. It lists what is waiting on the person's own ESO accounts,
+  oldest ask first, and posts to itself before redirecting, so what was just answered
+  disappears from the list instead of being answerable twice.
+- **One row per item, however many times it was asked for.** Two, then two more, then one
+  is a page row reading **Requested 5**, because that is one conversation. The database
+  rows stay separate: the number you send is spent on the oldest asks first, so 3 against
+  5 closes two of them and leaves the third waiting. Rows with no usable item id are
+  never merged.
+- The row carries what the requester needs to send the right copy: the item's type, its
+  **trait** and its **enchantment** when the shared file has them, under the name.
+- The time is when the ask arrived, on the clock of the machine running the site and in
+  its own date order; a grouped row shows the oldest ask, and its tooltip names the newest.
+- **Save** (green) records the number in the box as mailed. **Not fulfilled** (red) is the
+  same form saved as `0`: nothing was sent, so the request is cancelled with the owner's
+  reason on it. Both sit beside the number rather than under it.
+- **Requested** is the total asked for; **Amount Sent** is the number the owner typed.
 - The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
   was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the
   requester's history instead of looking complete.
 - Free copies are `item_count - outstanding requests - copies mailed since the owner's last
   upload`. That last term is why a handover shows up at once, and why it is not subtracted
   twice: the next upload's own count already leaves those copies out.
+- **An upload never rewrites an item that still has an open request on it.** The file was
+  written before the owner answered, so its count no longer describes the bag those copies
+  will leave; taking it would re-offer what is promised and could cancel a request that is
+  answerable. The row keeps the numbers it had, everything else in the file refreshes, and
+  the upload says so: *Pending requests for Soul Gem (2), so its inventory was not refreshed.*
+  Answer the requests, upload again, and the new count arrives.
 
 `npm run test:fulfillment` walks exactly that sequence against a real database: it runs
 every migration, shares ten copies, asks for three, answers "two sent", then uploads eight
 and checks the free count at each step. The last stage gives one message two rows of
 different items, answers one of them, and checks that the other stays pending and holding
 its copy, that saving the answered row again changes nothing, and that the link only stops
-working once every row has been answered. It drops and rebuilds its database first, so
+working once every row has been answered. Its last stage asks for one item three times,
+checks the owner's page lists that as one row of five, sends three of them and checks the
+oldest two are closed while the third still waits, then cancels what is left with the Not
+fulfilled answer. It drops and rebuilds its database first, so
 `ITEMSHARE_DATABASE` has to end in `_test` (`itemshare_test` by default).
 
 It needs a reachable MariaDB; without one it stops before touching anything and says so.

@@ -326,6 +326,39 @@ body {
     0 18px 45px rgba(0, 0, 0, 0.1);
 }
 
+/* A heading row that can also carry a way out, so a page that is a detour from the list
+   can be left from the corner the way a dialog is, without hunting for the button at the
+   bottom. Smaller than the heading, so it never competes with it. */
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 50%;
+  background: rgba(7, 16, 38, 0.6);
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.page-close:hover,
+.page-close:focus-visible {
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.52);
+  background: rgba(30, 41, 59, 0.92);
+}
+
 .card h2 {
   margin: 0 0 10px;
   font-size: 17px;
@@ -409,6 +442,11 @@ code {
   margin-top: 16px;
   display: flex;
   gap: 12px;
+}
+
+/* The way back sits in the middle of its row on pages that are a detour from the list. */
+.actions.center {
+  justify-content: center;
 }
 
 .primary-button {
@@ -630,7 +668,13 @@ code {
 }
 
 .table-shell {
-  overflow: auto;
+  /* Horizontal only. A table wider than the card still scrolls sideways, but these
+     tables have no height limit, so vertical overflow can only be momentary - a panel
+     being height-animated while the list is replaced - and `auto` turned that into a
+     scrollbar flashing beside the table until the animation settled. Clipping is
+     invisible, which is what a transient squeeze should be. */
+  overflow-x: auto;
+  overflow-y: clip;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 12px;
   background: rgba(8, 18, 42, 0.44);
@@ -1828,16 +1872,21 @@ th .sort-link {
   color: #ffffff;
 }
 
-/* The form the request email links to: one whole number per row and a Save for that row,
-   because an owner rarely mails a whole message at once. */
+/* The answer form: one whole number per row, then Save (green) beside it, and, on the
+   signed-in list, Not fulfilled (red) which is that same row saved as 0. */
 .fulfill-shell {
   margin-top: 14px;
+}
+
+.fulfill-cell {
+  white-space: nowrap;
 }
 
 .fulfill-row {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: nowrap;
   gap: 6px;
 }
 
@@ -1846,7 +1895,7 @@ th .sort-link {
   padding: 0 14px;
   border: 0;
   border-radius: 9px;
-  background: #2f6fed;
+  background: #15803d;
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;
@@ -1855,11 +1904,20 @@ th .sort-link {
 
 .fulfill-button:hover,
 .fulfill-button:focus-visible {
-  background: #3d7bf7;
+  background: #16a34a;
+}
+
+.fulfill-button.is-none {
+  background: #b91c1c;
+}
+
+.fulfill-button.is-none:hover,
+.fulfill-button.is-none:focus-visible {
+  background: #dc2626;
 }
 
 .fulfill-input {
-  width: 84px;
+  width: 70px;
   height: 38px;
   padding: 0 10px;
   border: 1px solid rgba(148, 163, 184, 0.32);
