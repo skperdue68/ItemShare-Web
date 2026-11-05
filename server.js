@@ -139,6 +139,14 @@ const sessionMiddleware = session({
   cookie: { httpOnly: true, sameSite: 'lax', secure: false, maxAge: SESSION_TTL_MS },
 });
 app.use(sessionMiddleware);
+// A stylesheet taken from a browser cache written before the deploy is the difference
+// between green and red answer buttons and two grey boxes with no layout, so it is sent
+// with no-cache and revalidated on every page: unchanged costs a 304, changed is seen.
+app.get('/styles.css', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.type('text/css').sendFile(path.join(__dirname, 'public', 'styles.css'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Socket.IO rides on the same HTTP server as Express, under /socket.io, so live

@@ -701,8 +701,8 @@ if (listRegion) {
   // ---------------------------------------------------------------- requests
   // The button carries how many this person may end up holding, their own basket
   // included, so the dialog can offer the rest of a stack that is partly theirs
-  // already. One, everything they can hold, or any number in between - the last two
-  // only when more than one is possible.
+  // already: one, or everything they can hold, and the second only when it is more
+  // than one - a number nobody could check is not worth asking for.
   let dialog = null;
   let dialogState = null;
   const knownClosed = new Set();
@@ -776,21 +776,15 @@ if (listRegion) {
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
         <h2 id="requestTitle">Ask for ${escapeText(name)}</h2>
         <p class="muted" data-dialog-summary>${escapeText(dialogSummary(state))}</p>
-        <form class="request-form" data-request-form>
+        <div class="modal-actions">
+          <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
+          <button class="request-button" type="button" data-ask-one>Request 1</button>
           ${
             choices
-              ? `<label class="request-option"><input type="radio" name="how" value="one" checked> Just one</label>
-                 <label class="request-option"><input type="radio" name="how" value="stack"> Entire stack (<span data-dialog-max>${state.max}</span>)</label>
-                 <label class="request-option"><input type="radio" name="how" value="number">
-                   <input class="request-number" type="number" name="quantity" min="1" max="${state.max}" value="${state.max}" aria-label="How many more to ask for"> to ask for
-                 </label>`
-              : '<label class="request-option"><input type="radio" name="how" value="one" checked> One</label>'
+              ? `<button class="request-button is-stack" type="button" data-ask-stack>Request stack (<span data-dialog-max>${state.max}</span>)</button>`
+              : ''
           }
-          <div class="modal-actions">
-            <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
-            <button class="primary-button" type="submit" data-send-request>Send request</button>
-          </div>
-        </form>
+        </div>
       </div>`;
 
     document.body.appendChild(backdrop);
@@ -804,65 +798,32 @@ if (listRegion) {
       }
     });
 
-    const numberInput = backdrop.querySelector('.request-number');
-
-    // What is left unclaimed is the cap on this field, not just a check on submit: a
-    // larger number is not something the person can type.
-    if (numberInput) {
-      numberInput.addEventListener('input', () => {
-        const limit = Math.max(1, dialogState ? dialogState.max : 1);
-        const value = Math.floor(Number(numberInput.value));
-
-        if (Number.isFinite(value) && value > limit) {
-          numberInput.value = String(limit);
-        }
-      });
-
-      backdrop.querySelectorAll('input[name="how"]').forEach((radio) => {
-        radio.addEventListener('change', () => {
-          if (radio.checked && radio.value === 'number') {
-            numberInput.focus();
-            numberInput.select();
-          }
-        });
-      });
-    }
-
-    const form = backdrop.querySelector('[data-request-form]');
-
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-
+    // Two answers and no typing: one copy, or everything still unclaimed. A number box
+    // asked people to work out a cap they could not see, and a radio pair made them pick
+    // a kind of answer before they could give one.
+    const ask = (which) => {
       const limit = Math.max(1, dialogState ? dialogState.max : 1);
-      const how = form.querySelector('input[name="how"]:checked');
-      let quantity = 1;
+      const picked = {
+        kind,
+        id: button.dataset.id,
+        quantity: which === 'stack' ? limit : 1,
+        name,
+      };
 
-      if (choices && how && how.value === 'stack') {
-        quantity = limit;
-      } else if (choices && how && how.value === 'number') {
-        quantity = Math.min(limit, Math.max(1, Math.floor(Number(numberInput.value)) || 1));
-      }
-
-      const picked = { kind, id: button.dataset.id, quantity, name };
       closeRequestDialog();
       sendRequest(picked);
-    });
+    };
 
-    // The number field is where a person types, so it opens focused with the whole value
-    // selected: typing replaces it, and its own radio is chosen first so the form submits
-    // the number rather than a choice they never made.
-    const numberChoice = backdrop.querySelector('input[name="how"][value="number"]');
+    const oneButton = backdrop.querySelector('[data-ask-one]');
+    const stackButton = backdrop.querySelector('[data-ask-stack]');
 
-    if (numberChoice && numberInput) {
-      numberChoice.checked = true;
-      numberInput.focus();
-      numberInput.select();
-    } else {
-      const first = backdrop.querySelector('input[name="how"]');
+    if (oneButton) {
+      oneButton.addEventListener('click', () => ask('one'));
+      oneButton.focus();
+    }
 
-      if (first) {
-        first.focus();
-      }
+    if (stackButton) {
+      stackButton.addEventListener('click', () => ask('stack'));
     }
   }
 
@@ -897,28 +858,20 @@ if (listRegion) {
       maxLabel.textContent = String(dialogState.max);
     }
 
-    const numberInput = dialog.querySelector('.request-number');
-
-    if (numberInput) {
-      numberInput.disabled = dialogState.max < 1;
-
-      if (dialogState.max > 0) {
-        numberInput.max = String(dialogState.max);
-        const typed = Math.floor(Number(numberInput.value)) || dialogState.max;
-        numberInput.value = String(Math.min(typed, dialogState.max));
-      }
-    }
-
     const nothingLeft = dialogState.max < 1;
-    const submit = dialog.querySelector('[data-send-request]');
+    const stackButton = dialog.querySelector('[data-ask-stack]');
 
-    if (submit) {
-      submit.disabled = nothingLeft;
+    if (stackButton) {
+      stackButton.disabled = nothingLeft;
+      // One copy left makes the two answers the same answer, so only one is offered.
+      stackButton.hidden = dialogState.max < 2;
     }
 
-    dialog.querySelectorAll('input[name="how"]').forEach((radio) => {
-      radio.disabled = nothingLeft;
-    });
+    const oneButton = dialog.querySelector('[data-ask-one]');
+
+    if (oneButton) {
+      oneButton.disabled = nothingLeft;
+    }
   }
 
   async function sendRequest({ kind, id, quantity, name }) {

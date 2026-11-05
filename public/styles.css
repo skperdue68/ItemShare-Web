@@ -1466,26 +1466,40 @@ th .sort-link.active {
   margin-top: 0;
 }
 
-.request-form {
-  display: grid;
-  gap: 10px;
+/* The two ways to ask, as buttons: one copy, or the whole unclaimed stack. Green for
+   the whole stack because it is the bigger commitment; plain blue for a single copy. */
+.request-button {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(91, 141, 255, 0.42);
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--accent-top) 0%, var(--accent-bottom) 100%);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.request-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
+.request-button:hover,
+.request-button:focus-visible {
+  filter: brightness(1.12);
 }
 
-.request-number {
-  width: 72px;
-  padding: 4px 6px;
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 6px;
-  background: var(--panel);
-  color: inherit;
-  font: inherit;
+.request-button.is-stack {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: #15803d;
+}
+
+.request-button.is-stack:hover,
+.request-button.is-stack:focus-visible {
+  background: #16a34a;
+}
+
+.request-button:disabled,
+.request-button[hidden] {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .modal-actions {
@@ -1894,6 +1908,7 @@ th .sort-link {
   height: 38px;
   padding: 0 14px;
   border: 0;
+  white-space: nowrap;
   border-radius: 9px;
   background: #15803d;
   color: #ffffff;

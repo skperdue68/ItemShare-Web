@@ -300,10 +300,10 @@ every linked account in *Offering*.
 
 ## Asking for something
 
-Every row in *Request* has a **Request** button offering one, everything still unclaimed,
-or any number in between. The largest number offered is the copies nobody has claimed
-plus whatever is already in your own basket, never more than the raw `item_count`, so
-two people can never be promised the same five. A number picked there is the total you
+Every row in *Request* has a **Request** button that asks one of two things: **Request 1**,
+or **Request stack (N)** where N is everything still unclaimed. N is the copies nobody has
+claimed plus whatever is already in your own basket, never more than the raw `item_count`,
+so two people can never be promised the same five. What is picked there is the total you
 want to hold, so the same item stays one row in the basket.
 
 A standing offer has no count behind it, so it always means one copy. It is only listed
@@ -333,8 +333,11 @@ picked rather than from the moment it is sent:
   "2 pending requests". The number falls as requests are answered, cancelled or time
   out, and vanishes at zero. Hovering it lists who asked and how many they asked for,
   one line per waiting request.
-- The request dialog opens with the number field focused and its value selected, and its
-  radio already chosen, so typing a number is all it takes to ask for that many.
+- The request dialog is two buttons - **Request 1** and **Request stack (N)** - and a
+  **Cancel**. There is no number to type: the cap was never visible on the row, and a box
+  that silently refused larger numbers made the person guess at it. If someone else takes
+  a copy while the dialog is open, the stack button follows the new count down and hides
+  itself when only one is left.
 - Asking puts the item in a **basket** with a clock (`REQUEST_HOLD_MINUTES`). Everything
   picked shares one timer, and adding or removing anything starts it again. *Your
   requests* shows the countdown beside a **Send requests** button; until it is pressed
@@ -641,7 +644,7 @@ real in the database, one at a time:
 
 | Flag | Meaning |
 | --- | --- |
-| `--every <ms>` | Pause between actions in milliseconds. Default `30000`. `0` runs with no pause |
+| `--every <ms>` | Fixed pause between actions in milliseconds. Left out, each wait is picked fresh from 5 to 60 seconds. `0` runs with no pause |
 | `--rounds <n>` | Stop after `n` actions instead of running until interrupted |
 | `--once` | Exactly one action, then exit. Implies no pause |
 | `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, answering, cancelling, timing out) or `items` (just re-saving files) |
@@ -659,9 +662,9 @@ npm run simulate -- --reset             # remove the simulated people and their 
 npm run simulate -- --url https://itemshare.example.com   # notify that site instead
 ```
 
-Without `--rounds` or `--once` it keeps going until Ctrl+C. `--every` defaults to no
-pause when combined with `--once`, so a single action is not followed by a thirty-second
-wait before exiting.
+Without `--rounds` or `--once` it keeps going until Ctrl+C, waiting a random five to sixty
+seconds between actions so the traffic does not arrive on a metronome. `--every` fixes that
+wait when a run needs a steady beat, and `--once` never pauses at all.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
 runs; without it the data still changes and you see it on the next refresh. Either way
