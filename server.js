@@ -59,6 +59,7 @@ import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
   renderListRegion,
   renderMessagePage,
+  renderOwnerRequestsCard,
   renderOwnerRequestsPage,
   renderPage,
   renderRequestFulfillPage,
@@ -753,6 +754,16 @@ function signedOutOwnerPage(req, res) {
   });
 }
 
+// The owner's list is one piece of markup with two front doors: a whole page for a
+// bookmark or a direct visit, and a fragment for the modal over the item list. Asking for
+// the fragment means "give me the card, not the page around it".
+function wantsFragment(req) {
+  return (
+    String(req.get('x-itemshare-fragment') || '') === '1' ||
+    String(req.query.fragment || '') === '1'
+  );
+}
+
 app.get('/owner/requests', async (req, res) => {
   const user = req.session ? req.session.user || null : null;
 
@@ -774,11 +785,18 @@ app.get('/owner/requests', async (req, res) => {
       };
     });
 
+    const answered = readAnsweredCounts(req.query.answered);
+
+    if (wantsFragment(req)) {
+      res.type('html').send(renderOwnerRequestsCard({ rows: data.requests, answered }));
+      return;
+    }
+
     res.type('html').send(
       renderOwnerRequestsPage({
         accounts: data.accounts,
         rows: data.requests,
-        answered: readAnsweredCounts(req.query.answered),
+        answered,
         user,
         providers: enabledProviders,
       })
@@ -805,7 +823,7 @@ app.post('/owner/requests', async (req, res) => {
   const invalid = answer.error;
 
   // The list is reloaded for every outcome, because an answer changes what is in it.
-  const renderList = async (status, notice) => {
+  const renderList = async (status, notice, answered = null) => {
     const data = await withDatabase(async (connection) => {
       const accounts = await getViewerAccounts(connection, user.id);
 
@@ -818,12 +836,26 @@ app.post('/owner/requests', async (req, res) => {
       };
     });
 
+    const values = answer.anchorId > 0 ? new Map([[answer.anchorId, answer.typed]]) : new Map();
+
+    // The modal gets the card and a 200 even when the answer was refused: the refused
+    // number and the reason for it belong beside that row on screen, not in a toast that
+    // leaves the old list standing.
+    if (wantsFragment(req)) {
+      res
+        .status(200)
+        .type('html')
+        .send(renderOwnerRequestsCard({ rows: data.requests, notice, answered, values }));
+      return;
+    }
+
     res.status(status).type('html').send(
       renderOwnerRequestsPage({
         accounts: data.accounts,
         rows: data.requests,
         notice,
-        values: answer.anchorId > 0 ? new Map([[answer.anchorId, answer.typed]]) : new Map(),
+        answered,
+        values,
         user,
         providers: enabledProviders,
       })
@@ -862,6 +894,11 @@ app.post('/owner/requests', async (req, res) => {
           outcome.copies === 1 ? 'y' : 'ies'
         } handed over, ${outcome.cancelled} cancelled`
       );
+    }
+
+    if (wantsFragment(req)) {
+      await renderList(200, '', { fulfilled: outcome.fulfilled, cancelled: outcome.cancelled });
+      return;
     }
 
     // Post, then redirect: a refresh shows the page again instead of answering again,

@@ -328,7 +328,7 @@ body {
 
 /* A heading row that can also carry a way out, so a page that is a detour from the list
    can be left from the corner the way a dialog is, without hunting for the button at the
-   bottom. Smaller than the heading, so it never competes with it. */
+   bottom. */
 .card-head {
   display: flex;
   align-items: flex-start;
@@ -336,27 +336,54 @@ body {
   gap: 16px;
 }
 
+.card-head h2 {
+  flex: 1;
+  margin: 0;
+}
+
+/* A close is a way out and has to be visible from across the room: white, large, in the
+   top right corner, and lit on hover. A small tinted x reads as decoration. */
 .page-close {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 50%;
-  background: rgba(7, 16, 38, 0.6);
-  color: var(--muted);
-  font-size: 20px;
+  width: 44px;
+  height: 44px;
+  margin: -6px -6px 0 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: 300;
   line-height: 1;
   text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .page-close:hover,
 .page-close:focus-visible {
-  color: #f8fafc;
-  border-color: rgba(148, 163, 184, 0.52);
-  background: rgba(30, 41, 59, 0.92);
+  color: #ffffff;
+  border-color: rgba(248, 250, 252, 0.45);
+  background: rgba(148, 163, 184, 0.22);
+}
+
+/* The owner's list inside the modal: the dialog supplies the frame, so the card does not
+   draw a second one, and the way back to the list is the close control above it. */
+.owner-modal {
+  padding: 20px 22px 22px;
+}
+
+.owner-modal .card {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.owner-modal .actions.center {
+  display: none;
 }
 
 .card h2 {
