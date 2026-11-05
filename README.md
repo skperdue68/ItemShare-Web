@@ -20,18 +20,29 @@ This repository is the **web application only**.
 - the parser for `ItemShareSavedVars.lua` - the site has to read that file, so the
   parser ships with it
 - the MariaDB schema and its migrations
-- the operator scripts: icon backfill, demo seeding, the request simulator, a mail check
+- the operator scripts: the command line importer, icon backfill, demo seeding, the
+  request simulator, a mail check
 
 **Not here:**
 
 - the ESO addon that writes `ItemShareSavedVars.lua`
-- anything that watches the game's `SavedVariables` folder or knows where the game is
-  installed on a player's machine
+- anything that watches the game's `SavedVariables` folder while the game runs
 - GuildSync, or any other client that posts to `/ingest`
 
-The site consumes the file; producing it is somebody else's job. The one place the two
-halves meet is documented below under *Automatic uploads*, which is an HTTP endpoint
-this site offers.
+The site consumes the file; producing it is somebody else's job. It can arrive three
+ways, and they are separate mechanisms - keeping them apart matters, because two of
+them share the word "ingest":
+
+| Way | What it is | Talks to |
+| --- | --- | --- |
+| The upload page | A person drops the file on the site | `POST /upload`, multipart, browser session |
+| `POST /ingest` | An HTTP endpoint this site offers to a watcher on the game machine | MariaDB, over HTTP, shared token |
+| `npm run ingest` | A command line importer run by hand where the file lives | MariaDB, directly - no HTTP at all |
+
+Only the first two are in the web request path. The command line importer never makes a
+network request to the site: it reads the file off disk and opens its own database
+connection, which is why it needs `MARIADB_*` credentials rather than `BASE_URL` or an
+`INGEST_TOKEN`.
 
 ## Requirements
 
@@ -162,6 +173,10 @@ someone who plays several ESO accounts can see which account holds each item.
 
 `POST /ingest` accepts the same file from a watcher instead of a browser, so the site
 stays current without anyone opening the page.
+
+*This section is about the HTTP endpoint. The command line importer is a different
+thing with a confusingly similar name - it is documented under
+[npm run ingest](#npm-run-ingest).*
 
 It is **off unless `INGEST_TOKEN` is set**, and the token is compared in constant time.
 It does exactly what an upload does - same parse, same fill-then-prune, same icon
@@ -500,6 +515,7 @@ npm run simulate -- --rounds 12
 | Command | Runs | Needs MariaDB | Needs the site running |
 | --- | --- | --- | --- |
 | `npm start` | `server.js` | boots without it and shows the error | - |
+| `npm run ingest` | `ingest.js` | yes, unless `--dry-run` | no |
 | `npm run backfill` | `backfillIcons.js` | yes | no |
 | `npm run seed:demo` | `seedDemo.js` | yes | no |
 | `npm run simulate` | `simulate.js` | yes | only for live pushes |
@@ -511,6 +527,68 @@ the file header and take the flags documented below.
 ### npm start
 
 No flags. Everything it reads comes from `.env` - see *Settings* and `.env.example`.
+
+### npm run ingest
+
+The command line importer. Reads `ItemShareSavedVars.lua`, parses it with the same code
+the website uses, and replaces the items and guilds of every ESO account in the file
+inside one transaction.
+
+It is **not** an HTTP client. It never posts anything: it reads the file from disk and
+writes to MariaDB directly, so it needs the database settings from `.env` and not a
+running site. If what you want is to push a file to a *running* site over HTTP, that is
+`POST /ingest` - see *Automatic uploads*.
+
+```bash
+npm run ingest                                        # the file found under your home directory
+npm run ingest -- <file>                              # that file
+npm run ingest -- <folder>                            # its SavedVariables folder
+npm run ingest -- <file> --dry-run                    # parse and report, write nothing
+```
+
+| Argument / flag | Meaning |
+| --- | --- |
+| *(no path)* | Search the ESO folder under the current user's home directory |
+| `<file>` | Import that file |
+| `<folder>` | Append `ItemShareSavedVars.lua` to the folder and import that |
+| `--dry-run` | Parse and print the summary; open no database and write nothing |
+
+The path is the only positional argument; anything starting with `--` is treated as a
+flag, so a path is never mistaken for one. It prints what it read *before* writing
+anything - every account with its item count and total quantity, its guilds, its
+standing offers, and the addon version the file records - and `--dry-run` stops after
+that report.
+
+**All accounts or none.** Every account in the file is replaced inside one transaction,
+so a failure part-way leaves the database exactly as it was. The fill-then-prune rules
+are identical to an upload's: rows the file mentions are written in place and only
+afterwards are the ones it no longer mentions deleted.
+
+**It has no browser session.** Like `POST /ingest`, it writes inventory rather than
+identity - it never links an ESO account to a person and never changes an existing link.
+
+#### Finding the saved variables file
+
+With no path the location is worked out from the home directory rather than from a
+hard-coded drive, so the same command is right on Windows, macOS and Linux.
+`os.homedir()` is the base - `%USERPROFILE%` on Windows, `$HOME` elsewhere - and from
+there it tries, in order:
+
+1. `Documents` under `%OneDrive%`, `%OneDriveConsumer%` and `%OneDriveCommercial%`,
+   because Windows moves Documents into OneDrive and the game writes there afterwards;
+2. `~/Documents` and `~/OneDrive/Documents`;
+3. the Steam Proton prefix on Linux, where ESO's `Documents` folder lives inside the
+   prefix
+   (`~/.steam/steam/steamapps/compatdata/306130/pfx/drive_c/users/steamuser/Documents`).
+
+Within each of those it checks `Elder Scrolls Online/live`, then `liveeu`, then `pts`,
+for `SavedVariables/ItemShareSavedVars.lua`. The first file that exists is used; if none
+does, the error lists every path it tried. A path you pass may be the file itself or just
+the `SavedVariables` folder holding it.
+
+This lookup is the only place this repository knows anything about a game installation,
+and it is reached by this command alone. The website never looks for the file - a
+browser hands it over.
 
 ### npm run backfill
 
