@@ -630,7 +630,13 @@ code {
 }
 
 .table-shell {
-  overflow: auto;
+  /* Horizontal only. A table wider than the card still scrolls sideways, but these
+     tables have no height limit, so vertical overflow can only be momentary - a panel
+     being height-animated while the list is replaced - and `auto` turned that into a
+     scrollbar flashing beside the table until the animation settled. Clipping is
+     invisible, which is what a transient squeeze should be. */
+  overflow-x: auto;
+  overflow-y: clip;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 12px;
   background: rgba(8, 18, 42, 0.44);
