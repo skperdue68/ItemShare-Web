@@ -1228,11 +1228,13 @@ async function answerOwnerRequest(form, submitter = null) {
   });
 
   // Fulfilled and Not fulfilled are the same form, and which one was pressed is the whole
-  // answer: a FormData built from the form alone leaves the submit button out.
-  const body = new FormData(form);
+  // answer: the body carries the button's name and value, because a form on its own leaves
+  // the submit button out. It is urlencoded rather than FormData on purpose - the server
+  // reads urlencoded bodies, so a multipart one arrives empty and the row looks unanswered.
+  const body = new URLSearchParams(new FormData(form));
 
   if (submitter && submitter.name) {
-    body.append(submitter.name, submitter.value);
+    body.set(submitter.name, submitter.value);
   }
 
   try {

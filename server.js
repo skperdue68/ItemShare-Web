@@ -811,7 +811,11 @@ app.get('/owner/requests', async (req, res) => {
   }
 });
 
-app.post('/owner/requests', async (req, res) => {
+// `upload.none()` parses a multipart body without accepting files. The page posts
+// urlencoded, which express.urlencoded already reads, but a browser still holding an older
+// app.js posts FormData - and reading that as an empty form told somebody their answer had
+// "nothing to record" when the row was filled in right in front of them.
+app.post('/owner/requests', upload.none(), async (req, res) => {
   const user = req.session ? req.session.user || null : null;
 
   if (!user) {
