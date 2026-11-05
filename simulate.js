@@ -863,11 +863,26 @@ const rounds = once
     : Number.POSITIVE_INFINITY;
 // `--every 0` means no pause, and 0 is falsy: treating an absent flag and a zero the
 // same way made the documented "0 runs with no pause" wait thirty seconds an action.
+// A run that is not told how often to act picks its own pace: five to sixty seconds
+// between actions, decided again after every one, so the site does not look like a
+// metronome. --every fixes the beat for a run that needs one.
 const everyGiven = valueAfter('--every');
-const every = Math.max(
-  0,
-  everyGiven === '' ? (once ? 0 : 30000) : Number(everyGiven) || 0
-);
+const fixedPause = everyGiven === '' ? null : Math.max(0, Number(everyGiven) || 0);
+const PAUSE_MIN_MS = 5000;
+const PAUSE_MAX_MS = 60000;
+
+/** How long to wait before the next action, chosen fresh each time. */
+function nextPause() {
+  if (once) {
+    return 0;
+  }
+
+  if (fixedPause !== null) {
+    return fixedPause;
+  }
+
+  return PAUSE_MIN_MS + Math.floor(Math.random() * (PAUSE_MAX_MS - PAUSE_MIN_MS + 1));
+}
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
 const SITE = siteBaseUrl();
@@ -968,7 +983,15 @@ try {
           Number.isFinite(rounds)
             ? `, ${rounds} action${rounds === 1 ? '' : 's'}`
             : ', running until you stop it'
-        }${every > 0 ? `, one every ${Math.round(every / 1000)}s` : ''}.`
+        }${
+          fixedPause === null
+            ? once
+              ? ''
+              : `, ${PAUSE_MIN_MS / 1000}-${PAUSE_MAX_MS / 1000}s apart`
+            : fixedPause > 0
+              ? `, one every ${Math.round(fixedPause / 1000)}s`
+              : ''
+        }.`
       );
 
       if (!Number.isFinite(rounds) || rounds > 1) {
@@ -1049,8 +1072,10 @@ try {
           // Nothing happened - no stock free, no basket to empty. An entry saying so would
           // put an action on the list that the site never saw, so nothing is printed and
           // nothing is announced.
-          if (every > 0 && acted < rounds && !stopping) {
-            await sleep(every);
+          const pause = nextPause();
+
+          if (pause > 0 && acted < rounds && !stopping) {
+            await sleep(pause);
           }
           continue;
         }
@@ -1063,8 +1088,10 @@ try {
           say(live);
         }
 
-        if (every > 0 && acted < rounds && !stopping) {
-          await sleep(every);
+        const pause = nextPause();
+
+        if (pause > 0 && acted < rounds && !stopping) {
+          await sleep(pause);
         }
       }
 
