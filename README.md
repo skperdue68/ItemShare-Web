@@ -959,9 +959,11 @@ pending, and the same link answers them later.
   **trait** and its **enchantment** when the shared file has them, under the name.
 - The time is when the ask arrived, on the clock of the machine running the site and in
   its own date order; a grouped row shows the oldest ask, and its tooltip names the newest.
-- **Save** (green) records the number in the box as mailed. **Not fulfilled** (red) is the
-  same form saved as `0`: nothing was sent, so the request is cancelled with the owner's
-  reason on it. Both sit beside the number rather than under it.
+- **Fulfilled** (green) records the number in the box as mailed. **Not fulfilled** (red)
+  is the same form saved as `0`: nothing was sent, so the request is cancelled with the
+  owner's reason on it. Both sit beside the number rather than under it. The email form
+  calls the green button **Save**, because in a message it is a save of that row rather
+  than a claim about the whole stack.
 - **Requested** is the total asked for; **Amount Sent** is the number the owner typed.
 - The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
   was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the
