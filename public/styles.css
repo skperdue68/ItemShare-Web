@@ -1828,9 +1828,34 @@ th .sort-link {
   color: #ffffff;
 }
 
-/* The form the request email links to: one whole number per row, one button for all. */
+/* The form the request email links to: one whole number per row and a Save for that row,
+   because an owner rarely mails a whole message at once. */
 .fulfill-shell {
   margin-top: 14px;
+}
+
+.fulfill-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.fulfill-button {
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: #2f6fed;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fulfill-button:hover,
+.fulfill-button:focus-visible {
+  background: #3d7bf7;
 }
 
 .fulfill-input {

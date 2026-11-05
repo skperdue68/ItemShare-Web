@@ -648,17 +648,28 @@ pause when combined with `--once`, so a single action is not followed by a thirt
 wait before exiting.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
-runs; without it the data still changes and you see it on the next refresh, and no
-`live:` line is printed after an action because there is no delivery to report.
+runs; without it the data still changes and you see it on the next refresh, and no live
+line is printed after an action because there is no delivery to report.
 
 Before the first action the simulator asks the site whether it will accept the token
 (`POST /simulate/check`, the same check the nudge uses, pushing nothing) and prints one
-line either way. *Armed* means the site holds the same token; a refusal names the
-fingerprint this run sent, says the site answers 404 when its own token is blank or
-different, and prints the `.env` path this process read - which is the actual answer to
-"they are both in .env, why do they disagree": usually a second `.env`, or a site that
-was not restarted after the token was added. Both processes hash the token with the same
-function (`lib/simulateToken.js`), so the two fingerprints are always comparable.
+line either way. Both processes hash the token with the same function
+(`lib/simulateToken.js`), so the two fingerprints can always be compared:
+
+- **`live pushes armed ... the site holds the same one`** - same token, nothing to do.
+- **`refused ... this run holds 7229d63d, that site holds 4b1f0e93`** - two different
+  tokens (HTTP 403). The site reads `SIMULATE_TOKEN` from its own `.env` when it starts,
+  so a token set on the machine running the simulator does nothing unless that same site
+  was restarted holding it.
+- **`refused ... that site has no SIMULATE_TOKEN at all`** - HTTP 404 with
+  `token-not-set`: a different `.env`, or a site started before the token was added.
+- **`refused ... (HTTP 404): nothing answers the simulate route there`** - that address is
+  not this ItemShare (check `BASE_URL` or `--url`), or the site predates this check.
+
+The site's answer to a refusal is JSON carrying the fingerprint it holds and never the
+token, and its own log line names both fingerprints, so the comparison works from either
+end. The simulator also catches the quiet case where `dotenv` ignored `.env` because the
+variable was already exported in the shell.
 
 The address it asks is `BASE_URL`, the same value the site builds its own links and
 sign-in redirects from, so a reverse proxy, another port or another host needs no extra
@@ -670,10 +681,20 @@ every run, and `--reset` takes all of them out again.
 Their activity appears in the log as a sentence rather than a revision number:
 
 ```
-Live: @DemoTrader asked @YourAccount for 2 x Soul Gem; @QuietSmith saved again: 2 items, now in Bank / Craft Bag - 1 open page told to refresh
-Live: @NightMarket sent 2 requests for Briarheart Greatsword, Dwemer Frame to @YourAccount - the owner would be emailed
-Live: @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
+[SIMULATE] 19:42:08 @DemoTrader asked @YourAccount for 2 x Soul Gem (still in their basket)
+[SIMULATE] live: 1 open page told to refresh
+Live: [SIMULATE] @DemoTrader asked @YourAccount for 2 x Soul Gem - 1 open page told to refresh
+
+[SIMULATE] 19:42:38 @NightMarket cancelled their request for 2 x Dwemer Frame before it was sent
+[SIMULATE] live: no pages open to refresh
+
+[SIMULATE] 19:43:08 @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
 ```
+
+Every line the simulator prints starts with `[SIMULATE]`, and so does anything the site
+pushes because of it, so a simulated handover is never mistaken for one that happened. An
+action that found nothing to do - no free stock, an empty basket - prints nothing at all
+and announces nothing: a line about a no-op made the log look busier than the site was.
 
 "1 open page told to refresh" is the delivery detail: how many browsers were connected at
 that moment, each of which refetches its own list. It says nothing about how many people
@@ -861,13 +882,21 @@ reports which.
 
 ## Answering a request
 
-Every request email carries a form: one row per name, the number asked for already in each
-box, and one **Done** button. The owner changes each number to what actually left their bag
-and presses it. `0` means nothing was sent, and that request is cancelled.
+Every request email carries a form: one row per name, the number asked for already in its
+box, and a **Save** button on that row. The owner sets a row to what actually left their
+bag and saves it. `0` means nothing was sent from that row, and that request is cancelled.
 
-- The form posts to `/requests/fulfill/:token`. The token is unguessable, stored only as a
-  SHA-256 hash, expires after 30 days, and is cleared the moment the form is answered - so a
-  double click, a re-sent message or a link a mail client prefetched changes nothing.
+A message is rarely answered in one go - half a stack today, the rest next week - so each
+row is submitted on its own. Saving one row records only that row: the others stay
+pending, and the same link answers them later.
+
+- The form posts to `/requests/fulfill/:token`, one row at a time. The token is
+  unguessable, stored only as a SHA-256 hash, and expires after 30 days. It is cleared from
+  the rows it answers, so the link keeps working for the rest of the message and stops
+  working for a row already recorded - a double click or a link a mail client prefetched
+  changes nothing.
+- A Save button posts that row's `row` and `quantity`. A page opened before per-row saving
+  still works: `quantity_<id>` fields are read the same way.
 - GET shows the form and POST records it. The link in the message exists because most mail
   clients strip forms out of HTML, so the same form is also a page on the site.
 - The same form is a signed-in page, `/owner/requests`, reachable from the account menu

@@ -837,30 +837,43 @@ app.post('/owner/requests', async (req, res) => {
 const EMAIL_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
 
 /**
- * The numbers from a submitted answer form, keyed by request id. Whole numbers only,
- * and a field that was left out is not guessed at.
+ * The numbers from a submitted answer form, keyed by request id.
+ *
+ * Each row posts on its own - a `row` field naming the request and one `quantity` -
+ * because a message is rarely answered in one go, and a single button for eight rows
+ * made a partial answer look like a decision about all of them. Fields named
+ * `quantity_<id>` are still read, so a page left open from before that change works.
+ * Whole numbers only, and a row the form did not carry is not guessed at.
  */
 function readSentQuantities(body) {
+  const fields = body || {};
   const sent = new Map();
+  const entries = [];
 
-  for (const [name, value] of Object.entries(body || {})) {
-    const match = /^quantity_(\d+)$/.exec(name);
+  if (fields.row !== undefined) {
+    entries.push([fields.quantity, Number(String(fields.row).trim())]);
+  } else {
+    for (const [name, value] of Object.entries(fields)) {
+      const match = /^quantity_(\d+)$/.exec(name);
 
-    if (!match) {
-      continue;
+      if (match) {
+        entries.push([value, Number(match[1])]);
+      }
     }
-
-    const raw = String(value ?? '').trim();
-
-    if (!/^\d+$/.test(raw)) {
-      return { sent, error: 'Every box needs a whole number: how many you sent, or 0 for none.' };
-    }
-
-    sent.set(Number(match[1]), Number(raw));
   }
 
-  if (sent.size === 0) {
+  if (entries.length === 0) {
     return { sent, error: 'That form had nothing to record. Open the link from the email again.' };
+  }
+
+  for (const [value, id] of entries) {
+    const raw = String(value ?? '').trim();
+
+    if (!/^\d+$/.test(raw) || !Number.isInteger(id) || id <= 0) {
+      return { sent, error: 'That box needs a whole number: how many you sent, or 0 for none.' };
+    }
+
+    sent.set(id, Number(raw));
   }
 
   return { sent, error: '' };
@@ -1512,16 +1525,24 @@ function refuseSimulate(res, token) {
     simulateRefusalLogged = true;
     console.warn(
       SIMULATE_TOKEN
-        ? `Simulate nudge refused: the run sent ${
+        ? `[SIMULATE] nudge refused: the run sent ${
             token ? `token ${tokenFingerprint(token)}` : 'no token at all'
           }, this site holds ${tokenFingerprint(
             SIMULATE_TOKEN
           )}. Both must read the same SIMULATE_TOKEN, from the .env this site loaded when it started.`
-        : 'Simulate nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden. Set it in .env and restart the site.'
+        : '[SIMULATE] nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden. Set it in .env and restart the site.'
     );
   }
 
-  res.status(404).end();
+  // The answer says which of the two it is and which fingerprint this site holds - never
+  // the token - so the run can put both numbers side by side. A bare 404 left the
+  // operator with nothing to compare and no way to tell a wrong token from a wrong
+  // address, which is the whole reason this took so long to find.
+  res.status(SIMULATE_TOKEN ? 403 : 404).json({
+    ok: false,
+    reason: SIMULATE_TOKEN ? 'token-mismatch' : 'token-not-set',
+    site: SIMULATE_TOKEN ? tokenFingerprint(SIMULATE_TOKEN) : 'none',
+  });
 }
 
 // What `npm run simulate` calls before its first action: the same token test and no

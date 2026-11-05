@@ -47,7 +47,7 @@ const message = renderRequestEmail({
 });
 
 if (message.html.includes(sampleToken)) {
-  console.log('The Done button uses a sample link: it shows the form, but records nothing.');
+  console.log('The Save buttons use a sample link: they open the form, but record nothing.');
 }
 
 console.log(
