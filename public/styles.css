@@ -1,0 +1,1581 @@
+:root {
+  --bg-top: #0f172a;
+  --bg-bottom: #111c3d;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --muted-strong: #a6b4cd;
+  --panel: rgba(8, 18, 42, 0.44);
+  --panel-border: rgba(148, 163, 184, 0.25);
+  --panel-border-strong: rgba(148, 163, 184, 0.34);
+  --accent-top: #2d6cdf;
+  --accent-bottom: #2454bd;
+  --discord-top: #6d78f5;
+  --discord-bottom: #5865f2;
+  --danger: #fecaca;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: "Segoe UI", Arial, sans-serif;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0) 34%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  background-attachment: fixed;
+}
+
+.top-bar {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(7, 12, 24, 0.92);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--accent-top) 0%, var(--accent-bottom) 100%);
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.brand-title {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.brand-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.user-area {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+.discord-button {
+  height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  text-decoration: none;
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--discord-top) 0%, var(--discord-bottom) 100%);
+  box-shadow: 0 10px 24px rgba(37, 56, 163, 0.35);
+}
+
+.discord-button:hover {
+  background: linear-gradient(180deg, #7b86ff 0%, #6571f6 100%);
+}
+
+.discord-button-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+
+.discord-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.discord-mark {
+  font-size: 11px;
+}
+
+.auth-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-button-google {
+  background: linear-gradient(180deg, #ffffff 0%, #e5e7eb 100%);
+  color: #1f2937;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28);
+}
+
+.auth-button-google:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
+}
+
+.provider-note {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.surface {
+  flex: 1;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 30px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Signed out, or a login with no ESO account linked yet: the single card sits in the
+   middle of what the header and footer leave, rather than near the top of an empty
+   page. The card keeps a reading width instead of stretching across the window. */
+.surface-centered {
+  justify-content: center;
+  align-items: center;
+}
+
+.solo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.card {
+  padding: 22px 24px;
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.07) 0%, rgba(59, 130, 246, 0) 40%),
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 45px rgba(0, 0, 0, 0.1);
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.card-notice {
+  border-color: rgba(59, 130, 246, 0.66);
+  background: linear-gradient(180deg, rgba(25, 55, 111, 0.84) 0%, rgba(11, 26, 60, 0.84) 100%);
+}
+
+.card-error {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.22);
+  color: var(--danger);
+}
+
+.card-error h2 {
+  color: #fee2e2;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.muted + .muted {
+  margin-top: 8px;
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: #dbeafe;
+}
+
+.drop-zone {
+  margin-top: 16px;
+  padding: 26px 20px;
+  border: 1px dashed var(--panel-border-strong);
+  border-radius: 14px;
+  background: rgba(7, 16, 38, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.drop-zone:hover,
+.drop-zone.dragging {
+  border-color: rgba(96, 165, 250, 0.85);
+  background: rgba(37, 99, 235, 0.14);
+}
+
+.drop-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.drop-file {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.drop-zone input {
+  display: none;
+}
+
+.actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.primary-button {
+  height: 42px;
+  padding: 0 22px;
+  border: 1px solid rgba(91, 141, 255, 0.42);
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--accent-top) 0%, var(--accent-bottom) 100%);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
+}
+
+.primary-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #387cf0 0%, #2359c7 100%);
+}
+
+.primary-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.status {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.status.ok {
+  color: #86efac;
+}
+
+.status.err {
+  color: var(--danger);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 6px 0 16px;
+}
+
+.stat {
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(8, 18, 42, 0.44);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+}
+
+.meta-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.meta-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.filter select,
+.filter input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  background: rgba(7, 16, 38, 0.72);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.filter-search input {
+  min-width: 200px;
+}
+
+.filter-button {
+  height: 34px;
+  padding: 0 18px;
+  font-size: 13px;
+}
+
+.filter-clear {
+  align-self: center;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.filter-clear:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.item-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.item-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.7);
+  object-fit: cover;
+}
+
+.item-icon-empty {
+  display: inline-block;
+}
+
+/* A name is not a link: it opens a card instead, so it keeps the item's quality
+   colour and shows nothing underlined under the pointer. */
+.item-name-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: help;
+}
+
+.item-name-link:hover,
+.item-name-link:focus-visible {
+  text-decoration: none;
+}
+
+.item-name-link:focus-visible {
+  outline: 1px solid rgba(148, 163, 184, 0.6);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.item-cell-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-meta {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.type-row td {
+  background: rgba(37, 99, 235, 0.1);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #cbd5e1;
+}
+
+.type-count {
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.table-shell {
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  background: rgba(8, 18, 42, 0.44);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #d9e2f4;
+}
+
+th,
+td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(17, 34, 70, 0.96);
+  color: #dce6f7;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  box-shadow: 0 1px 0 rgba(148, 163, 184, 0.18);
+}
+
+tbody tr:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+td.num,
+th.num {
+  text-align: right;
+  width: 70px;
+}
+
+.account-block {
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.account-block + .account-block {
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.account-block .subsection {
+  margin-top: 12px;
+}
+
+.subsection {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.subsection h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(7, 16, 38, 0.62);
+  font-size: 12px;
+  font-weight: 700;
+  color: #dbeafe;
+}
+
+.chip-id {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.meta-note {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.item-name {
+  font-weight: 700;
+}
+
+.own-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.24);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #dbeafe;
+  vertical-align: middle;
+}
+
+.owner {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.owner-character {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.footer {
+  padding: 16px 28px 22px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .top-bar {
+    height: auto;
+    padding: 14px 16px;
+    flex-wrap: wrap;
+  }
+
+  .surface {
+    padding: 20px 14px 30px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Account menu: a circular avatar in the header, with Log out inside the menu
+   rather than a permanent button beside the name.
+   --------------------------------------------------------------------------- */
+.account-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.avatar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.avatar-button:hover,
+.avatar-button[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #7b86ff 0%, #4c56d8 100%);
+}
+
+.avatar-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--muted-strong);
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: #1b2136;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+}
+
+/* The author rule above outranks the browser's [hidden] rule, so restate it. */
+.account-menu-panel[hidden] {
+  display: none;
+}
+
+.account-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.account-menu-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.account-menu-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.account-menu-item {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-menu-item:hover,
+.account-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Message pages link back with the primary button styling. */
+a.primary-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* Profile picture layered over the initials, so a failed load still looks right. */
+.avatar-with-photo {
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Live updates. The pill stays hidden until the socket has something to say, so a
+   reader without scripts is never told a list is live when it cannot be. */
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 2px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  color: var(--muted);
+}
+
+.live-pill[hidden] {
+  display: none;
+}
+
+.live-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.live-pill[data-live="live"] {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.45);
+}
+
+.live-pill[data-live="live"]::before {
+  opacity: 1;
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.16);
+}
+
+.live-pill[data-live="wait"] {
+  color: #fcd34d;
+  border-color: rgba(252, 211, 77, 0.4);
+}
+
+.live-pill[data-live="off"] {
+  color: var(--muted);
+}
+
+/* Tabs and the filter card. The filter row lives outside #itemLists on purpose: a
+   live update must never wipe out what someone is typing there. */
+.card-filters {
+  padding: 14px 18px;
+}
+
+.card-filters .filters {
+  margin: 0;
+}
+
+/* The tabs are the only thing in this row most of the time, so they sit in the
+   middle; the live pill stays out of that centring at the right edge. */
+.list-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.list-head .live-pill {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+}
+
+/* "12 different items shared by other members of your guilds": the answer to
+   "how much is there for me here?", above the tabs and below the basket clock. */
+.offer-summary {
+  margin: 0 0 14px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  color: #e5ecff;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: rgba(6, 14, 32, 0.55);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: #e5e7eb;
+}
+
+.tab[aria-selected="true"] {
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--accent-top) 0%, var(--accent-bottom) 100%);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+}
+
+.tab-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: inherit;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.tab[aria-selected="true"] .tab-count {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.list-panel[hidden] {
+  display: none;
+}
+
+/* The hover card for an item name. Fixed positioning keeps it beside the pointer
+   as the list moves underneath; pointer-events stays off so it never steals the
+   hover that opened it, and the offset keeps it clear of the name itself. */
+.item-tip-card {
+  position: fixed;
+  z-index: 80;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  background: rgba(8, 15, 30, 0.97);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5);
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.item-tip-card[hidden] {
+  display: none;
+}
+
+.item-tip-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.item-tip-name {
+  font-weight: 800;
+}
+
+.item-tip-tag {
+  padding: 1px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.item-tip-meta {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.item-tip-text {
+  margin: 8px 0 0;
+}
+
+.item-tip-set {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.item-tip-set-name {
+  font-weight: 700;
+  color: #dbeafe;
+}
+
+.item-tip-set ul {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding-left: 15px;
+}
+
+.item-tip-source {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #6b7688;
+}
+
+.subhead {
+  margin: 20px 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
+
+.filter-clear {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-clear:hover {
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+/* Upload progress and result, floating above the page and gone on its own. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 50;
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 12px;
+  background: rgba(9, 17, 35, 0.97);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-line;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translate(-50%, 12px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.toast.ok {
+  border-color: rgba(74, 222, 128, 0.5);
+  color: #bbf7d0;
+}
+
+.toast.err {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: var(--danger);
+}
+
+.toast.info {
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.drop-zone.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------- sorting and row actions */
+th .sort-link {
+  display: inline-flex;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dashed transparent;
+}
+
+th .sort-link:hover,
+th .sort-link:focus-visible {
+  border-bottom-color: currentColor;
+}
+
+th .sort-link.active {
+  border-bottom-color: var(--muted-strong);
+}
+
+.seen-cell {
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.action-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.request-button {
+  border: 1px solid var(--panel-border-strong);
+  background: rgba(59, 130, 246, 0.16);
+  color: inherit;
+  border-radius: 7px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.request-button:hover,
+.request-button:focus-visible {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.reserved-note,
+.claimed-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.claimed-note {
+  color: #e0a3a3;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.status-pending {
+  border-color: rgba(59, 130, 246, 0.55);
+}
+
+.status-cancelled {
+  border-color: rgba(224, 120, 120, 0.55);
+  color: #e7b4b4;
+}
+
+.status-fulfilled {
+  border-color: rgba(124, 200, 140, 0.55);
+}
+
+/* ------------------------------------------------------- the request dialog */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 9, 20, 0.68);
+  z-index: 40;
+}
+
+.modal {
+  width: min(420px, 100%);
+  padding: 18px 20px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 12px;
+  background: #0b1630;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal h2 {
+  margin-top: 0;
+}
+
+.request-form {
+  display: grid;
+  gap: 10px;
+}
+
+.request-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.request-number {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------- availability and the basket */
+.held-cell {
+  color: var(--muted-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.draft-basket {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.12), rgba(250, 204, 21, 0.03));
+}
+
+.draft-basket-text {
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.draft-basket-text .muted {
+  font-size: 12px;
+}
+
+.draft-basket-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.countdown {
+  min-width: 58px;
+  padding: 4px 10px;
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  border-radius: 999px;
+  background: rgba(9, 17, 36, 0.6);
+  color: #fde68a;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 13px;
+  text-align: center;
+}
+
+.countdown-urgent {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.7);
+}
+
+.status-draft {
+  border-color: rgba(250, 204, 21, 0.55);
+  color: #fde68a;
+}
+
+.status-expired {
+  border-color: rgba(148, 163, 184, 0.5);
+  color: var(--muted);
+}
+
+/* The accounts review dialog, and its close affordance. */
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal-wide {
+  width: min(720px, 100%);
+  max-height: 82vh;
+  overflow: auto;
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-head h2 {
+  margin: 0;
+}
+
+.modal-close {
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  color: var(--muted-strong);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover,
+.modal-close:focus-visible {
+  color: #ffffff;
+}
+
+.leave-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/* The basket clock: neutral, then yellow, then red, then out. */
+.countdown {
+  color: #e7ecf7;
+  border-color: rgba(148, 163, 184, 0.55);
+  transition: color 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+}
+
+.countdown-soon {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.7);
+}
+
+.countdown-urgent:not(.countdown-fading) {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.75);
+}
+
+.countdown-fading {
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+
+/* A closed request fades before it leaves, so the reason can be read first. The
+   fade is deliberately slow: a row that vanishes between two blinks looks like a
+   glitch, and the rows under it need a moment to be seen closing up. */
+tr.row-fading {
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+tr.row-fading td {
+  border-color: transparent;
+  transition: border-color 1.2s ease;
+}
+
+/* Rows are moved by app.js, which measures the old and new positions and plays the
+   difference back. A panel's height is animated the same way, so applying or
+   clearing filters settles the list instead of making the page jump. */
+.sent-cell time {
+  color: inherit;
+  border-bottom: 0;
+}
+
+.filter-chips {
+  transition: min-height 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tbody tr,
+  tr.row-fading,
+  tr.row-fading td,
+  .filter-chips {
+    transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ filters */
+
+/* The filter controls and the chips under them are centred as one row. */
+.card-filters .filters {
+  justify-content: center;
+}
+
+.filter-menu {
+  position: relative;
+}
+
+/* A filter that holds several values: a menu of checkboxes, styled like the select
+   it replaced so the row still reads as one set of controls. */
+.filter-dropdown > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 158px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  background: rgba(7, 16, 38, 0.72);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.filter-dropdown > summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-dropdown > summary::after {
+  content: '\25be';
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.filter-dropdown[open] > summary {
+  border-color: rgba(96, 165, 250, 0.6);
+}
+
+.filter-count:not([hidden]) {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.35);
+  color: #dbeafe;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.filter-menu-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 10px;
+  background: rgba(9, 17, 35, 0.98);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.55);
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filter-option:hover {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+/* One long row of chips: everything that is narrowing the list, each one a click
+   away from being taken off again. */
+.filter-chips {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.filter-chips:empty {
+  display: none;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.25);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter-chip:hover {
+  border-color: rgba(248, 113, 113, 0.7);
+  background: rgba(127, 29, 29, 0.35);
+}
+
+/* Clearing throws the whole filter row away, so it is coloured like the destructive
+   action it is and lines up with the bottom of the controls beside it. */
+.card-filters .filter-clear {
+  align-self: flex-end;
+  height: 34px;
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
+
+.card-filters .filter-clear:hover {
+  border-color: rgba(248, 113, 113, 0.85);
+  background: rgba(153, 27, 27, 0.55);
+  color: #fff;
+}
+
+/* Where the owner's copy was when they last saved. Scanned rather than read, so it
+   stays muted and never wraps into two lines. */
+.location-cell {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Request rows carry the item's picture now, the same way the item list does. */
+.item-lists .item-cell {
+  gap: 8px;
+}
+
+/* When a request went out. Narrow, muted, never wrapped. */
+.sent-cell {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
