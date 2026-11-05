@@ -314,10 +314,10 @@ just what you can see.
 A request is **a reservation, not a delivery**, and it reserves from the moment it is
 picked rather than from the moment it is sent:
 
-- The list has two quantity columns. **QTY** is what nobody has reserved, **Reserved**
-  is what a request is standing on, and together they always add up to what the owner
-  reported. A row with nothing reserved leaves that column blank rather than filling it
-  with a dash. When nothing is free the button becomes *All held*.
+- The list has two quantity columns. **QUANTITY** is what nobody has reserved,
+  **RESERVED** is what a request is standing on, and together they always add up to
+  what the owner reported. A row with nothing reserved leaves that column blank rather
+  than filling it with a dash. When nothing is free the button becomes *All held*.
 - Asking puts the item in a **basket** with a clock (`REQUEST_HOLD_MINUTES`). Everything
   picked shares one timer, and adding or removing anything starts it again. *Your
   requests* shows the countdown beside a **Send requests** button; until it is pressed
@@ -493,7 +493,7 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every QTY/Reserved calculation is unaffected by a reserve.
+what is actually on offer, so every QUANTITY/RESERVED calculation is unaffected by a reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
 unique nor stable.

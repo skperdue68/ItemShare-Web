@@ -1724,8 +1724,13 @@ tr.row-fading td {
   gap: 8px;
 }
 
+/* The chip row keeps the height of one line even when nothing is chosen, so the filter
+   card does not jump the moment the first chip appears. It is a floor, not a fixed
+   size: more chips still wrap and push the card taller. */
 .filter-chips:empty {
-  display: none;
+  display: flex;
+  min-height: 28px;
+  align-content: flex-start;
 }
 
 .filter-chip {
