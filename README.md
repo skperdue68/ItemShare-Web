@@ -296,7 +296,7 @@ every linked account in *Offering*.
 
 ## Asking for something
 
-Every row in *Request* has a **Request** button offering one, everything you can hold,
+Every row in *Request* has a **Request** button offering one, everything still unclaimed,
 or any number in between. The largest number offered is the copies nobody has claimed
 plus whatever is already in your own basket, never more than the raw `item_count`, so
 two people can never be promised the same five. A number picked there is the total you
