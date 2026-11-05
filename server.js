@@ -139,10 +139,20 @@ function readParam(value) {
   return typeof value === 'string' ? value.trim().slice(0, 120) : '';
 }
 
-// How a person is named in the server log and in the live-update line. The provider
-// username is what they signed in as; the email is the fallback for a provider that
-// does not give one.
-function personLabel(user) {
+// How a person is named in the server log and in the live-update line. The ESO account is
+// what the guild deals in - a Discord handle means nothing next to "asked for 2 x Soul
+// Gem" - so the account the action came from is used, which is the account being browsed
+// as whenever there is a choice. The provider username is only the fallback for something
+// that has no ESO account attached to it.
+function personLabel(user, accountNames) {
+  const names = (Array.isArray(accountNames) ? accountNames : [accountNames])
+    .map((name) => String(name || '').trim())
+    .filter(Boolean);
+
+  if (names.length > 0) {
+    return [...new Set(names)].join(' and ');
+  }
+
   return (user && (user.username || user.email)) || 'Someone';
 }
 
@@ -516,7 +526,9 @@ app.post('/requests', async (req, res) => {
     // Everyone looking at that stack needs the new count straight away.
     notifyItemsChanged(
       'request',
-      `${personLabel(user)} asked for ${outcome.quantity} x ${outcome.itemName} from ${outcome.ownerAccountName}`
+      `${personLabel(user, outcome.requesterAccountName)} asked for ${outcome.quantity} x ${
+        outcome.itemName
+      } from ${outcome.ownerAccountName}`
     );
     res.json({ ok: true, ...outcome });
   } catch (error) {
@@ -552,9 +564,9 @@ app.post('/requests/:id/cancel', async (req, res) => {
 
     notifyItemsChanged(
       'request',
-      `${personLabel(user)} ${outcome.wasDraft ? 'took back' : 'cancelled'} their request for ${
-        outcome.itemName || 'an item'
-      }`
+      `${personLabel(user, outcome.requesterAccountName)} ${
+        outcome.wasDraft ? 'took back' : 'cancelled'
+      } their request for ${outcome.itemName || 'an item'}`
     );
     res.json({ ok: true, ...outcome });
   } catch (error) {
@@ -620,7 +632,10 @@ app.post('/requests/submit', async (req, res) => {
 
     notifyItemsChanged(
       'request',
-      `${personLabel(user)} sent ${outcome.sent} request${outcome.sent === 1 ? '' : 's'}${
+      `${personLabel(
+        user,
+        (outcome.submitted || []).map((row) => row.requester_account_name)
+      )} sent ${outcome.sent} request${outcome.sent === 1 ? '' : 's'}${
         mail.sent > 0 ? ` and emailed ${mail.sent} owner${mail.sent === 1 ? '' : 's'}` : ''
       }`
     );
