@@ -643,10 +643,19 @@ try {
         {
             ["$AccountWide"] =
             {
-                ["addonVersion"] = "1.9.0",
-                ["knownGuilds"] =
+                ["version"] = 3,
+                ["addonVersion"] = "1.10.0",
+                ["guilds"] =
                 {
-                    [${GUILD}] = "Test Guild",
+                    ["${GUILD}"] = "Test Guild",
+                },
+                ["characterGuilds"] =
+                {
+                    ["Tester"] =
+                    {
+                        ["guildIds"] = { ${GUILD} },
+                        ["updatedAt"] = 1793866476,
+                    },
                 },
                 ["sharedItems"] =
                 {
@@ -656,10 +665,6 @@ try {
                         ["characterName"] = "Tester",
                         ["itemName"] = "Copied Item",
                         ["count"] = 3,
-                        ["guildIds"] =
-                        {
-                            [1] = ${GUILD},
-                        },
                     },
                     ["moved-key"] =
                     {
@@ -674,6 +679,7 @@ try {
                     ["offer-key"] =
                     {
                         ["accountName"] = "@TestOriginal",
+                        ["characterName"] = "Tester",
                         ["itemName"] = "Copied Offer",
                     },
                 },
@@ -683,7 +689,8 @@ try {
         {
             ["$AccountWide"] =
             {
-                ["addonVersion"] = "1.9.0",
+                ["version"] = 3,
+                ["addonVersion"] = "1.10.0",
                 ["sharedItems"] =
                 {
                 },
@@ -724,11 +731,10 @@ try {
     2
   );
 
-  console.log('\n13. A version 3 file stores exactly what a version 2 file stored');
+  console.log('\n13. A version 3 file stores its items under all five guilds');
 
-  // Five guilds, five items. v2 copies the guilds onto every item and keeps a name map;
-  // v3 keeps one registry and a per-character id list, and puts no guild field on an
-  // item at all. The stored rows are what has to match, so they are what is compared.
+  // Five guilds, five items, one registry and one character snapshot. The whole link is
+  // character -> guildIds -> registry, because the items carry no guild fields at all.
   const FIVE_GUILDS = [
     [9001, 'Test Guild'],
     [9002, 'Second Guild'],
@@ -737,65 +743,20 @@ try {
     [9005, 'Fifth Guild'],
   ];
   const GUILD_IDS = FIVE_GUILDS.map(([guildId]) => guildId);
-  const GUILD_NAMES = FIVE_GUILDS.map(([, name]) => name);
   const guildPairs = (indent) =>
-    FIVE_GUILDS.map(([guildId, name]) => `${indent}[${guildId}] = "${name}",`).join('\n');
-  const pairTables = (indent) =>
-    FIVE_GUILDS.map(
-      ([guildId, name]) => `${indent}{ ["guildId"] = ${guildId}, ["guildName"] = "${name}" },`
-    ).join('\n');
-
-  const guildedItems = (account, { withGuilds }) =>
-    Array.from({ length: 5 }, (_, index) => {
-      const guildFields = withGuilds
-        ? `
-            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
-            ["guildNames"] = { ${GUILD_NAMES.map((name) => `"${name}"`).join(', ')} },
-            ["guildsCapturedAt"] = 1793866476,`
-        : '';
-
-      return `          ["guilded-key-${index + 1}"] =
+    FIVE_GUILDS.map(([guildId, name]) => `${indent}["${guildId}"] = "${name}",`).join('\n');
+  const guildedItems = (account) =>
+    Array.from(
+      { length: 5 },
+      (_, index) => `          ["guilded-key-${index + 1}"] =
           {
             ["accountName"] = "${account}",
             ["characterName"] = "Tester",
             ["itemName"] = "Guilded Item ${index + 1}",
             ["count"] = ${index + 4},
-            ["locationKey"] = "inventory:tester",${guildFields}
-          },`;
-    }).join('\n');
-
-  const v2File = `ItemShareSavedVars =
-{
-  ["Default"] =
-  {
-    ["@TestV2"] =
-    {
-      ["$AccountWide"] =
-      {
-        ["addonVersion"] = "1.9.0",
-        ["knownGuilds"] =
-        {
-${guildPairs('          ')}
-        },
-        ["characterGuilds"] =
-        {
-          ["Tester"] =
-          {
-            ["guilds"] =
-            {
-${pairTables('              ')}
-            },
-            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
-          },
-        },
-        ["sharedItems"] =
-        {
-${guildedItems('@TestV2', { withGuilds: true })}
-        },
-      },
-    },
-  },
-}`;
+            ["locationKey"] = "inventory:tester",
+          },`
+    ).join('\n');
 
   const v3File = `ItemShareSavedVars =
 {
@@ -822,36 +783,25 @@ ${guildPairs('          ')}
         ["guildsUpdatedAt"] = 1793866476,
         ["sharedItems"] =
         {
-${guildedItems('@TestV3', { withGuilds: false })}
+${guildedItems('@TestV3')}
         },
       },
     },
   },
 }`;
 
-  const parsedV2 = extractShareData(v2File);
   const parsedV3 = extractShareData(v3File);
 
   ok(
-    'the v3 registry gives every guild its name',
+    'the registry gives every guild its name',
     [...parsedV3.guilds.entries()].sort((a, b) => a[0] - b[0]),
     FIVE_GUILDS
   );
+  ok('the file finds five items', parsedV3.items.length, 5);
   ok(
-    'the v2 knownGuilds map gives the same five',
-    [...parsedV2.guilds.entries()].sort((a, b) => a[0] - b[0]),
-    FIVE_GUILDS
-  );
-  ok('both files find five items', [parsedV2.items.length, parsedV3.items.length], [5, 5]);
-  ok(
-    'each v3 item follows its character to all five guilds',
+    'each item follows its character to all five guilds',
     parsedV3.items.map((item) => item.guildIds.slice().sort((a, b) => a - b)),
     parsedV3.items.map(() => GUILD_IDS)
-  );
-  ok(
-    'each v2 item keeps the five it carried',
-    parsedV2.items.map((item) => item.guildIds.slice().sort((a, b) => a - b)),
-    parsedV2.items.map(() => GUILD_IDS)
   );
 
   const storeFile = (account, parsed, sourceFile) =>
@@ -868,11 +818,9 @@ ${guildedItems('@TestV3', { withGuilds: false })}
       { sourceFile }
     );
 
-  const v2Upload = (await storeFile('@TestV2', parsedV2, 'ItemShareExport.lua'))[0];
   const v3Upload = (await storeFile('@TestV3', parsedV3, 'ItemShareSavedVars.lua'))[0];
 
-  ok('the v2 upload records five guilds', v2Upload.guildCount, 5);
-  ok('the v3 upload records five guilds too', v3Upload.guildCount, 5);
+  ok('the upload records five guilds', v3Upload.guildCount, 5);
 
   const storedRows = async (accountName) => {
     const [rows] = await connection.execute(
@@ -895,10 +843,13 @@ ${guildedItems('@TestV3', { withGuilds: false })}
     ]);
   };
 
-  const v2Rows = await storedRows('@TestV2');
   const v3Rows = await storedRows('@TestV3');
 
-  ok('the same five rows and the same guild links come out of either file', v3Rows, v2Rows);
+  ok(
+    'five rows, keyed and counted as the file says',
+    v3Rows.map((row) => [row[0], row[2]]),
+    ['1', '2', '3', '4', '5'].map((step) => [`guilded-key-${step}`, Number(step) + 3])
+  );
   ok(
     'every item is offered to all five guilds',
     v3Rows.map((row) => row[3]),
@@ -914,7 +865,7 @@ ${guildedItems('@TestV3', { withGuilds: false })}
     FIVE_GUILDS
   );
   ok(
-    'the v3 account is in exactly five guilds',
+    'the account is in exactly five guilds',
     Number(
       (
         await connection.execute(
