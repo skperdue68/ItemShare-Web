@@ -9,6 +9,7 @@
 //   npm run simulate -- --only requests  asking, sending, cancelling and timing out
 //   npm run simulate -- --only items     just people re-saving their files
 //   npm run simulate -- --reset          remove the simulated people and their data
+//   npm run simulate -- --url <address>  ask a different site to announce the changes
 //
 // It writes through lib/store.js, the same code the site uses, so reservations, the
 // basket clock and the upload reconciliation behave exactly as they would for a real
@@ -16,8 +17,10 @@
 //
 // The site holds the socket connections, so the script cannot push on its own. After
 // each action it asks the running site to announce what happened; that needs
-// SIMULATE_TOKEN in .env (the same file the site reads) and the site
-// running. Without it the data still changes - you just see it on the next refresh.
+// SIMULATE_TOKEN in .env (the same file the site reads) and the site running. The address
+// it asks is BASE_URL - the one the site publishes for its own links - so a reverse proxy
+// or another port needs nothing extra here, and --url sends one run somewhere else.
+// Without it the data still changes - you just see it on the next refresh.
 //
 // Everything it creates is labelled with a `simulator` identity, so the same three
 // people come back instead of a new set on every run, and --reset removes them all.
@@ -543,6 +546,18 @@ async function saveSomething(connection, person, guilds) {
   };
 }
 
+// Where the site answers. BASE_URL is the address the site already publishes for its own
+// links and sign-in redirects, so it is already right behind a proxy or on another port;
+// --url overrides it for one run, and a missing scheme is filled in because "host:port"
+// is what people type.
+function siteBaseUrl() {
+  const chosen = String(valueAfter('--url') || process.env.BASE_URL || '').trim();
+  const base = chosen || `http://127.0.0.1:${process.env.PORT || 3000}`;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(base) ? base : `http://${base}`;
+
+  return withScheme.replace(/\/+$/, '');
+}
+
 async function nudge(summary) {
   const token = String(process.env.SIMULATE_TOKEN || '').trim();
 
@@ -552,10 +567,8 @@ async function nudge(summary) {
     return '';
   }
 
-  const base = `http://127.0.0.1:${process.env.PORT || 3000}`;
-
   try {
-    const response = await fetch(`${base}/simulate/nudge`, {
+    const response = await fetch(`${SITE_URL}/simulate/nudge`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -565,7 +578,12 @@ async function nudge(summary) {
     });
 
     if (!response.ok) {
-      return `the site answered ${response.status}, so open pages were not told`;
+      // 404 is the site's own answer when its token is blank or different, deliberately
+      // indistinguishable from a missing route, so say which knob to check.
+      const hint =
+        response.status === 404 ? ' (it hides the route unless SIMULATE_TOKEN matches)' : '';
+
+      return `the site answered ${response.status}${hint}, so open pages were not told`;
     }
 
     const result = await response.json().catch(() => ({}));
@@ -575,7 +593,7 @@ async function nudge(summary) {
       ? 'no pages open to refresh'
       : `${clients} open page${clients === 1 ? '' : 's'} told to refresh`;
   } catch (error) {
-    return `could not reach the site on ${base} (${error.message})`;
+    return `could not reach the site on ${SITE_URL} (${error.message})`;
   }
 }
 
@@ -619,6 +637,7 @@ const rounds = once
 const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 10000));
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
+const SITE_URL = siteBaseUrl();
 
 const config = readConfig();
 let connection;
@@ -713,6 +732,10 @@ try {
             : ', running until you stop it'
         }${every > 0 ? `, one every ${Math.round(every / 1000)}s` : ''}.`
       );
+
+      if (String(process.env.SIMULATE_TOKEN || '').trim()) {
+        console.log(`Live pushes: ${SITE_URL}/simulate/nudge`);
+      }
 
       if (!Number.isFinite(rounds) || rounds > 1) {
         console.log('Press Ctrl+C to stop.');
