@@ -268,10 +268,31 @@ async function withDatabase(handler) {
 const SORT_FIELDS = new Set(['type', 'name', 'added']);
 const ADDED_WINDOWS = new Set(['1', '7', '30']);
 
-function readFilters(query) {
+// The sort order is a reading preference, not a filter: it is kept in a small cookie so
+// the address bar stays a plain link to the filters, safe to share or bookmark. A
+// ?sort= still wins when it is present, so an older bookmark keeps behaving.
+const SORT_COOKIE = 'itemshare_sort';
+
+function readSortCookie(header) {
+  for (const part of String(header || '').split(';')) {
+    const [name, ...rest] = part.split('=');
+
+    if (name && name.trim() === SORT_COOKIE) {
+      return decodeURIComponent(rest.join('=').trim());
+    }
+  }
+
+  return '';
+}
+
+function readFilters(query, sortCookie = '') {
   const sort = readParam(query.sort);
   const dir = readParam(query.dir);
   const added = readParam(query.added);
+  // "name:desc" - the field and the direction in one small value.
+  const remembered = String(sortCookie || '').split(':');
+  const chosenSort = sort || remembered[0];
+  const chosenDir = dir || remembered[1];
 
   return {
     // Several types or owners at once arrive as repeated parameters, so they stay
@@ -282,8 +303,8 @@ function readFilters(query) {
     // Only the values the list actually offers get through, so a hand-typed ?sort=
     // or ?added= falls back to the default instead of reaching the query.
     added: ADDED_WINDOWS.has(added) ? added : '',
-    sort: SORT_FIELDS.has(sort) && sort !== 'type' ? sort : 'type',
-    dir: dir === 'desc' ? 'desc' : 'asc',
+    sort: SORT_FIELDS.has(chosenSort) && chosenSort !== 'type' ? chosenSort : 'type',
+    dir: chosenDir === 'desc' ? 'desc' : 'asc',
   };
 }
 
@@ -377,7 +398,9 @@ async function viewerAccountNames(req, connection, user) {
 
   return data;
 }  app.get('/', async (req, res) => {
-    res.type('html').send(renderPage(await collectViewerData(req, readFilters(req.query))));
+    res
+      .type('html')
+      .send(renderPage(await collectViewerData(req, readFilters(req.query, readSortCookie(req.headers.cookie)))));
   });
 
   // Choosing the account to browse as. A plain form POST, so it still works with the
@@ -429,8 +452,7 @@ async function viewerAccountNames(req, connection, user) {
 // The live update: the same list the page was built from, as a fragment, using the
 // filters this browser already has. A non-200 means "leave the screen alone" - a
 // database hiccup must not replace a good list with an error card.
-app.get('/items', async (req, res) => {
-  const data = await collectViewerData(req, readFilters(req.query));
+app.get('/items', async (req, res) => {    const data = await collectViewerData(req, readFilters(req.query, readSortCookie(req.headers.cookie)));
 
   if (data.dbError) {
     res.status(503).json({ error: data.dbError });

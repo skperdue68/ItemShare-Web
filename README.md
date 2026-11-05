@@ -257,8 +257,10 @@ Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (oth
 people's items), **Offering** (your own), and **Your requests**.
 
 Rows are grouped by type and alphabetical inside each group. The **Item** and **Added**
-headings sort; clicking the same heading again reverses it. Sorting by either drops the
-type headings, so the order you asked for is the order you get.
+headings sort, cycling through three states on repeated clicks: ascending, descending,
+then back to the type groups. Sorting by either drops the type headings, so the order
+you asked for is the order you get. The chosen order is remembered in the
+`itemshare_sort` cookie, so it survives a reload without ever appearing in the URL.
 
 `Added` is the day an item first entered its owner's shared list - the day they offered
 it - not the day of their latest upload, so re-uploading a long-held item does not make
@@ -272,8 +274,10 @@ A filter bar narrows the list by item type, owner account, how recently it was a
 (day / 7 days / 30 days) and item name. Type and owner accept several values at once,
 each ticked value becoming a chip on a row underneath; clicking a chip removes just that
 value. Filters are ordinary query parameters, repeated once per value
-(`/?type=Weapon&type=Armor&owner=@Name&added=7&q=sword&sort=added&dir=desc`), so a
-filtered, sorted view can be bookmarked and works with scripts off.
+(`/?type=Weapon&type=Armor&owner=@Name&added=7&q=sword`), so a filtered view can be
+bookmarked and works with scripts off. The sort order is deliberately not among them:
+it is a reading preference kept in a cookie, which keeps links clean and stops one
+person's sorting being handed to whoever opens their link.
 
 An owner can keep part of a stack back in game with a *share reserve*. The site lists
 what is actually being offered - the reserve is subtracted before upload - and shows the
@@ -310,9 +314,10 @@ just what you can see.
 A request is **a reservation, not a delivery**, and it reserves from the moment it is
 picked rather than from the moment it is sent:
 
-- The list has two quantity columns. **Free** is what nobody is holding, **Held** is
-  what a request is standing on, and together they always add up to what the owner
-  reported. When nothing is free the button becomes *All held*.
+- The list has two quantity columns. **QTY** is what nobody has reserved, **Reserved**
+  is what a request is standing on, and together they always add up to what the owner
+  reported. A row with nothing reserved leaves that column blank rather than filling it
+  with a dash. When nothing is free the button becomes *All held*.
 - Asking puts the item in a **basket** with a clock (`REQUEST_HOLD_MINUTES`). Everything
   picked shares one timer, and adding or removing anything starts it again. *Your
   requests* shows the countdown beside a **Send requests** button; until it is pressed
@@ -488,7 +493,7 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every Free/Held calculation is unaffected by a reserve.
+what is actually on offer, so every QTY/Reserved calculation is unaffected by a reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
 unique nor stable.
