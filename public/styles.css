@@ -1019,6 +1019,7 @@ a.primary-button {
   margin: 0 0 14px;
   font-size: 13px;
   color: var(--muted-strong);
+  text-align: center;
 }
 
 .browsing-single {
