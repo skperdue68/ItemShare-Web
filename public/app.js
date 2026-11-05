@@ -842,10 +842,21 @@ if (listRegion) {
       sendRequest(picked);
     });
 
-    const first = backdrop.querySelector('input[name="how"]');
+    // The number field is where a person types, so it opens focused with the whole value
+    // selected: typing replaces it, and its own radio is chosen first so the form submits
+    // the number rather than a choice they never made.
+    const numberChoice = backdrop.querySelector('input[name="how"][value="number"]');
 
-    if (first) {
-      first.focus();
+    if (numberChoice && numberInput) {
+      numberChoice.checked = true;
+      numberInput.focus();
+      numberInput.select();
+    } else {
+      const first = backdrop.querySelector('input[name="how"]');
+
+      if (first) {
+        first.focus();
+      }
     }
   }
 

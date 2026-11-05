@@ -321,10 +321,19 @@ just what you can see.
 A request is **a reservation, not a delivery**, and it reserves from the moment it is
 picked rather than from the moment it is sent:
 
-- The list has two quantity columns. **QUANTITY** is what nobody has reserved,
-  **RESERVED** is what a request is standing on, and together they always add up to
-  what the owner reported. A row with nothing reserved leaves that column blank rather
-  than filling it with a dash. When nothing is free the button becomes *All held*.
+- The list has three quantity columns, so the arithmetic is visible instead of
+  inferred: **OFFERED** is what the owner's file reported, **AVAILABLE** is what nobody
+  has reserved, and **HELD** is what a request is standing on. Available and held always
+  add up to offered, so a row of 8 offered with 3 available and 5 held explains itself.
+  A row with nothing held leaves that column blank rather than filling it with a dash.
+  When nothing is available the button becomes *All held*.
+- On your own rows, **N pending requests** says how many asks are waiting on you, one
+  per request rather than one per copy, so two people asking for one copy each reads
+  "2 pending requests". The number falls as requests are answered, cancelled or time
+  out, and vanishes at zero. Hovering it lists who asked and how many they asked for,
+  one line per waiting request.
+- The request dialog opens with the number field focused and its value selected, and its
+  radio already chosen, so typing a number is all it takes to ask for that many.
 - Asking puts the item in a **basket** with a clock (`REQUEST_HOLD_MINUTES`). Everything
   picked shares one timer, and adding or removing anything starts it again. *Your
   requests* shows the countdown beside a **Send requests** button; until it is pressed
@@ -500,7 +509,8 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every QUANTITY/RESERVED calculation is unaffected by a reserve.
+what is actually on offer, so every OFFERED/AVAILABLE/HELD calculation is unaffected by a
+reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
 unique nor stable.
