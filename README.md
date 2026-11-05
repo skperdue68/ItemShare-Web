@@ -224,6 +224,7 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/items` | The item-list region only, as a fragment, for live refresh. `503` means "leave the screen alone" |
 | `POST` | `/upload` | Accept a `ItemShareSavedVars.lua` upload |
 | `POST` | `/ingest` | Accept the same file from a watcher, token-authenticated |
+| `POST` | `/browsing-account` | Choose the ESO account browsing uses; a form post that redirects back to `/` |
 | `POST` | `/requests` | Put an item in the basket, or top up its quantity |
 | `POST` | `/requests/:id/cancel` | Take a basket row back out |
 | `POST` | `/requests/submit` | Send the basket: commit it and email the owners |
@@ -239,8 +240,18 @@ port and no extra proxy rule.
 
 ## Seeing shared items
 
-The page lists every item offered to any guild that any of your linked ESO accounts
-belongs to, with the owning account, character, quantity, item type and trait.
+You browse as **one** of your ESO accounts. When more than one is linked, a *Browsing
+as* control above the tabs picks it, and the choice is stored on the person
+(`itemshare_users.browsing_eso_account_name`) rather than in the session, so it survives
+signing out and follows you to another device. With a single account it is a label
+instead of a choice.
+
+The chosen account decides what **Request** shows: only items offered to guilds *that
+account* belongs to. **Offering** deliberately spans every linked account and names the
+account and character holding each item, so a second account never hides what the first
+one shares. **Your requests** covers everything you have asked for, from any account.
+
+Every row shows the owning account, character, quantity, item type and trait.
 
 Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (other
 people's items), **Offering** (your own), and **Your requests**.
@@ -274,6 +285,9 @@ viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_gui
 Nothing is readable without a guild overlap, so an account in no guilds sees nothing -
 and nothing is listed at all before a first upload.
 
+The overlap is resolved per list: for the account you browse as in *Request*, and across
+every linked account in *Offering*.
+
 ## Asking for something
 
 Every row in *Request* has a **Request** button offering one, everything you can hold,
@@ -289,7 +303,11 @@ asked for while the owner has one in a bag right now. When they do not, the row 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
 
-A request is a **reservation, not a delivery**, and it reserves from the moment it is
+A request is recorded against the account you are browsing as - that is the character
+the owner is told to mail - so the account picker changes where a handover happens, not
+just what you can see.
+
+A request is **a reservation, not a delivery**, and it reserves from the moment it is
 picked rather than from the moment it is sent:
 
 - The list has two quantity columns. **Free** is what nobody is holding, **Held** is
@@ -454,7 +472,7 @@ handled by one process would otherwise never reach sockets held by another.
 | `itemshare_uploads` | One row per import: account, file, item count, total quantity, person |
 | `itemshare_accounts` | ESO account → person link; several accounts may belong to one person |
 | `itemshare_account_guilds` | Which guilds each ESO account belongs to |
-| `itemshare_users` | One row per person: display name, email, verified flag, avatar |
+| `itemshare_users` | One row per person: display name, email, verified flag, avatar, and the ESO account they browse as |
 | `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord and Google |
 | `itemshare_sessions` | Sign-in sessions, so they survive a restart |
 | `itemshare_discord_users` | Legacy Discord profile table, superseded by `itemshare_users` |
