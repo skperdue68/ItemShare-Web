@@ -285,7 +285,9 @@ async function emailOwners({ user, submitted, contacts }) {
   }
 
   console.log(
-    `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${skipped ? `, ${skipped} failed` : ''}`
+    `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${
+      skipped ? `, ${skipped} failed` : ''
+    }${config.overrideTo ? ` (all to ${config.overrideTo}, from EMAIL_OVERRIDE_TO)` : ''}`
   );
 
   return { sent, skipped };
@@ -901,7 +903,9 @@ app.post('/owner/requests', upload.none(), async (req, res) => {
     }
 
     if (wantsFragment(req)) {
-      await renderList(200, '', { fulfilled: outcome.fulfilled, cancelled: outcome.cancelled });
+      // The whole outcome, not just the counts: the card's confirmation names the item,
+      // the copies and the requester, and the row it came from is about to disappear.
+      await renderList(200, '', outcome);
       return;
     }
 

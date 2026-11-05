@@ -55,6 +55,12 @@ console.log(
 );
 console.log(`From:      ${config.from}`);
 console.log(`To:        ${to}`);
+
+// Worth saying out loud: a test address and EMAIL_OVERRIDE_TO can both be set, and then
+// the Gmail or Resend dashboard shows the override, not the address typed on the command.
+if (config.overrideTo) {
+  console.log(`Redirect:  every message goes to ${config.overrideTo} (would have gone to ${to})`);
+}
 console.log(`Subject:   ${message.subject}`);
 
 const result = await sendEmail({ to, ...message }, config);

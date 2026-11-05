@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import mysql from 'mysql2/promise';
 
 import { openDatabase, readConfig } from './lib/database.js';
+import { extractShareData } from './lib/savedVars.js';
 import {
   createRequest,
   getFulfillForm,
@@ -540,6 +541,14 @@ try {
     spread ? [spread.copies, spread.fulfilled, spread.cancelled] : null,
     [3, 2, 0]
   );
+  ok(
+    'and every answered row names the item, the copies and the asker, so the confirmation can',
+    spread.rows.map((row) => [row.itemName, row.requesterAccount, row.sent]),
+    [
+      [ITEM, ASKER, 2],
+      [ITEM, ASKER, 1],
+    ]
+  );
 
   const [spreadRows] = await connection.execute(
     'SELECT id, status, quantity, quantity_requested FROM itemshare_requests WHERE id IN (?, ?, ?) ORDER BY id ASC',
@@ -573,6 +582,11 @@ try {
     sent: 0,
   });
   ok('Not fulfilled cancels the row', [notFulfilled.fulfilled, notFulfilled.cancelled], [0, 1]);
+  ok(
+    'and the cancelled row names the item and the asker too',
+    [notFulfilled.rows[0].itemName.length > 0, notFulfilled.rows[0].requesterAccount],
+    [true, ASKER]
+  );
   ok('and the list is empty again', (await getOwnerRequests(connection, [OWNER])).length, 0);
 
   console.log('\n11. An upload leaves an item alone while a request on it is open');
@@ -616,6 +630,98 @@ try {
     'the request it protected is still waiting',
     heldHistory.some((row) => row.status === 'pending' && row.item_name === ITEM),
     true
+  );
+
+  console.log('\n12. A file copied to a new account still names the old one inside its items');
+  // Exactly the shape of a saved variables file copied between accounts: the tables are
+  // renamed, but every entry keeps the accountName the addon wrote when it was dumped.
+  const copiedFile = `ItemShareSavedVars =
+{
+    ["Default"] =
+    {
+        ["@TestCopied"] =
+        {
+            ["$AccountWide"] =
+            {
+                ["addonVersion"] = "1.9.0",
+                ["knownGuilds"] =
+                {
+                    [${GUILD}] = "Test Guild",
+                },
+                ["sharedItems"] =
+                {
+                    ["copied-key"] =
+                    {
+                        ["accountName"] = "@TestOriginal",
+                        ["characterName"] = "Tester",
+                        ["itemName"] = "Copied Item",
+                        ["count"] = 3,
+                        ["guildIds"] =
+                        {
+                            [1] = ${GUILD},
+                        },
+                    },
+                    ["moved-key"] =
+                    {
+                        ["accountName"] = "@TestSecond",
+                        ["characterName"] = "Tester",
+                        ["itemName"] = "Moved Item",
+                        ["count"] = 1,
+                    },
+                },
+                ["alwaysShare"] =
+                {
+                    ["offer-key"] =
+                    {
+                        ["accountName"] = "@TestOriginal",
+                        ["itemName"] = "Copied Offer",
+                    },
+                },
+            },
+        },
+        ["@TestSecond"] =
+        {
+            ["$AccountWide"] =
+            {
+                ["addonVersion"] = "1.9.0",
+                ["sharedItems"] =
+                {
+                },
+            },
+        },
+    },
+}`;
+
+  const copied = extractShareData(copiedFile);
+  ok('both accounts in the file are read', copied.accounts, ['@TestCopied', '@TestSecond']);
+  ok(
+    'an item follows the table it sits in, not the stale name inside it',
+    copied.items.map((item) => [item.itemKey, item.accountName]).sort(),
+    [
+      ['copied-key', '@TestCopied'],
+      // A name that really is another account of this file is still honoured.
+      ['moved-key', '@TestSecond'],
+    ]
+  );
+  ok(
+    'a standing offer follows its table the same way',
+    copied.alwaysShare.map((entry) => entry.accountName),
+    ['@TestCopied']
+  );
+  ok(
+    'the item keeps the guild it was offered to',
+    copied.items.find((item) => item.itemKey === 'copied-key').guildIds,
+    [GUILD]
+  );
+  ok(
+    'the bookkeeping field does not survive into a stored row',
+    [...copied.items, ...copied.alwaysShare].filter((row) => 'pathAccount' in row).length,
+    0
+  );
+  ok(
+    'every item of the copied file lands under an account the upload will store',
+    copied.items.filter((item) => copied.accounts.includes(item.accountName)).length,
+    2
   );
 
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
