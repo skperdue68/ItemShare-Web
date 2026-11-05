@@ -1011,7 +1011,7 @@ ${guildedItems('@TestV3')}
         ["schema"] = 4,
         ["addonVersion"] = "1.10.1",
         ["guilds"] = { ["9301"] = "Reserve Guild" },
-        ["reserves"] = { ["|H0:item:57151:154|h|h"] = 5 },
+        ["reserves"] = { ["|H0:item:57151:154|h|h"] = 5, ["|H0:item:424242:1|h|h"] = 3 },
         ["characterGuilds"] =
         {
           ["Tester"] =
@@ -1050,6 +1050,9 @@ ${guildedItems('@TestV3')}
   const [reservedStack] = v4.items;
 
   ok('the reserve table is matched by item link', reservedStack.reserveQuantity, 5);
+  // The second reserve belongs to an item that is not being shared at all. Holding some
+  // back is not the same as offering the rest, so it must not become a row.
+  ok('a reserve on its own shares nothing', v4.items.length, 1);
   ok('the stack offers what is held minus the reserve', reservedStack.itemCount, 195);
   ok('the bag still says how much was there', reservedStack.heldQuantity, 200);
   ok(
@@ -1074,6 +1077,18 @@ ${guildedItems('@TestV3')}
       )
     )[0].map((row) => Number(row.reserve_quantity)),
     [5]
+  );
+  ok(
+    'the reserve for an unshared item adds no row',
+    Number(
+      (
+        await connection.execute(
+          'SELECT COUNT(*) AS rowCount FROM itemshare_shared_items WHERE account_name = ?',
+          ['@TestV4']
+        )
+      )[0][0].rowCount
+    ),
+    1
   );
   ok(
     'the owner sees the offer although the item is not shared as stock',

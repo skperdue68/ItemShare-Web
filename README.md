@@ -322,6 +322,10 @@ site matches it to the stack before storing: `item_count` is what is really bein
 shown as a small amber note under the item name (`keeping 5 back of 200`). A stack
 offering 8 does not look like an owner who only has 8.
 
+A reserve never shares anything by itself. It only reduces a stack that is already in the
+file's item list, so a reserve for an item that is not being shared is ignored: setting a
+reserve creates no offer, no row and no request button.
+
 Visibility joins three tables: the item's guilds (`itemshare_shared_item_guilds`), the
 viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_guilds`).
 Nothing is readable without a guild overlap, so an account in no guilds sees nothing -
