@@ -251,7 +251,9 @@ account* belongs to. **Offering** deliberately spans every linked account and na
 account and character holding each item, so a second account never hides what the first
 one shares. **Your requests** covers everything you have asked for, from any account.
 
-Every row shows the owning account, character, quantity, item type and trait.
+Every row shows the owning account, quantity, item type and trait. The character is named
+by the `Location` column (`Inventory (Character Name)`), so it is not repeated beside the
+account.
 
 Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (other
 people's items), **Offering** (your own), and **Your requests**.
