@@ -5,7 +5,7 @@
 //
 //   npm start            (reads .env)
 
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
@@ -1118,10 +1118,32 @@ async function backfillIcons(reason) {
 // the endpoint off unless someone deliberately set one.
 const SIMULATE_TOKEN = String(process.env.SIMULATE_TOKEN || '').trim();
 
+// Eight hex characters of a hash, never the token itself. `npm run simulate` prints the
+// fingerprint of what it holds in the same form, so a mismatch is spotted by comparing
+// two lines instead of by guessing at a trailing space or a second .env.
+const tokenFingerprint = (value) => {
+  const trimmed = String(value || '').trim();
+  return trimmed ? createHash('sha1').update(trimmed).digest('hex').slice(0, 8) : 'none';
+};
+
+let simulateRefusalLogged = false;
+
 app.post('/simulate/nudge', (req, res) => {
   const token = String(req.get('x-itemshare-simulate') || '').trim();
 
   if (!SIMULATE_TOKEN || token !== SIMULATE_TOKEN) {
+    // Said once, not once per nudge: the simulator asks every ten seconds.
+    if (!simulateRefusalLogged) {
+      simulateRefusalLogged = true;
+      console.warn(
+        SIMULATE_TOKEN
+          ? `Simulate nudge refused: the run sent ${
+              token ? `token ${tokenFingerprint(token)}` : 'no token'
+            }, this site holds ${tokenFingerprint(SIMULATE_TOKEN)}. Both must read the same SIMULATE_TOKEN.`
+          : 'Simulate nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden. Set it in .env and restart.'
+      );
+    }
+
     res.status(404).end();
     return;
   }
@@ -1271,6 +1293,11 @@ httpServer.listen(PORT, () => {
     enabledProviders.length
       ? `Sign-in providers: ${enabledProviders.map((provider) => provider.label).join(', ')}`
       : 'Sign-in providers: none (set DISCORD_* or GOOGLE_* env vars)'
+  );
+  console.log(
+    SIMULATE_TOKEN
+      ? `Live pushes: armed for npm run simulate (token ${tokenFingerprint(SIMULATE_TOKEN)})`
+      : 'Live pushes: off - set SIMULATE_TOKEN in .env and restart to let npm run simulate refresh open pages'
   );
   console.log(`Env file: ${hasEnvFile ? envPath : `${envPath} not found - copy .env.example to .env`}`);
   console.log(`Sign-in stays active for ${SESSION_TTL_DAYS} days (SESSION_TTL_DAYS), stored in MariaDB`);
