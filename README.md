@@ -236,8 +236,8 @@ token travels in a header and the file contents are plain text over the wire.
 | `POST` | `/simulate/nudge` | Token-authenticated "something changed" push, used by `npm run simulate` |
 | `GET` | `/requests/fulfill/:token` | The answer form a request email links to; the token in the address is the credential |
 | `POST` | `/requests/fulfill/:token` | Records what the owner says they sent: `0` cancels that row, anything else hands it over |
-| `GET` | `/owner/requests` | Signed-in list of what is waiting on your own items, with the same number boxes |
-| `POST` | `/owner/requests` | Records an answer given on the site, then redirects back so a refresh cannot answer twice |
+| `GET` | `/owner/requests` | Signed-in list of what is waiting on your own items; with `X-ItemShare-Fragment: 1` it returns just the card the modal shows |
+| `POST` | `/owner/requests` | Records an answer given on the site, then redirects back so a refresh cannot answer twice; the fragment request gets the refreshed card instead |
 
 Socket.IO shares the HTTP server under `/socket.io`, so live updates need no second
 port and no extra proxy rule.
@@ -366,9 +366,13 @@ picked rather than from the moment it is sent:
   dropped rather than sitting in the list looking live; when a live update brings back a
   cancellation the page still says so in a toast, once.
 - A requester can cancel a waiting request. The owner sees "2 asked for" on the row.
-- Leaving the page with a basket still holding items raises a styled warning ("You have
-  unsubmitted item requests") before following a link, with the browser's own unload
-  prompt as the fallback for closing the tab or posting a form.
+- Following a link to **another site** while a basket still holds items raises a styled
+  warning ("You have unsubmitted item requests"). Moving between pages of this site does
+  not: the basket is held on the server, so it is still there on the way back. The
+  wording says so - the items return to everyone only when the clock runs out - and
+  **Leave anyway** suppresses the browser's own unload prompt for that navigation, so the
+  same warning is never asked twice. Closing the tab, or posting a form, still falls back
+  to the browser's prompt.
 
 ## Request emails
 
@@ -938,10 +942,14 @@ pending, and the same link answers them later.
   still works: `quantity_<id>` fields are read the same way.
 - GET shows the form and POST records it. The link in the message exists because most mail
   clients strip forms out of HTML, so the same form is also a page on the site.
-- The same answering is a signed-in page, `/owner/requests`, reachable from the account
-  menu as *Requests for me*. It lists what is waiting on the person's own ESO accounts,
-  oldest ask first, and posts to itself before redirecting, so what was just answered
-  disappears from the list instead of being answerable twice.
+- The same answering is **Requests for me**, reachable from the account menu. It opens as
+  a modal over the item list rather than replacing it, so answering costs one small
+  request and the list underneath is still where it was; Escape, the large white close
+  in the corner or a click outside it puts it away. `/owner/requests` is still a whole
+  page for a bookmark or a direct visit, and the modal fetches the same card as a
+  fragment, so the two cannot drift apart. It lists what is waiting on the person's own
+  ESO accounts, oldest ask first, and answers a row before returning the list, so what
+  was just answered disappears instead of being answerable twice.
 - **One row per item, however many times it was asked for.** Two, then two more, then one
   is a page row reading **Requested 5**, because that is one conversation. The database
   rows stay separate: the number you send is spent on the oldest asks first, so 3 against
