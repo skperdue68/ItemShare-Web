@@ -646,6 +646,7 @@ if (listRegion) {
     setLiveState(liveState);
     setTab(activeTab);
     noteClosedRequests();
+    syncRequestDialog();
   }
 
   async function refresh() {
@@ -697,6 +698,7 @@ if (listRegion) {
   // already. One, everything they can hold, or any number in between - the last two
   // only when more than one is possible.
   let dialog = null;
+  let dialogState = null;
   const knownClosed = new Set();
   let requestsPrimed = false;
 
@@ -712,6 +714,7 @@ if (listRegion) {
       dialog = null;
     }
 
+    dialogState = null;
     document.removeEventListener('keydown', onDialogKey);
   }
 
@@ -721,15 +724,43 @@ if (listRegion) {
     }
   }
 
+  // How many copies this person may still claim on one row: the ones nobody has
+  // reserved. Their own basket is not added in, because RESERVED already counts it and
+  // asking again adds to that row instead of starting a second one.
+  function dialogNumbers(button) {
+    if (!button) {
+      return { max: 0, stack: 0, held: 0 };
+    }
+
+    const stack = Math.max(1, Number(button.dataset.stack) || 1);
+    const max = Math.min(stack, Math.max(0, Number(button.dataset.max) || 0));
+    const held = Math.max(0, Number(button.dataset.held) || 0);
+
+    return { max, stack, held };
+  }
+
+  function dialogSummary(state) {
+    if (state.kind === 'offer') {
+      return 'This is a standing offer, so it means one copy.';
+    }
+
+    if (state.max < 1) {
+      return 'Every copy has just been claimed, so there is nothing left to ask for.';
+    }
+
+    return `${state.max}${state.stack > state.max ? ` of the ${state.stack}` : ''} still unclaimed${
+      state.held > 0
+        ? `, and ${state.held} already in your basket - asking for more adds to that row rather than starting another`
+        : ''
+    }.`;
+  }
+
   function openRequestDialog(button) {
     const kind = button.dataset.kind === 'offer' ? 'offer' : 'inventory';
-    // max is what this person may end up holding in total, which includes anything
-    // already in their basket; stack is how many copies exist at all.
-    const max = Math.max(1, Number(button.dataset.max) || 1);
-    const stack = Math.max(max, Number(button.dataset.stack) || max);
-    const held = Math.max(0, Number(button.dataset.held) || 0);
+    const numbers = dialogNumbers(button);
     const name = button.dataset.name || 'that item';
-    const choices = kind === 'inventory' && max > 1;
+    const choices = kind === 'inventory' && numbers.max > 1;
+    const state = { kind, id: button.dataset.id, name, ...numbers };
 
     closeRequestDialog();
 
@@ -738,34 +769,27 @@ if (listRegion) {
     backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
         <h2 id="requestTitle">Ask for ${escapeText(name)}</h2>
-        <p class="muted">${
-          kind === 'offer'
-            ? 'This is a standing offer, so it means one copy.'
-            : `${max} you can hold${stack > max ? ` of the ${stack} shared` : ''}${
-                held > 0
-                  ? `, ${held} of them already in your basket - asking for more tops up that row rather than adding another one`
-                  : ''
-              }.`
-        }</p>
+        <p class="muted" data-dialog-summary>${escapeText(dialogSummary(state))}</p>
         <form class="request-form" data-request-form>
           ${
             choices
               ? `<label class="request-option"><input type="radio" name="how" value="one" checked> Just one</label>
-                 <label class="request-option"><input type="radio" name="how" value="stack"> All you can hold (${max})</label>
+                 <label class="request-option"><input type="radio" name="how" value="stack"> Entire stack (<span data-dialog-max>${state.max}</span>)</label>
                  <label class="request-option"><input type="radio" name="how" value="number">
-                   <input class="request-number" type="number" name="quantity" min="1" max="${max}" value="${max}" aria-label="How many in total"> in total
+                   <input class="request-number" type="number" name="quantity" min="1" max="${state.max}" value="${state.max}" aria-label="How many more to ask for"> to ask for
                  </label>`
               : '<label class="request-option"><input type="radio" name="how" value="one" checked> One</label>'
           }
           <div class="modal-actions">
             <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
-            <button class="primary-button" type="submit">Send request</button>
+            <button class="primary-button" type="submit" data-send-request>Send request</button>
           </div>
         </form>
       </div>`;
 
     document.body.appendChild(backdrop);
     dialog = backdrop;
+    dialogState = state;
     document.addEventListener('keydown', onDialogKey);
 
     backdrop.addEventListener('click', (event) => {
@@ -776,7 +800,18 @@ if (listRegion) {
 
     const numberInput = backdrop.querySelector('.request-number');
 
+    // What is left unclaimed is the cap on this field, not just a check on submit: a
+    // larger number is not something the person can type.
     if (numberInput) {
+      numberInput.addEventListener('input', () => {
+        const limit = Math.max(1, dialogState ? dialogState.max : 1);
+        const value = Math.floor(Number(numberInput.value));
+
+        if (Number.isFinite(value) && value > limit) {
+          numberInput.value = String(limit);
+        }
+      });
+
       backdrop.querySelectorAll('input[name="how"]').forEach((radio) => {
         radio.addEventListener('change', () => {
           if (radio.checked && radio.value === 'number') {
@@ -792,17 +827,19 @@ if (listRegion) {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
 
+      const limit = Math.max(1, dialogState ? dialogState.max : 1);
       const how = form.querySelector('input[name="how"]:checked');
       let quantity = 1;
 
       if (choices && how && how.value === 'stack') {
-        quantity = max;
+        quantity = limit;
       } else if (choices && how && how.value === 'number') {
-        quantity = Math.min(max, Math.max(1, Number(numberInput.value) || 1));
+        quantity = Math.min(limit, Math.max(1, Math.floor(Number(numberInput.value)) || 1));
       }
 
+      const picked = { kind, id: button.dataset.id, quantity, name };
       closeRequestDialog();
-      sendRequest({ kind, id: button.dataset.id, quantity, name });
+      sendRequest(picked);
     });
 
     const first = backdrop.querySelector('input[name="how"]');
@@ -810,6 +847,61 @@ if (listRegion) {
     if (first) {
       first.focus();
     }
+  }
+
+  /**
+   * Keeps an open dialog honest while the list under it moves: when somebody else
+   * claims a copy, the number left, the cap on the field and the Entire stack option
+   * all follow it down, without making the person close and reopen the dialog.
+   */
+  function syncRequestDialog() {
+    if (!dialog || !dialogState) {
+      return;
+    }
+
+    const fresh = document.querySelector(
+      `[data-request][data-kind="${dialogState.kind}"][data-id="${dialogState.id}"]`
+    );
+    const numbers = dialogNumbers(fresh);
+
+    dialogState.max = numbers.max;
+    dialogState.stack = numbers.stack;
+    dialogState.held = numbers.held;
+
+    const summary = dialog.querySelector('[data-dialog-summary]');
+
+    if (summary) {
+      summary.textContent = dialogSummary(dialogState);
+    }
+
+    const maxLabel = dialog.querySelector('[data-dialog-max]');
+
+    if (maxLabel) {
+      maxLabel.textContent = String(dialogState.max);
+    }
+
+    const numberInput = dialog.querySelector('.request-number');
+
+    if (numberInput) {
+      numberInput.disabled = dialogState.max < 1;
+
+      if (dialogState.max > 0) {
+        numberInput.max = String(dialogState.max);
+        const typed = Math.floor(Number(numberInput.value)) || dialogState.max;
+        numberInput.value = String(Math.min(typed, dialogState.max));
+      }
+    }
+
+    const nothingLeft = dialogState.max < 1;
+    const submit = dialog.querySelector('[data-send-request]');
+
+    if (submit) {
+      submit.disabled = nothingLeft;
+    }
+
+    dialog.querySelectorAll('input[name="how"]').forEach((radio) => {
+      radio.disabled = nothingLeft;
+    });
   }
 
   async function sendRequest({ kind, id, quantity, name }) {
