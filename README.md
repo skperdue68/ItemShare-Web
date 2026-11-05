@@ -957,6 +957,15 @@ arrives, the problem is the MTA's queue or DNS, not ItemShare. It exits `0` when
 message was accepted, `1` when email is not configured or the transport refused it, and
 `2` on a missing or malformed address.
 
+`npm run email:preview` renders that same message to files instead of sending it:
+`email-preview.html` and `email-preview.txt` (the plain-text part), or whatever name you
+give it - `node previewEmail.js out.html`. Open the HTML in a browser to see the layout,
+the quality colours and the answer link an owner receives. The link is built from
+`BASE_URL`; with that unset the command says so and `itemshare.example` stands in, so the
+whole message can still be seen. Nothing is sent, no mail transport is needed and no
+database is opened, so a change to the message can be checked on a machine that cannot
+send mail at all.
+
 ## Deploying on a Linux host
 
 What a real host needs: Node 20 or newer, MariaDB, and optionally a mail server for the
