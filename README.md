@@ -164,7 +164,13 @@ The first upload from a signed-in person links their identity to the ESO account
 upload is refused rather than silently reassigned.
 
 Item rows keep the account they came from (`itemshare_shared_items.account_name`), so
-someone who plays several ESO accounts can see which account holds each item.
+someone who plays several ESO accounts can see which account holds each item. Which
+account that is comes from **where the item sits in the file** - the `["@account"]`
+table - and not from the `accountName` the addon copies into the entry. That copy still
+names the old account when a saved variables file is copied to a different one, and an
+upload that trusted it stored the items under an account the file did not contain, which
+is to say it stored none of them. A copy that names another account of the same file is
+still honoured, because that is a deliberate move between accounts.
 
 ## Automatic uploads
 
