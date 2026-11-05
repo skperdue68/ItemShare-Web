@@ -321,12 +321,13 @@ just what you can see.
 A request is **a reservation, not a delivery**, and it reserves from the moment it is
 picked rather than from the moment it is sent:
 
-- The list has three quantity columns, so the arithmetic is visible instead of
-  inferred: **OFFERED** is what the owner's file reported, **AVAILABLE** is what nobody
-  has reserved, and **HELD** is what a request is standing on. Available and held always
-  add up to offered, so a row of 8 offered with 3 available and 5 held explains itself.
-  A row with nothing held leaves that column blank rather than filling it with a dash.
-  When nothing is available the button becomes *All held*.
+- The list has three quantity columns, so the arithmetic is visible instead of inferred:
+  **OFFERED** is the total the owner presented for claiming, **CLAIMED** is how much of it
+  a request is standing on, and **AVAILABLE** is what is left to claim - the cap on what
+  anyone can ask for. Claimed and available add up to offered, so a row of 8 offered with
+  5 claimed and 3 available explains itself. A row with nothing claimed leaves that column
+  blank rather than filling it with a dash. When nothing is available the button becomes
+  *All held*.
 - On your own rows, **N pending requests** says how many asks are waiting on you, one
   per request rather than one per copy, so two people asking for one copy each reads
   "2 pending requests". The number falls as requests are answered, cancelled or time
@@ -509,8 +510,8 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every OFFERED/AVAILABLE/HELD calculation is unaffected by a
-reserve.
+what is actually on offer, so every OFFERED/CLAIMED/AVAILABLE calculation is unaffected by
+a reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
 unique nor stable.
