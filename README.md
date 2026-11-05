@@ -172,6 +172,35 @@ upload that trusted it stored the items under an account the file did not contai
 is to say it stored none of them. A copy that names another account of the same file is
 still honoured, because that is a deliberate move between accounts.
 
+### The two saved-variables layouts
+
+Both layouts the addon has written are read the same way, and produce the same stored
+rows:
+
+- **v2** (`version` 2, addon 1.9.0 and older) - every `sharedItems` / `alwaysShare` entry
+  carries `guildIds`, `guildNames` and `guildsCapturedAt`, and the account-wide registry
+  is called `knownGuilds`.
+- **v3** (`version` 3, addon 1.10.0+) - one `guilds` table keyed by guild id replaces
+  `knownGuilds`, entries carry no guild fields at all, and the link is
+  `entry.characterName` -> `characterGuilds[character]` -> its `guildIds` -> `guilds[id]`.
+
+The shape is detected from the contents, never from the file name: `guilds` without
+`knownGuilds` is v3, `knownGuilds` is v2. Guild names come from the registry whenever
+one is present, and the old per-entry names are still read, so a v2 file keeps the names
+it carried. Every registered guild is upserted - including one that no item names - so a
+name never goes stale and the upload's guild count stays right. A character the file has
+no snapshot for falls back to the account's own membership, so its items are attributed
+to the whole account rather than to nobody.
+
+Two fields the addon is about to drop are already tolerated: a row with no `itemKey` is
+keyed by its `itemLink` plus the `locationKey` it was found in, and a row with no `count`
+takes `heldCount` minus `reserve`.
+
+For one release the addon also writes `ItemShareExport.lua`, a compatibility file in the
+**old** layout, so uploads keep working while both are understood. Either file can be
+uploaded; `ItemShareSavedVars.lua` is the one to prefer, and the compatibility file goes
+away in the release after this one.
+
 ## Automatic uploads
 
 `POST /ingest` accepts the same file from a watcher instead of a browser, so the site
@@ -228,7 +257,7 @@ token travels in a header and the file contents are plain text over the wire.
 | --- | --- | --- |
 | `GET` | `/` | The page: tabs, filters, the item table |
 | `GET` | `/items` | The item-list region only, as a fragment, for live refresh. `503` means "leave the screen alone" |
-| `POST` | `/upload` | Accept a `ItemShareSavedVars.lua` upload |
+| `POST` | `/upload` | Accept a saved-variables upload (v3, or an older layout) |
 | `POST` | `/ingest` | Accept the same file from a watcher, token-authenticated |
 | `POST` | `/browsing-account` | Choose the ESO account browsing uses; a form post that redirects back to `/` |
 | `POST` | `/requests` | Put an item in the basket, or top up its quantity |

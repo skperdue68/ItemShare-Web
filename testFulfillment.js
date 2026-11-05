@@ -724,6 +724,324 @@ try {
     2
   );
 
+  console.log('\n13. A version 3 file stores exactly what a version 2 file stored');
+
+  // Five guilds, five items. v2 copies the guilds onto every item and keeps a name map;
+  // v3 keeps one registry and a per-character id list, and puts no guild field on an
+  // item at all. The stored rows are what has to match, so they are what is compared.
+  const FIVE_GUILDS = [
+    [9001, 'Test Guild'],
+    [9002, 'Second Guild'],
+    [9003, 'Third Guild'],
+    [9004, 'Fourth Guild'],
+    [9005, 'Fifth Guild'],
+  ];
+  const GUILD_IDS = FIVE_GUILDS.map(([guildId]) => guildId);
+  const GUILD_NAMES = FIVE_GUILDS.map(([, name]) => name);
+  const guildPairs = (indent) =>
+    FIVE_GUILDS.map(([guildId, name]) => `${indent}[${guildId}] = "${name}",`).join('\n');
+  const pairTables = (indent) =>
+    FIVE_GUILDS.map(
+      ([guildId, name]) => `${indent}{ ["guildId"] = ${guildId}, ["guildName"] = "${name}" },`
+    ).join('\n');
+
+  const guildedItems = (account, { withGuilds }) =>
+    Array.from({ length: 5 }, (_, index) => {
+      const guildFields = withGuilds
+        ? `
+            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
+            ["guildNames"] = { ${GUILD_NAMES.map((name) => `"${name}"`).join(', ')} },
+            ["guildsCapturedAt"] = 1793866476,`
+        : '';
+
+      return `          ["guilded-key-${index + 1}"] =
+          {
+            ["accountName"] = "${account}",
+            ["characterName"] = "Tester",
+            ["itemName"] = "Guilded Item ${index + 1}",
+            ["count"] = ${index + 4},
+            ["locationKey"] = "inventory:tester",${guildFields}
+          },`;
+    }).join('\n');
+
+  const v2File = `ItemShareSavedVars =
+{
+  ["Default"] =
+  {
+    ["@TestV2"] =
+    {
+      ["$AccountWide"] =
+      {
+        ["addonVersion"] = "1.9.0",
+        ["knownGuilds"] =
+        {
+${guildPairs('          ')}
+        },
+        ["characterGuilds"] =
+        {
+          ["Tester"] =
+          {
+            ["guilds"] =
+            {
+${pairTables('              ')}
+            },
+            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
+          },
+        },
+        ["sharedItems"] =
+        {
+${guildedItems('@TestV2', { withGuilds: true })}
+        },
+      },
+    },
+  },
+}`;
+
+  const v3File = `ItemShareSavedVars =
+{
+  ["Default"] =
+  {
+    ["@TestV3"] =
+    {
+      ["$AccountWide"] =
+      {
+        ["version"] = 3,
+        ["addonVersion"] = "1.10.0",
+        ["guilds"] =
+        {
+${guildPairs('          ')}
+        },
+        ["characterGuilds"] =
+        {
+          ["Tester"] =
+          {
+            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
+            ["updatedAt"] = 1793866476,
+          },
+        },
+        ["guildsUpdatedAt"] = 1793866476,
+        ["sharedItems"] =
+        {
+${guildedItems('@TestV3', { withGuilds: false })}
+        },
+      },
+    },
+  },
+}`;
+
+  const parsedV2 = extractShareData(v2File);
+  const parsedV3 = extractShareData(v3File);
+
+  ok(
+    'the v3 registry gives every guild its name',
+    [...parsedV3.guilds.entries()].sort((a, b) => a[0] - b[0]),
+    FIVE_GUILDS
+  );
+  ok(
+    'the v2 knownGuilds map gives the same five',
+    [...parsedV2.guilds.entries()].sort((a, b) => a[0] - b[0]),
+    FIVE_GUILDS
+  );
+  ok('both files find five items', [parsedV2.items.length, parsedV3.items.length], [5, 5]);
+  ok(
+    'each v3 item follows its character to all five guilds',
+    parsedV3.items.map((item) => item.guildIds.slice().sort((a, b) => a - b)),
+    parsedV3.items.map(() => GUILD_IDS)
+  );
+  ok(
+    'each v2 item keeps the five it carried',
+    parsedV2.items.map((item) => item.guildIds.slice().sort((a, b) => a - b)),
+    parsedV2.items.map(() => GUILD_IDS)
+  );
+
+  const storeFile = (account, parsed, sourceFile) =>
+    replaceAccounts(
+      connection,
+      [
+        {
+          accountName: account,
+          items: parsed.items,
+          alwaysShare: parsed.alwaysShare,
+          guilds: parsed.accountGuilds.get(account),
+        },
+      ],
+      { sourceFile }
+    );
+
+  const v2Upload = (await storeFile('@TestV2', parsedV2, 'ItemShareExport.lua'))[0];
+  const v3Upload = (await storeFile('@TestV3', parsedV3, 'ItemShareSavedVars.lua'))[0];
+
+  ok('the v2 upload records five guilds', v2Upload.guildCount, 5);
+  ok('the v3 upload records five guilds too', v3Upload.guildCount, 5);
+
+  const storedRows = async (accountName) => {
+    const [rows] = await connection.execute(
+      `SELECT i.item_key, i.item_name, i.item_count,
+              GROUP_CONCAT(g.guild_id ORDER BY g.guild_id) AS guild_ids
+         FROM itemshare_shared_items i
+         LEFT JOIN itemshare_shared_item_guilds link ON link.item_id = i.id
+         LEFT JOIN itemshare_guilds g ON g.guild_id = link.guild_id
+        WHERE i.account_name = ?
+        GROUP BY i.id
+        ORDER BY i.item_key`,
+      [accountName]
+    );
+
+    return rows.map((row) => [
+      row.item_key,
+      row.item_name,
+      Number(row.item_count),
+      String(row.guild_ids || ''),
+    ]);
+  };
+
+  const v2Rows = await storedRows('@TestV2');
+  const v3Rows = await storedRows('@TestV3');
+
+  ok('the same five rows and the same guild links come out of either file', v3Rows, v2Rows);
+  ok(
+    'every item is offered to all five guilds',
+    v3Rows.map((row) => row[3]),
+    Array.from({ length: 5 }, () => GUILD_IDS.join(','))
+  );
+  ok(
+    'the guild names the UI reads come from the registry',
+    (
+      await connection.execute(
+        'SELECT guild_id, guild_name FROM itemshare_guilds WHERE guild_id IN (9001, 9002, 9003, 9004, 9005) ORDER BY guild_id'
+      )
+    )[0].map((row) => [Number(row.guild_id), row.guild_name]),
+    FIVE_GUILDS
+  );
+  ok(
+    'the v3 account is in exactly five guilds',
+    Number(
+      (
+        await connection.execute(
+          'SELECT COUNT(*) AS guildCount FROM itemshare_account_guilds WHERE account_name = ?',
+          ['@TestV3']
+        )
+      )[0][0].guildCount
+    ),
+    5
+  );
+
+  console.log('\n14. A registered guild with no items, and a character with no snapshot');
+
+  const idleFile = `ItemShareSavedVars =
+{
+  ["Default"] =
+  {
+    ["@TestIdle"] =
+    {
+      ["$AccountWide"] =
+      {
+        ["version"] = 3,
+        ["addonVersion"] = "1.10.0",
+        ["guilds"] =
+        {
+          ["9101"] = "Seen Guild",
+          ["9102"] = "Idle Guild",
+        },
+        ["characterGuilds"] =
+        {
+          ["Tester"] =
+          {
+            ["guildIds"] = { 9101 },
+            ["updatedAt"] = 1793866476,
+          },
+        },
+        ["guildsUpdatedAt"] = 1793866476,
+        ["sharedItems"] =
+        {
+          ["seen-key"] =
+          {
+            ["itemName"] = "Seen Item",
+            ["characterName"] = "Tester",
+            ["count"] = 2,
+          },
+          ["unsnapshotted-key"] =
+          {
+            ["itemName"] = "Unsnapshotted Item",
+            ["characterName"] = "Nobody",
+            ["count"] = 1,
+          },
+        },
+      },
+    },
+  },
+}`;
+
+  const idle = extractShareData(idleFile);
+  ok('a guild registered but on no character is still read', idle.guilds.get(9102), 'Idle Guild');
+  ok(
+    "an item follows its character to that character's guild",
+    idle.items.find((item) => item.itemKey === 'seen-key').guildIds,
+    [9101]
+  );
+  ok(
+    'a character with no snapshot falls back to the account, not to nothing',
+    idle.items
+      .find((item) => item.itemKey === 'unsnapshotted-key')
+      .guildIds.slice()
+      .sort((a, b) => a - b),
+    [9101, 9102]
+  );
+
+  await storeFile('@TestIdle', idle, 'ItemShareSavedVars.lua');
+
+  ok(
+    'the guild no item names is still upserted with its name',
+    (await connection.execute('SELECT guild_name FROM itemshare_guilds WHERE guild_id = 9102'))[0].map(
+      (row) => row.guild_name
+    ),
+    ['Idle Guild']
+  );
+
+  console.log('\n15. The item builder survives the fields the addon will drop');
+
+  // The table key is empty and there is no itemKey: the link and the location are all
+  // that is left to identify the row. `count` is gone too, so heldCount - reserve is the
+  // shareable number.
+  const minimalFile = `ItemShareSavedVars =
+{
+  ["Default"] =
+  {
+    ["@TestMinimal"] =
+    {
+      ["$AccountWide"] =
+      {
+        ["version"] = 3,
+        ["addonVersion"] = "1.11.0",
+        ["guilds"] = { ["9201"] = "Minimal Guild" },
+        ["sharedItems"] =
+        {
+          [""] =
+          {
+            ["itemLink"] = "|H0:item:30357:175|h|h",
+            ["locationKey"] = "inventory:tester",
+            ["itemName"] = "Lockpick",
+            ["characterName"] = "Tester",
+            ["heldCount"] = 200,
+            ["reserve"] = 25,
+          },
+        },
+      },
+    },
+  },
+}`;
+
+  const minimal = extractShareData(minimalFile);
+  const lockpick = minimal.items[0];
+
+  ok(
+    'the key is the link plus the place it was found',
+    lockpick.itemKey,
+    '|H0:item:30357:175|h|h||inventory:tester'
+  );
+  ok('the count is what is held minus what is kept back', lockpick.itemCount, 175);
+  ok('the account comes from the table it sits under', lockpick.accountName, '@TestMinimal');
+
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
 } catch (error) {
