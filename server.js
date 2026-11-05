@@ -243,10 +243,10 @@ async function emailOwners({ user, submitted, contacts }) {
   let skipped = 0;
 
   for (const group of groups.values()) {
-    // One token per message: every row in this email is answered by the same form, and
+    // One token per message: every row in this email is answered by the same page, and
     // the token is the only thing that lets it be answered at all. Without BASE_URL
     // there is no address to build, so the message goes out as a plain list.
-    let formUrl = '';
+    let answerUrl = '';
 
     if (config.siteUrl) {
       try {
@@ -258,10 +258,10 @@ async function emailOwners({ user, submitted, contacts }) {
         );
 
         if (token) {
-          formUrl = `${config.siteUrl}/requests/fulfill/${token}`;
+          answerUrl = `${config.siteUrl}/requests/fulfill/${token}`;
         }
       } catch (error) {
-        console.warn(`Email: no answer form for ${group.email}: ${error.message}`);
+        console.warn(`Email: no answer link for ${group.email}: ${error.message}`);
       }
     }
 
@@ -271,7 +271,7 @@ async function emailOwners({ user, submitted, contacts }) {
       ownerAccount: [...group.owners].join(', '),
       items: group.items,
       siteUrl: config.siteUrl,
-      formUrl,
+      answerUrl,
     });
 
     const result = await sendEmail({ to: group.email, ...message }, config);
