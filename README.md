@@ -625,6 +625,7 @@ real in the database, one at a time:
 | `--once` | Exactly one action, then exit. Implies no pause |
 | `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, cancelling, timing out) or `items` (just re-saving files) |
 | `--reset` | Remove the simulated people and all their data, then exit |
+| `--url <address>` | The site to ask for the live push. Defaults to `BASE_URL`, falling back to `http://127.0.0.1:<PORT>`. A missing `http://` is filled in |
 
 ```bash
 npm run simulate                        # until Ctrl+C, one action every 10s
@@ -634,6 +635,7 @@ npm run simulate -- --once              # exactly one action, then exit
 npm run simulate -- --only requests     # asking, sending, cancelling, timing out
 npm run simulate -- --only items        # just re-saving files
 npm run simulate -- --reset             # remove the simulated people and their data
+npm run simulate -- --url https://itemshare.example.com   # notify that site instead
 ```
 
 Without `--rounds` or `--once` it keeps going until Ctrl+C. `--every` defaults to no
@@ -642,8 +644,13 @@ wait before exiting.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
 runs; without it the data still changes and you see it on the next refresh, and no
-`live:` line is printed after an action because there is no delivery to report. The
-three people are identified by a `simulator` identity, so they are the same people on
+`live:` line is printed after an action because there is no delivery to report.
+
+The address it asks is `BASE_URL`, the same value the site builds its own links and
+sign-in redirects from, so a reverse proxy, another port or another host needs no extra
+setting - and if `BASE_URL` is unset it falls back to `http://127.0.0.1:$PORT`. Use
+`--url` to point one run at a different site, for instance when casing a staging copy.
+The three people are identified by a `simulator` identity, so they are the same people on
 every run, and `--reset` takes all of them out again.
 
 Their activity appears in the log as a sentence rather than a revision number:
