@@ -687,7 +687,9 @@ the file, because that is where the running value actually came from.
 
 The address it asks is `BASE_URL`, the same value the site builds its own links and
 sign-in redirects from, so a reverse proxy, another port or another host needs no extra
-setting - and if `BASE_URL` is unset it falls back to `http://127.0.0.1:$PORT`. Use
+setting - and if `BASE_URL` is unset it falls back to `http://127.0.0.1:$PORT`. `BASE_URL`
+wins over `PORT`, so a site that moved port must have its `BASE_URL` updated too; the
+`Live pushes:` line says which of the two the run is using. Use
 `--url` to point one run at a different site, for instance when casing a staging copy.
 The three people are identified by a `simulator` identity, so they are the same people on
 every run, and `--reset` takes all of them out again.

@@ -10,6 +10,7 @@
 //   npm run simulate -- --only items     just people re-saving their files
 //   npm run simulate -- --reset          remove the simulated people and their data
 //   npm run simulate -- --url <address>  ask a different site to announce the changes
+//                                        (or --url=<address>; BASE_URL is used otherwise)
 //
 // It writes through lib/store.js, the same code the site uses, so reservations, the
 // basket clock and the upload reconciliation behave exactly as they would for a real
@@ -213,6 +214,14 @@ const PEOPLE = [
 ];
 
 function valueAfter(flag) {
+  // Both spellings: `--url <address>` and `--url=<address>`. The second used to be
+  // ignored without a word, which quietly sent a run to the address it was not given.
+  const inline = process.argv.find((argument) => argument.startsWith(`${flag}=`));
+
+  if (inline) {
+    return String(inline.slice(flag.length + 1)).trim();
+  }
+
   const index = process.argv.indexOf(flag);
   return index >= 0 && process.argv[index + 1] ? String(process.argv[index + 1]).trim() : '';
 }
@@ -564,11 +573,19 @@ async function saveSomething(connection, person, guilds) {
 // --url overrides it for one run, and a missing scheme is filled in because "host:port"
 // is what people type.
 function siteBaseUrl() {
-  const chosen = String(valueAfter('--url') || process.env.BASE_URL || '').trim();
-  const base = chosen || `http://127.0.0.1:${process.env.PORT || 3000}`;
+  const fromFlag = String(valueAfter('--url') || '').trim();
+  const configured = String(process.env.BASE_URL || '').trim();
+  const port = process.env.PORT || 3000;
+  // BASE_URL wins over PORT, so a site moved to another port while BASE_URL still names
+  // the old one is asked at the old address. The source comes back with the address so
+  // the run says which one it used instead of leaving it to be guessed.
+  const base = fromFlag || configured || `http://127.0.0.1:${port}`;
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(base) ? base : `http://${base}`;
 
-  return withScheme.replace(/\/+$/, '');
+  return {
+    url: withScheme.replace(/\/+$/, ''),
+    source: fromFlag ? '--url' : configured ? 'BASE_URL' : `PORT ${port} (default)`,
+  };
 }
 
 /**
@@ -619,7 +636,7 @@ function describeRefusal({ status, body, token }) {
 
   if (reason === 'token-mismatch') {
     return [
-      `live pushes refused by ${SITE_URL}: this run holds ${mine}, that site holds ${theirs}.`,
+      `live pushes refused by ${SITE_URL} (address from ${SITE.source}): this run holds ${mine}, that site holds ${theirs}.`,
       '  Two different tokens. The site reads SIMULATE_TOKEN from its own .env at start-up,',
       '  so setting it on this machine changes nothing unless that same site was restarted',
       '  with the same value. It prints the fingerprint it holds as it boots.',
@@ -628,7 +645,7 @@ function describeRefusal({ status, body, token }) {
 
   if (reason === 'token-not-set') {
     return [
-      `live pushes refused by ${SITE_URL}: that site has no SIMULATE_TOKEN at all.`,
+      `live pushes refused by ${SITE_URL} (address from ${SITE.source}): that site has no SIMULATE_TOKEN at all.`,
       '  It is reading a different .env from this run, or it started before the token was',
       '  added. Set SIMULATE_TOKEN where that site runs, then restart it.',
     ].join('\n');
@@ -636,14 +653,14 @@ function describeRefusal({ status, body, token }) {
 
   if (status === 404) {
     return [
-      `live pushes refused by ${SITE_URL} (HTTP 404): nothing answers the simulate route there.`,
+      `live pushes refused by ${SITE_URL} (HTTP 404, address from ${SITE.source}): nothing answers the simulate route there.`,
       '  Either that address is not this ItemShare (check BASE_URL or --url), or the site is',
       '  older than this check. The data still changes; open pages see it on their next',
       '  refresh.',
     ].join('\n');
   }
 
-  return `live pushes refused by ${SITE_URL} (HTTP ${status}); open pages were not told what changed.`;
+  return `live pushes refused by ${SITE_URL} (HTTP ${status}, address from ${SITE.source}); open pages were not told what changed.`;
 }
 
 /**
@@ -672,7 +689,7 @@ async function checkLivePushes(token) {
       say(
         `live pushes armed for ${SITE_URL} (token ${tokenFingerprint(
           token
-        )}; the site holds the same one).`
+        )}; the site holds the same one). Address from ${SITE.source}.`
       );
       return;
     }
@@ -686,7 +703,7 @@ async function checkLivePushes(token) {
     );
   } catch (error) {
     warn(
-      `could not reach ${SITE_URL} (${error.message}). The data still changes; open pages see it on their next refresh.`
+      `could not reach ${SITE_URL} (address from ${SITE.source}; ${error.message}). The data still changes; open pages see it on their next refresh.`
     );
   }
 }
@@ -712,7 +729,9 @@ async function nudge(summary) {
 
     if (!response.ok) {
       // Say what the site itself reported rather than guessing at it: its answer names the
-      // token it holds, so both fingerprints sit next to each other in one line.
+      // token it holds, so both fingerprints sit next to each other in one line. Every
+      // message names the address it asked, because "404" is as often the wrong site as
+      // the wrong token.
       return describeRefusal({
         status: response.status,
         body: await response.json().catch(() => null),
@@ -771,7 +790,8 @@ const rounds = once
 const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 30000));
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
-const SITE_URL = siteBaseUrl();
+const SITE = siteBaseUrl();
+const SITE_URL = SITE.url;
 
 // Before the database is touched, because a token that does not match is a configuration
 // problem and this line is more useful on its own than buried under a connection error.
