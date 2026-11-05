@@ -395,13 +395,14 @@ try {
   });
 
   console.log('\n9. One message, two rows, answered one row at a time');
-  // A fresh file so both rows are measured from it, and old enough that "mailed after the
-  // upload" has one answer.
-  const multiUpload = await uploadItems(connection, OWNER, [
+  // Not backdated, unlike stage 1: the copies handed over in stages 4 and 7 happened
+  // before this file was written, so this upload's own count already leaves them out and
+  // they must not be subtracted again. Answering waits a tick instead, because
+  // "mailed after the upload" is compared in whole seconds.
+  await uploadItems(connection, OWNER, [
     { name: ITEM, count: 10 },
     { name: SECOND, count: 5 },
   ]);
-  await ageUpload(connection, multiUpload.uploadId, 10);
 
   const sharedRows = await getSharedItemsForViewer(connection, [ASKER]);
   const firstItemId = Number(sharedRows.find((row) => row.item_name === ITEM).id);
@@ -428,6 +429,8 @@ try {
     before ? before.rows.map((row) => Number(row.id)).sort((a, b) => a - b) : null,
     bothAdded
   );
+
+  await new Promise((resolve) => setTimeout(resolve, 1100));
 
   const partial = await recordFulfillment(connection, {
     token: oneToken,
