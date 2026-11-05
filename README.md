@@ -765,7 +765,7 @@ drops it to zero. The simulator does not repeat it: it prints the action and mov
 The simulator never sends mail - the email module is only reached from the site's own send
 route - so a simulated send changes the data and says who would have been emailed.
 Handing an item over in game is not recorded, so nothing here moves a request from
-*Waiting* to *Handed over*.
+*Requested* to *Fulfilled*.
 
 ### npm run email:test
 
