@@ -36,8 +36,10 @@ import {
   getViewerAccounts,
   getViewerFacets,
   getViewerGuilds,
+  getBrowsingAccount,
   linkAccountToUser,
   replaceAccounts,
+  setBrowsingAccount,
   signInWithProvider,
   submitDrafts,
 } from './lib/store.js';
@@ -266,10 +268,31 @@ async function withDatabase(handler) {
 const SORT_FIELDS = new Set(['type', 'name', 'added']);
 const ADDED_WINDOWS = new Set(['1', '7', '30']);
 
-function readFilters(query) {
+// The sort order is a reading preference, not a filter: it is kept in a small cookie so
+// the address bar stays a plain link to the filters, safe to share or bookmark. A
+// ?sort= still wins when it is present, so an older bookmark keeps behaving.
+const SORT_COOKIE = 'itemshare_sort';
+
+function readSortCookie(header) {
+  for (const part of String(header || '').split(';')) {
+    const [name, ...rest] = part.split('=');
+
+    if (name && name.trim() === SORT_COOKIE) {
+      return decodeURIComponent(rest.join('=').trim());
+    }
+  }
+
+  return '';
+}
+
+function readFilters(query, sortCookie = '') {
   const sort = readParam(query.sort);
   const dir = readParam(query.dir);
   const added = readParam(query.added);
+  // "name:desc" - the field and the direction in one small value.
+  const remembered = String(sortCookie || '').split(':');
+  const chosenSort = sort || remembered[0];
+  const chosenDir = dir || remembered[1];
 
   return {
     // Several types or owners at once arrive as repeated parameters, so they stay
@@ -280,8 +303,8 @@ function readFilters(query) {
     // Only the values the list actually offers get through, so a hand-typed ?sort=
     // or ?added= falls back to the default instead of reaching the query.
     added: ADDED_WINDOWS.has(added) ? added : '',
-    sort: SORT_FIELDS.has(sort) && sort !== 'type' ? sort : 'type',
-    dir: dir === 'desc' ? 'desc' : 'asc',
+    sort: SORT_FIELDS.has(chosenSort) && chosenSort !== 'type' ? chosenSort : 'type',
+    dir: chosenDir === 'desc' ? 'desc' : 'asc',
   };
 }
 
@@ -305,16 +328,27 @@ async function viewerAccountNames(req, connection, user) {
 
 // The item list is loaded twice: once as part of the page, and once on its own when
 // a live update says something changed. Both go through here, so a pushed refresh
-// can never disagree with a page load about who is allowed to see what.
-async function collectViewerData(req, filters) {
+// can never disagree with a page load about who is allowed to see what.  // One person can own several ESO accounts and each is in its own guilds. They browse
+  // as one of them: that account decides what the Request list shows and it is the
+  // character an owner is told to mail. A remembered choice only counts while the
+  // account is still linked, so an unlinked one falls back instead of hiding the site.
+  function browsingAccountFor(accountNames, saved) {
+    const chosen = String(saved || '').trim();
+
+    return accountNames.includes(chosen) ? chosen : accountNames[0] || '';
+  }
+
+  async function collectViewerData(req, filters) {
   const user = req.session ? req.session.user || null : null;
 
   const data = {
     user,
-    providers: enabledProviders,
-    accounts: [],
-    sharedItems: [],
-    alwaysShare: [],
+    providers: enabledProviders,      accounts: [],
+      browsingAccount: '',
+      sharedItems: [],
+      requestItems: [],
+      alwaysShare: [],
+      requestOffers: [],
     requests: [],
     basket: { count: 0, quantity: 0, secondsLeft: 0, holdMinutes: HOLD_MINUTES },
     basketRows: [],
@@ -337,11 +371,21 @@ async function collectViewerData(req, filters) {
           ...(await getAccountSummary(connection, accountName)),
           guilds: await getViewerGuilds(connection, [accountName]),
         });
-      }
+      }        data.browsingAccount = browsingAccountFor(
+          accountNames,
+          user ? await getBrowsingAccount(connection, user.id) : ''
+        );
 
-      data.facets = await getViewerFacets(connection, accountNames);
-      data.sharedItems = await getSharedItemsForViewer(connection, accountNames, filters);
-      data.alwaysShare = await getAlwaysShareForViewer(connection, accountNames, filters);
+        // Request is fetched twice on purpose: once for the chosen account, whose
+        // guilds are the only ones its list may show, and once across every account
+        // for Offering, where nothing a second account shares should disappear.
+        const requestScope = data.browsingAccount ? [data.browsingAccount] : accountNames;
+
+        data.facets = await getViewerFacets(connection, requestScope);
+        data.sharedItems = await getSharedItemsForViewer(connection, accountNames, filters);
+        data.requestItems = await getSharedItemsForViewer(connection, requestScope, filters);
+        data.alwaysShare = await getAlwaysShareForViewer(connection, accountNames, filters);
+        data.requestOffers = await getAlwaysShareForViewer(connection, requestScope, filters);
       data.requests = user ? await getRequesterRequests(connection, user.id) : [];
       data.basketRows = user ? await getBasketRows(connection, user.id) : [];
       data.basket = user
@@ -353,17 +397,62 @@ async function collectViewerData(req, filters) {
   }
 
   return data;
-}
+}  app.get('/', async (req, res) => {
+    res
+      .type('html')
+      .send(renderPage(await collectViewerData(req, readFilters(req.query, readSortCookie(req.headers.cookie)))));
+  });
 
-app.get('/', async (req, res) => {
-  res.type('html').send(renderPage(await collectViewerData(req, readFilters(req.query))));
-});
+  // Choosing the account to browse as. A plain form POST, so it still works with the
+  // scripts switched off, and it redirects back to the list instead of answering JSON.
+  app.post('/browsing-account', async (req, res) => {
+    const user = req.session ? req.session.user || null : null;
+    const requested = String(req.body.accountName || '').trim();
+
+    if (!user) {
+      res.redirect(303, '/');
+      return;
+    }
+
+    try {
+      await withDatabase(async (connection) => {
+        // Ownership is checked against the database, never taken from the form: an
+        // account name is not a secret, but browsing as someone else's is not allowed.
+        const linked = await getViewerAccounts(connection, user.id);
+
+        if (!linked.some((row) => row.eso_account_name === requested)) {
+          const error = new Error('That ESO account is not linked to your sign-in.');
+          error.statusCode = 400;
+          throw error;
+        }
+
+        await setBrowsingAccount(connection, user.id, requested);
+      });
+    } catch (error) {
+      res
+        .status(error.statusCode || 500)
+        .type('html')
+        .send(
+          renderMessagePage({
+            title: 'Browsing account \u00b7 ItemShare',
+            heading: 'That account is not yours',
+            message: error.message,
+            tone: 'error',
+            user,
+            providers: enabledProviders,
+            accounts: [],
+          })
+        );
+      return;
+    }
+
+    res.redirect(303, '/');
+  });
 
 // The live update: the same list the page was built from, as a fragment, using the
 // filters this browser already has. A non-200 means "leave the screen alone" - a
 // database hiccup must not replace a good list with an error card.
-app.get('/items', async (req, res) => {
-  const data = await collectViewerData(req, readFilters(req.query));
+app.get('/items', async (req, res) => {    const data = await collectViewerData(req, readFilters(req.query, readSortCookie(req.headers.cookie)));
 
   if (data.dbError) {
     res.status(503).json({ error: data.dbError });
@@ -405,11 +494,18 @@ app.post('/requests', async (req, res) => {
         const error = new Error('Upload your own file first: an ESO account is needed to ask from.');
         error.statusCode = 400;
         throw error;
-      }
+      }        // The list already shows only the chosen account's guilds; the request itself
+        // has to be scoped the same way, and the chosen account is the recipient.
+        const browsingAccount = browsingAccountFor(
+          accountNames,
+          await getBrowsingAccount(connection, user.id)
+        );
 
-      return createRequest(connection, {
-        userId: user.id,
-        requesterAccounts: accountNames,
+        return createRequest(connection, {
+          userId: user.id,
+          requesterAccounts: browsingAccount ? [browsingAccount] : accountNames,
+          ownAccounts: accountNames,
+          requesterAccount: browsingAccount,
         itemKind,
         itemId,
         quantity,

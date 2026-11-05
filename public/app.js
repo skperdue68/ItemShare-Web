@@ -285,30 +285,19 @@ if (listRegion) {
       return;
     }
 
-    // A column heading is also the sort control: clicking sorts by it, clicking
-    // again reverses. The list is fetched instead of reloading the page.
-    const sortLink = closest('[data-sort]');
+    // A column heading is the sort control and it cycles: ascending, descending, then
+    // back to the type groups. The order is remembered in a cookie instead of the
+    // address bar, so a shared link never carries somebody else's sorting.
+    const sortButton = closest('[data-sort]');
 
-    if (sortLink) {
+    if (sortButton) {
       event.preventDefault();
-      sortState = {
-        field: sortLink.dataset.sort,
-        dir: sortLink.dataset.dir === 'desc' ? 'desc' : 'asc',
-      };
 
-      const params = new URLSearchParams(window.location.search);
-      params.set('sort', sortState.field);
+      const field = sortButton.dataset.sort;
+      const current = sortButton.dataset.dir;
+      const next = current === 'asc' ? 'desc' : current === 'desc' ? '' : 'asc';
 
-      if (sortState.dir === 'desc') {
-        params.set('dir', 'desc');
-      } else {
-        params.delete('dir');
-      }
-
-      if (window.history && window.history.replaceState) {
-        window.history.replaceState(null, '', `/?${params.toString()}`);
-      }
-
+      writeSortCookie(next ? `${field}:${next}` : 'type:asc');
       scheduleRefresh(0);
       return;
     }
@@ -369,18 +358,14 @@ if (listRegion) {
   // address bar keeps up, so a reload or a live refresh uses the same filters.
   const filterForm = document.querySelector('[data-filters]');
 
-  // The sort order is not a filter, so it is not in the form; it is kept here and
-  // re-applied with whatever the form says, which is why changing a filter never
-  // silently resets the order the reader chose.
-  let sortState = (() => {
-    const params = new URLSearchParams(window.location.search);
-    const sort = params.get('sort');
-
-    return {
-      field: sort === 'name' || sort === 'added' ? sort : 'type',
-      dir: params.get('dir') === 'desc' ? 'desc' : 'asc',
-    };
-  })();
+  // The sort order is a reading preference, so it is remembered in a cookie and never
+  // written into the address bar. `type:asc` means "no choice": the plain type grouping
+  // the server sends anyway, which also clears a choice made on an earlier visit.
+  function writeSortCookie(value) {
+    document.cookie = `itemshare_sort=${encodeURIComponent(
+      value
+    )}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  }
 
   // A filter can hold several values, and what is switched on is shown as chips
   // under the row, so the controls and the chips are built from one place.
@@ -470,14 +455,6 @@ if (listRegion) {
     ['type', 'owner', 'added', 'q'].forEach((name) => {
       chosenValues(name).forEach((value) => params.append(name, value));
     });
-
-    if (sortState.field !== 'type') {
-      params.set('sort', sortState.field);
-
-      if (sortState.dir === 'desc') {
-        params.set('dir', 'desc');
-      }
-    }
 
     renderFilterChips();
     renderFilterMenus();

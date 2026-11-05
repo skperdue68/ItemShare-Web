@@ -224,6 +224,7 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/items` | The item-list region only, as a fragment, for live refresh. `503` means "leave the screen alone" |
 | `POST` | `/upload` | Accept a `ItemShareSavedVars.lua` upload |
 | `POST` | `/ingest` | Accept the same file from a watcher, token-authenticated |
+| `POST` | `/browsing-account` | Choose the ESO account browsing uses; a form post that redirects back to `/` |
 | `POST` | `/requests` | Put an item in the basket, or top up its quantity |
 | `POST` | `/requests/:id/cancel` | Take a basket row back out |
 | `POST` | `/requests/submit` | Send the basket: commit it and email the owners |
@@ -239,15 +240,29 @@ port and no extra proxy rule.
 
 ## Seeing shared items
 
-The page lists every item offered to any guild that any of your linked ESO accounts
-belongs to, with the owning account, character, quantity, item type and trait.
+You browse as **one** of your ESO accounts. When more than one is linked, a *Browsing
+as* control above the tabs picks it, and the choice is stored on the person
+(`itemshare_users.browsing_eso_account_name`) rather than in the session, so it survives
+signing out and follows you to another device. With a single account it is a label
+instead of a choice.
+
+The chosen account decides what **Request** shows: only items offered to guilds *that
+account* belongs to. **Offering** deliberately spans every linked account and names the
+account and character holding each item, so a second account never hides what the first
+one shares. **Your requests** covers everything you have asked for, from any account.
+
+Every row shows the owning account, quantity, item type and trait. The character is named
+by the `Location` column (`Inventory (Character Name)`), so it is not repeated beside the
+account.
 
 Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (other
 people's items), **Offering** (your own), and **Your requests**.
 
 Rows are grouped by type and alphabetical inside each group. The **Item** and **Added**
-headings sort; clicking the same heading again reverses it. Sorting by either drops the
-type headings, so the order you asked for is the order you get.
+headings sort, cycling through three states on repeated clicks: ascending, descending,
+then back to the type groups. Sorting by either drops the type headings, so the order
+you asked for is the order you get. The chosen order is remembered in the
+`itemshare_sort` cookie, so it survives a reload without ever appearing in the URL.
 
 `Added` is the day an item first entered its owner's shared list - the day they offered
 it - not the day of their latest upload, so re-uploading a long-held item does not make
@@ -261,8 +276,10 @@ A filter bar narrows the list by item type, owner account, how recently it was a
 (day / 7 days / 30 days) and item name. Type and owner accept several values at once,
 each ticked value becoming a chip on a row underneath; clicking a chip removes just that
 value. Filters are ordinary query parameters, repeated once per value
-(`/?type=Weapon&type=Armor&owner=@Name&added=7&q=sword&sort=added&dir=desc`), so a
-filtered, sorted view can be bookmarked and works with scripts off.
+(`/?type=Weapon&type=Armor&owner=@Name&added=7&q=sword`), so a filtered view can be
+bookmarked and works with scripts off. The sort order is deliberately not among them:
+it is a reading preference kept in a cookie, which keeps links clean and stops one
+person's sorting being handed to whoever opens their link.
 
 An owner can keep part of a stack back in game with a *share reserve*. The site lists
 what is actually being offered - the reserve is subtracted before upload - and shows the
@@ -273,6 +290,9 @@ Visibility joins three tables: the item's guilds (`itemshare_shared_item_guilds`
 viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_guilds`).
 Nothing is readable without a guild overlap, so an account in no guilds sees nothing -
 and nothing is listed at all before a first upload.
+
+The overlap is resolved per list: for the account you browse as in *Request*, and across
+every linked account in *Offering*.
 
 ## Asking for something
 
@@ -289,12 +309,17 @@ asked for while the owner has one in a bag right now. When they do not, the row 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
 
-A request is a **reservation, not a delivery**, and it reserves from the moment it is
+A request is recorded against the account you are browsing as - that is the character
+the owner is told to mail - so the account picker changes where a handover happens, not
+just what you can see.
+
+A request is **a reservation, not a delivery**, and it reserves from the moment it is
 picked rather than from the moment it is sent:
 
-- The list has two quantity columns. **Free** is what nobody is holding, **Held** is
-  what a request is standing on, and together they always add up to what the owner
-  reported. When nothing is free the button becomes *All held*.
+- The list has two quantity columns. **QUANTITY** is what nobody has reserved,
+  **RESERVED** is what a request is standing on, and together they always add up to
+  what the owner reported. A row with nothing reserved leaves that column blank rather
+  than filling it with a dash. When nothing is free the button becomes *All held*.
 - Asking puts the item in a **basket** with a clock (`REQUEST_HOLD_MINUTES`). Everything
   picked shares one timer, and adding or removing anything starts it again. *Your
   requests* shows the countdown beside a **Send requests** button; until it is pressed
@@ -454,7 +479,7 @@ handled by one process would otherwise never reach sockets held by another.
 | `itemshare_uploads` | One row per import: account, file, item count, total quantity, person |
 | `itemshare_accounts` | ESO account → person link; several accounts may belong to one person |
 | `itemshare_account_guilds` | Which guilds each ESO account belongs to |
-| `itemshare_users` | One row per person: display name, email, verified flag, avatar |
+| `itemshare_users` | One row per person: display name, email, verified flag, avatar, and the ESO account they browse as |
 | `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord and Google |
 | `itemshare_sessions` | Sign-in sessions, so they survive a restart |
 | `itemshare_discord_users` | Legacy Discord profile table, superseded by `itemshare_users` |
@@ -470,7 +495,7 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every Free/Held calculation is unaffected by a reserve.
+what is actually on offer, so every QUANTITY/RESERVED calculation is unaffected by a reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
 unique nor stable.
@@ -823,3 +848,11 @@ either of the two - so a request that is handed over in game simply stays *Waiti
 **Surfacing stored detail.** The `eso_data` column holds getters the site does not render
 yet (required level, champion points, style among them). They are captured and stored,
 and nothing shows them.
+
+- server-aware identity: guild ids and account names are only unique within a
+  megaserver, so NA, EU and PTS data can collide. The same numeric `guild_id` on two
+  worlds becomes one guild, and the same `@handle` on two worlds becomes one account
+  whose uploads overwrite each other. Fixing it needs a server column on
+  `itemshare_accounts` and `itemshare_guilds`, composite keys, and the addon writing
+  the world into the file, because the parser cannot infer it from guild ids or names.
+  Harmless while everyone plays on one megaserver.
