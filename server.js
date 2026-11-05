@@ -1095,6 +1095,28 @@ async function backfillIcons(reason) {
 
 // Everything that is not a page we serve, including a mistyped address, still gets
 // the site's own layout. Icons are images, so they get an empty 404 instead.
+
+// ---------------------------------------------------------------- simulation
+// `npm run simulate` runs as its own process. It writes through the same store code
+// the site uses, but it cannot reach the sockets this process holds, so after each
+// round it says what happened here and this turns that into a push. The token keeps
+// the endpoint off unless someone deliberately set one.
+const SIMULATE_TOKEN = String(process.env.SIMULATE_TOKEN || '').trim();
+
+app.post('/simulate/nudge', (req, res) => {
+  const token = String(req.get('x-itemshare-simulate') || '').trim();
+
+  if (!SIMULATE_TOKEN || token !== SIMULATE_TOKEN) {
+    res.status(404).end();
+    return;
+  }
+
+  const summary = readParam(req.body && req.body.summary).slice(0, 200);
+
+  notifyItemsChanged('simulation', summary || 'Simulated activity');
+  res.json({ ok: true, clients: realtime.clients(), revision: realtime.revision() });
+});
+
 app.use((req, res) => {
   if (req.path.startsWith('/icons/')) {
     res.status(404).end();
@@ -1226,27 +1248,6 @@ if (SWEEP_INTERVAL_MS > 0) {
   setInterval(sweepExpiredRequests, SWEEP_INTERVAL_MS).unref();
   sweepExpiredRequests();
 }
-
-// ---------------------------------------------------------------- simulation
-// `npm run simulate` runs as its own process. It writes through the same store code
-// the site uses, but it cannot reach the sockets this process holds, so after each
-// round it says what happened here and this turns that into a push. The token keeps
-// the endpoint off unless someone deliberately set one.
-const SIMULATE_TOKEN = String(process.env.SIMULATE_TOKEN || '').trim();
-
-app.post('/simulate/nudge', (req, res) => {
-  const token = String(req.get('x-itemshare-simulate') || '').trim();
-
-  if (!SIMULATE_TOKEN || token !== SIMULATE_TOKEN) {
-    res.status(404).end();
-    return;
-  }
-
-  const summary = readParam(req.body && req.body.summary).slice(0, 200);
-
-  notifyItemsChanged('simulation', summary || 'Simulated activity');
-  res.json({ ok: true, clients: realtime.clients(), revision: realtime.revision() });
-});
 
 httpServer.listen(PORT, () => {
   console.log(`ItemShare upload site listening on http://localhost:${PORT}`);
