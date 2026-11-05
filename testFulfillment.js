@@ -540,6 +540,14 @@ try {
     spread ? [spread.copies, spread.fulfilled, spread.cancelled] : null,
     [3, 2, 0]
   );
+  ok(
+    'and every answered row names the item, the copies and the asker, so the confirmation can',
+    spread.rows.map((row) => [row.itemName, row.requesterAccount, row.sent]),
+    [
+      [ITEM, ASKER, 2],
+      [ITEM, ASKER, 1],
+    ]
+  );
 
   const [spreadRows] = await connection.execute(
     'SELECT id, status, quantity, quantity_requested FROM itemshare_requests WHERE id IN (?, ?, ?) ORDER BY id ASC',
@@ -573,6 +581,11 @@ try {
     sent: 0,
   });
   ok('Not fulfilled cancels the row', [notFulfilled.fulfilled, notFulfilled.cancelled], [0, 1]);
+  ok(
+    'and the cancelled row names the item and the asker too',
+    [notFulfilled.rows[0].itemName.length > 0, notFulfilled.rows[0].requesterAccount],
+    [true, ASKER]
+  );
   ok('and the list is empty again', (await getOwnerRequests(connection, [OWNER])).length, 0);
 
   console.log('\n11. An upload leaves an item alone while a request on it is open');

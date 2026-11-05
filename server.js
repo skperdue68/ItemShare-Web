@@ -903,7 +903,9 @@ app.post('/owner/requests', upload.none(), async (req, res) => {
     }
 
     if (wantsFragment(req)) {
-      await renderList(200, '', { fulfilled: outcome.fulfilled, cancelled: outcome.cancelled });
+      // The whole outcome, not just the counts: the card's confirmation names the item,
+      // the copies and the requester, and the row it came from is about to disappear.
+      await renderList(200, '', outcome);
       return;
     }
 
