@@ -912,8 +912,13 @@ pending, and the same link answers them later.
 
 `npm run test:fulfillment` walks exactly that sequence against a real database: it runs
 every migration, shares ten copies, asks for three, answers "two sent", then uploads eight
-and checks the free count at each step. It drops and rebuilds its database first, so
+and checks the free count at each step. The last stage gives one message two rows of
+different items, answers one of them, and checks that the other stays pending and holding
+its copy, that saving the answered row again changes nothing, and that the link only stops
+working once every row has been answered. It drops and rebuilds its database first, so
 `ITEMSHARE_DATABASE` has to end in `_test` (`itemshare_test` by default).
+
+It needs a reachable MariaDB; without one it stops before touching anything and says so.
 
 ## Not done yet
 

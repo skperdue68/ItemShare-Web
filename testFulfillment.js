@@ -48,6 +48,8 @@ const OWNER = '@TestOwner';
 const ASKER = '@TestAsker';
 const GUILD = 9001;
 const ITEM = 'Briarheart Dagger';
+// A second name, so one message can carry two rows that are answered separately.
+const SECOND = 'Soul Gem';
 
 let checks = 0;
 
@@ -60,13 +62,17 @@ function ok(label, actual, expected) {
 // What the addon writes for one item. Only the fields the store reads are meaningful;
 // the rest are here so a new column cannot silently shift the row.
 function itemFor(accountName, itemName, itemCount) {
+  // Keyed by name, so a file with two names makes two shared rows rather than one that
+  // overwrites the other.
+  const slug = itemName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
   return {
     accountName,
     characterName: 'Tester',
-    itemKey: 'test-key:briarheart',
+    itemKey: `test-key:${slug}`,
     itemLink: '',
     itemName,
-    itemId: 12345,
+    itemId: 12345 + slug.length,
     icon: '',
     itemType: 1,
     itemTypeName: 'Miscellaneous',
@@ -99,13 +105,14 @@ function itemFor(accountName, itemName, itemCount) {
   };
 }
 
-async function upload(connection, accountName, itemCount) {
+/** Writes this person's whole file again, from a list of `{ name, count }`. */
+async function uploadItems(connection, accountName, entries) {
   const [result] = await replaceAccounts(
     connection,
     [
       {
         accountName,
-        items: itemCount > 0 ? [itemFor(accountName, ITEM, itemCount)] : [],
+        items: entries.map(({ name, count }) => itemFor(accountName, name, count)),
         alwaysShare: [],
         guilds: new Map([[GUILD, 'Test Guild']]),
       },
@@ -114,6 +121,14 @@ async function upload(connection, accountName, itemCount) {
   );
 
   return result;
+}
+
+async function upload(connection, accountName, itemCount) {
+  return uploadItems(
+    connection,
+    accountName,
+    itemCount > 0 ? [{ name: ITEM, count: itemCount }] : []
+  );
 }
 
 /** Backdates an upload, so "was this mailed after the file arrived?" has one answer. */
@@ -378,6 +393,117 @@ try {
     delivered: 0,
     free: 3,
   });
+
+  console.log('\n9. One message, two rows, answered one row at a time');
+  // A fresh file so both rows are measured from it, and old enough that "mailed after the
+  // upload" has one answer.
+  const multiUpload = await uploadItems(connection, OWNER, [
+    { name: ITEM, count: 10 },
+    { name: SECOND, count: 5 },
+  ]);
+  await ageUpload(connection, multiUpload.uploadId, 10);
+
+  const sharedRows = await getSharedItemsForViewer(connection, [ASKER]);
+  const firstItemId = Number(sharedRows.find((row) => row.item_name === ITEM).id);
+  const secondItemId = Number(sharedRows.find((row) => row.item_name === SECOND).id);
+
+  const firstRow = await askFor(connection, askerId, firstItemId, 2);
+  await submitDrafts(connection, { userId: askerId });
+  const secondRow = await askFor(connection, askerId, secondItemId, 1);
+  await submitDrafts(connection, { userId: askerId });
+
+  const bothAdded = [firstRow, secondRow].sort((a, b) => a - b);
+  ok(
+    'both asks are waiting, as separate rows',
+    (await getOwnerRequests(connection, [OWNER]))
+      .map((row) => Number(row.id))
+      .sort((a, b) => a - b),
+    bothAdded
+  );
+
+  const oneToken = await issueRequestEmailToken(connection, [firstRow, secondRow]);
+  const before = await getFulfillForm(connection, oneToken);
+  ok(
+    'one message carries both rows',
+    before ? before.rows.map((row) => Number(row.id)).sort((a, b) => a - b) : null,
+    bothAdded
+  );
+
+  const partial = await recordFulfillment(connection, {
+    token: oneToken,
+    sentById: new Map([[firstRow, 2]]),
+  });
+  ok(
+    'only the row that was saved is recorded',
+    partial ? [partial.fulfilled, partial.cancelled, partial.copies] : null,
+    [1, 0, 2]
+  );
+
+  const [savedRows] = await connection.execute(
+    'SELECT id, status, quantity, quantity_requested FROM itemshare_requests WHERE id IN (?, ?)',
+    [firstRow, secondRow]
+  );
+  const byId = new Map(savedRows.map((row) => [Number(row.id), row]));
+  ok('the saved row is closed', byId.get(firstRow).status, 'fulfilled');
+  ok(
+    'the other row is untouched and still pending',
+    [byId.get(secondRow).status, Number(byId.get(secondRow).quantity)],
+    ['pending', 1]
+  );
+  ok(
+    'the saved row still shows what was asked',
+    [Number(byId.get(firstRow).quantity), Number(byId.get(firstRow).quantity_requested)],
+    [2, 2]
+  );
+  ok('the two copies leave the free count once', await availability(connection), {
+    total: 10,
+    reserved: 0,
+    delivered: 2,
+    free: 8,
+  });
+  ok(
+    'the waiting row is still holding its copy',
+    Number(
+      (await getSharedItemsForViewer(connection, [ASKER])).find(
+        (row) => row.item_name === SECOND
+      ).reserved
+    ),
+    1
+  );
+
+  const afterFirst = await getFulfillForm(connection, oneToken);
+  ok(
+    'the same link still answers the rest',
+    afterFirst ? afterFirst.rows.map((row) => Number(row.id)) : null,
+    [secondRow]
+  );
+  ok(
+    'saving the answered row again changes nothing',
+    (
+      await recordFulfillment(connection, {
+        token: oneToken,
+        sentById: new Map([[firstRow, 2]]),
+      })
+    ).rows.length,
+    0
+  );
+  ok(
+    'and the waiting row is still waiting afterwards',
+    (await getFulfillForm(connection, oneToken)).rows.map((row) => Number(row.id)),
+    [secondRow]
+  );
+
+  const rest = await recordFulfillment(connection, {
+    token: oneToken,
+    sentById: new Map([[secondRow, 1]]),
+  });
+  ok('the last row answers with the same link', rest ? [rest.fulfilled, rest.copies] : null, [1, 1]);
+  ok(
+    'the link stops only once every row is answered',
+    await getFulfillForm(connection, oneToken),
+    null
+  );
+  ok('the owner has nothing left to answer', (await getOwnerRequests(connection, [OWNER])).length, 0);
 
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
