@@ -102,15 +102,15 @@ body {
 }
 
 .discord-button {
-  height: 34px;
-  padding: 0 16px;
+  height: 38px;
+  padding: 0 18px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 14px;
   font-weight: 600;
   color: #ffffff;
   text-decoration: none;
@@ -145,13 +145,35 @@ body {
 }
 
 .auth-button-google {
-  background: linear-gradient(180deg, #ffffff 0%, #e5e7eb 100%);
-  color: #1f2937;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28);
+  background: #ffffff;
+  border: 1px solid #dadce0;
+  color: #3c4043;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.3);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .auth-button-google:hover {
-  background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
+  background: #f6f8fc;
+  border-color: #c2c8d2;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.36);
+}
+
+.auth-button-google:focus-visible {
+  outline: 2px solid #4285f4;
+  outline-offset: 2px;
+}
+
+.provider-mark {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  display: block;
+}
+
+/* The Discord clyde is wider than it is tall. */
+.provider-mark-discord {
+  width: 19px;
+  height: auto;
 }
 
 .provider-note {
@@ -666,6 +688,18 @@ th.num {
 .account-menu {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-name {
+  max-width: 180px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avatar-button {
