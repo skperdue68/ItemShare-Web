@@ -6,7 +6,7 @@
 //   npm run simulate -- --every 4000     one action every four seconds
 //   npm run simulate -- --rounds 12      stop after twelve actions
 //   npm run simulate -- --once           exactly one action, then exit
-//   npm run simulate -- --only requests  asking, sending, cancelling and timing out
+//   npm run simulate -- --only requests  asking, sending, answering, cancelling, timing out
 //   npm run simulate -- --only items     just people re-saving their files
 //   npm run simulate -- --reset          remove the simulated people and their data
 //   npm run simulate -- --url <address>  ask a different site to announce the changes
@@ -39,6 +39,7 @@ import {
   expireDueDrafts,
   getBasketRows,
   getSharedItemsForViewer,
+  recordOwnerGroupAnswer,
   replaceAccounts,
   submitDrafts,
 } from './lib/store.js';
@@ -547,6 +548,59 @@ async function timeoutBasket(connection, person) {
   return expired > 0 ? { person: person.account, item: asked.item } : null;
 }
 
+/**
+ * The owner's side of a request: answers something waiting on this person's own items,
+ * either sending part or all of it or saying there was nothing to send. Without this
+ * every simulated request stayed pending for ever, so a requester's history never showed
+ * a handover and the database only ever held asks nobody had touched.
+ *
+ * It goes through the same store function the signed-in list uses, oldest ask first, so
+ * the copies it sends leave the free count exactly as a real answer would.
+ */
+async function answerRequest(connection, person) {
+  const [rows] = await connection.execute(
+    `SELECT id, item_name, requester_account_name, quantity, quantity_requested
+       FROM itemshare_requests
+      WHERE status = 'pending' AND owner_account_name = ?
+      ORDER BY COALESCE(submitted_at, created_at) ASC, id ASC
+      LIMIT 1`,
+    [person.account]
+  );
+  const row = rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  const asked = Math.max(1, Number(row.quantity_requested) || Number(row.quantity) || 1);
+  const roll = Math.random();
+  // Sometimes nothing could be sent, sometimes part of it, sometimes all of it.
+  const sent =
+    roll < 0.25
+      ? 0
+      : roll < 0.65
+        ? 1 + Math.floor(Math.random() * Math.max(1, asked - 1))
+        : asked;
+  const outcome = await recordOwnerGroupAnswer(connection, {
+    accountNames: [person.account],
+    anchorId: Number(row.id),
+    sent,
+  });
+
+  if (!outcome || outcome.fulfilled + outcome.cancelled === 0) {
+    return null;
+  }
+
+  return {
+    person: person.account,
+    requester: String(row.requester_account_name || 'someone'),
+    item: String(row.item_name || 'an item'),
+    asked,
+    copies: outcome.copies,
+    sentNothing: outcome.copies === 0,
+  };
+}
+
 /** Names a few items for one log sentence without dumping a whole basket into it. */
 function describeItems(names) {
   const list = [...new Set((names || []).filter(Boolean))];
@@ -900,8 +954,8 @@ try {
         only === 'items'
           ? ['save']
           : only === 'requests'
-            ? ['request', 'send', 'cancel', 'timeout']
-            : ['request', 'send', 'cancel', 'timeout', 'save'];
+            ? ['request', 'send', 'answer', 'cancel', 'timeout']
+            : ['request', 'send', 'answer', 'cancel', 'timeout', 'save'];
 
       say(
         `Simulating ${PEOPLE.length} people into ${guilds.size} guild${
@@ -909,7 +963,7 @@ try {
         } alongside ${mine.join(', ')}.`
       );
       say(
-        `${only ? `Only ${only}` : 'A mix of asks, sends, cancels, timeouts and re-saves'}${
+        `${only ? `Only ${only}` : 'A mix of asks, sends, answers, cancels, timeouts and re-saves'}${
           Number.isFinite(rounds)
             ? `, ${rounds} action${rounds === 1 ? '' : 's'}`
             : ', running until you stop it'
@@ -965,6 +1019,19 @@ try {
             line = `${done.person} let the basket clock run out, so ${describeItems([
               done.item,
             ])} went back to being available`;
+          }
+        } else if (action === 'answer') {
+          // The owner's half of the conversation: an ask on their own items is sent, part
+          // sent, or refused, so the requester's history shows an answer instead of an
+          // ask nobody ever touched.
+          const done = await answerRequest(connection, person);
+
+          if (done) {
+            line = done.sentNothing
+              ? `${done.person} had nothing to send, so ${done.requester}'s request for ${describeItems(
+                  [done.item]
+                )} was cancelled`
+              : `${done.person} sent ${done.copies} x ${done.item} to ${done.requester}`;
           }
         } else {
           const done = await saveSomething(connection, person, guilds);

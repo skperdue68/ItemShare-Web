@@ -630,6 +630,9 @@ real in the database, one at a time:
   anybody visible is fair game, the other simulated people included, not just you
 - **sending** - the basket is committed, the moment a real person's send would email you;
   the log says who *would* have been emailed instead of sending anything
+- **answering** - an ask waiting on a simulated person's own items is sent, part sent or
+  refused, through the same code the signed-in list uses, so a requester's history shows
+  a handover instead of asking for ever
 - **cancelling** - either a request already waiting, or one taken back out of the basket
 - **timing out** - the basket's deadline is pushed past, and the site's own sweeper runs
 - **re-saving** - items move between bags, bank and furnishing vault, stacks change and
@@ -641,7 +644,7 @@ real in the database, one at a time:
 | `--every <ms>` | Pause between actions in milliseconds. Default `30000`. `0` runs with no pause |
 | `--rounds <n>` | Stop after `n` actions instead of running until interrupted |
 | `--once` | Exactly one action, then exit. Implies no pause |
-| `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, cancelling, timing out) or `items` (just re-saving files) |
+| `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, answering, cancelling, timing out) or `items` (just re-saving files) |
 | `--reset` | Remove the simulated people and all their data, then exit |
 | `--url <address>` | The site to ask for the live push. Defaults to `BASE_URL`, falling back to `http://127.0.0.1:<PORT>`. A missing `http://` is filled in |
 
@@ -715,6 +718,8 @@ Their activity appears in the log as a sentence rather than a revision number:
 Live: [SIMULATE] @DemoTrader asked @YourAccount for 2 x Soul Gem - 1 open page told to refresh
 
 [SIMULATE] 19:42:38 @NightMarket cancelled their request for 2 x Dwemer Frame before it was sent
+
+[SIMULATE] 19:42:53 @QuietSmith sent 2 x Alinor Bookshelf, Grand to @DemoTrader
 
 [SIMULATE] 19:43:08 @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
 
@@ -930,10 +935,23 @@ pending, and the same link answers them later.
   still works: `quantity_<id>` fields are read the same way.
 - GET shows the form and POST records it. The link in the message exists because most mail
   clients strip forms out of HTML, so the same form is also a page on the site.
-- The same form is a signed-in page, `/owner/requests`, reachable from the account menu
-  as *Requests for me*. It lists what is waiting on the person's own ESO accounts, oldest
-  ask first, and posts to itself before redirecting, so the rows just answered disappear
-  from the list instead of being answerable twice.
+- The same answering is a signed-in page, `/owner/requests`, reachable from the account
+  menu as *Requests for me*. It lists what is waiting on the person's own ESO accounts,
+  oldest ask first, and posts to itself before redirecting, so what was just answered
+  disappears from the list instead of being answerable twice.
+- **One row per item, however many times it was asked for.** Two, then two more, then one
+  is a page row reading **Requested 5**, because that is one conversation. The database
+  rows stay separate: the number you send is spent on the oldest asks first, so 3 against
+  5 closes two of them and leaves the third waiting. Rows with no usable item id are
+  never merged.
+- The row carries what the requester needs to send the right copy: the item's type, its
+  **trait** and its **enchantment** when the shared file has them, under the name.
+- The time is when the ask arrived, on the clock of the machine running the site and in
+  its own date order; a grouped row shows the oldest ask, and its tooltip names the newest.
+- **Save** (green) records the number in the box as mailed. **Not fulfilled** (red) is the
+  same form saved as `0`: nothing was sent, so the request is cancelled with the owner's
+  reason on it. Both sit beside the number rather than under it.
+- **Requested** is the total asked for; **Amount Sent** is the number the owner typed.
 - The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
   was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the
   requester's history instead of looking complete.
@@ -946,7 +964,10 @@ every migration, shares ten copies, asks for three, answers "two sent", then upl
 and checks the free count at each step. The last stage gives one message two rows of
 different items, answers one of them, and checks that the other stays pending and holding
 its copy, that saving the answered row again changes nothing, and that the link only stops
-working once every row has been answered. It drops and rebuilds its database first, so
+working once every row has been answered. Its last stage asks for one item three times,
+checks the owner's page lists that as one row of five, sends three of them and checks the
+oldest two are closed while the third still waits, then cancels what is left with the Not
+fulfilled answer. It drops and rebuilds its database first, so
 `ITEMSHARE_DATABASE` has to end in `_test` (`itemshare_test` by default).
 
 It needs a reachable MariaDB; without one it stops before touching anything and says so.

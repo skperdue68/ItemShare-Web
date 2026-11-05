@@ -28,6 +28,7 @@ import {
   linkAccountToUser,
   recordFulfillment,
   recordOwnerAnswer,
+  recordOwnerGroupAnswer,
   replaceAccounts,
   submitDrafts,
 } from './lib/store.js';
@@ -507,6 +508,72 @@ try {
     null
   );
   ok('the owner has nothing left to answer', (await getOwnerRequests(connection, [OWNER])).length, 0);
+
+  console.log('\n10. Repeated asks for one item read as one number, and are answered together');
+  await uploadItems(connection, OWNER, [{ name: ITEM, count: 12 }]);
+  const groupedItemId = Number(
+    (await getSharedItemsForViewer(connection, [ASKER])).find((row) => row.item_name === ITEM).id
+  );
+
+  const firstAsk = await askFor(connection, askerId, groupedItemId, 2);
+  await submitDrafts(connection, { userId: askerId });
+  const secondAsk = await askFor(connection, askerId, groupedItemId, 2);
+  await submitDrafts(connection, { userId: askerId });
+  const thirdAsk = await askFor(connection, askerId, groupedItemId, 1);
+  await submitDrafts(connection, { userId: askerId });
+
+  const grouped = await getOwnerRequests(connection, [OWNER]);
+  ok(
+    'two, two and one asks are one row of five',
+    grouped.map((row) => [Number(row.id), row.asked, row.requests]),
+    [[firstAsk, 5, 3]]
+  );
+  ok('the row still knows every request behind it', grouped[0].ids, [firstAsk, secondAsk, thirdAsk]);
+
+  const spread = await recordOwnerGroupAnswer(connection, {
+    accountNames: [OWNER],
+    anchorId: firstAsk,
+    sent: 3,
+  });
+  ok(
+    'three copies answer the oldest asks first',
+    spread ? [spread.copies, spread.fulfilled, spread.cancelled] : null,
+    [3, 2, 0]
+  );
+
+  const [spreadRows] = await connection.execute(
+    'SELECT id, status, quantity, quantity_requested FROM itemshare_requests WHERE id IN (?, ?, ?) ORDER BY id ASC',
+    [firstAsk, secondAsk, thirdAsk]
+  );
+  ok(
+    'the oldest fills, the next takes the remainder, the rest still waits',
+    spreadRows.map((row) => [Number(row.id), row.status, Number(row.quantity)]),
+    [
+      [firstAsk, 'fulfilled', 2],
+      [secondAsk, 'fulfilled', 1],
+      [thirdAsk, 'pending', 1],
+    ]
+  );
+  ok(
+    'the short handover keeps the ask it answered',
+    [Number(spreadRows[1].quantity), Number(spreadRows[1].quantity_requested)],
+    [1, 2]
+  );
+
+  const restGrouped = await getOwnerRequests(connection, [OWNER]);
+  ok(
+    'what is left lists as one row again',
+    restGrouped.map((row) => [Number(row.id), row.asked]),
+    [[thirdAsk, 1]]
+  );
+
+  const notFulfilled = await recordOwnerGroupAnswer(connection, {
+    accountNames: [OWNER],
+    anchorId: thirdAsk,
+    sent: 0,
+  });
+  ok('Not fulfilled cancels the row', [notFulfilled.fulfilled, notFulfilled.cancelled], [0, 1]);
+  ok('and the list is empty again', (await getOwnerRequests(connection, [OWNER])).length, 0);
 
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
