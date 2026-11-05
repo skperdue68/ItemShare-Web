@@ -10,6 +10,7 @@
 //   npm run simulate -- --only items     just people re-saving their files
 //   npm run simulate -- --reset          remove the simulated people and their data
 //   npm run simulate -- --url <address>  ask a different site to announce the changes
+//                                        (or --url=<address>; BASE_URL is used otherwise)
 //
 // It writes through lib/store.js, the same code the site uses, so reservations, the
 // basket clock and the upload reconciliation behave exactly as they would for a real
@@ -202,6 +203,14 @@ const PEOPLE = [
 ];
 
 function valueAfter(flag) {
+  // Both spellings: `--url <address>` and `--url=<address>`. The second used to be
+  // ignored without a word, which quietly sent a run to the address it was not given.
+  const inline = process.argv.find((argument) => argument.startsWith(`${flag}=`));
+
+  if (inline) {
+    return String(inline.slice(flag.length + 1)).trim();
+  }
+
   const index = process.argv.indexOf(flag);
   return index >= 0 && process.argv[index + 1] ? String(process.argv[index + 1]).trim() : '';
 }
@@ -552,11 +561,19 @@ async function saveSomething(connection, person, guilds) {
 // --url overrides it for one run, and a missing scheme is filled in because "host:port"
 // is what people type.
 function siteBaseUrl() {
-  const chosen = String(valueAfter('--url') || process.env.BASE_URL || '').trim();
-  const base = chosen || `http://127.0.0.1:${process.env.PORT || 3000}`;
+  const fromFlag = String(valueAfter('--url') || '').trim();
+  const configured = String(process.env.BASE_URL || '').trim();
+  const port = process.env.PORT || 3000;
+  // BASE_URL wins over PORT, so a site moved to another port while BASE_URL still names
+  // the old one is asked at the old address. The source comes back with the address so
+  // the run says which one it used instead of leaving it to be guessed.
+  const base = fromFlag || configured || `http://127.0.0.1:${port}`;
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(base) ? base : `http://${base}`;
 
-  return withScheme.replace(/\/+$/, '');
+  return {
+    url: withScheme.replace(/\/+$/, ''),
+    source: fromFlag ? '--url' : configured ? 'BASE_URL' : `PORT ${port} (default)`,
+  };
 }
 
 // The same eight characters the site prints at start-up: compare the two lines to see
@@ -593,7 +610,7 @@ async function nudge(summary) {
           ? ` (it hides the route unless SIMULATE_TOKEN matches; this run sent ${tokenFingerprint(token)})`
           : '';
 
-      return `the site answered ${response.status}${hint}, so open pages were not told`;
+      return `the site answered ${response.status}${hint} at ${SITE_URL}/simulate/nudge, so open pages were not told`;
     }
 
     const result = await response.json().catch(() => ({}));
@@ -647,7 +664,8 @@ const rounds = once
 const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 10000));
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
-const SITE_URL = siteBaseUrl();
+const SITE = siteBaseUrl();
+const SITE_URL = SITE.url;
 
 const config = readConfig();
 let connection;
@@ -745,7 +763,9 @@ try {
 
       if (String(process.env.SIMULATE_TOKEN || '').trim()) {
         console.log(
-          `Live pushes: ${SITE_URL}/simulate/nudge (token ${tokenFingerprint(process.env.SIMULATE_TOKEN)})`
+          `Live pushes: ${SITE_URL}/simulate/nudge (token ${tokenFingerprint(
+            process.env.SIMULATE_TOKEN
+          )}, from ${SITE.source})`
         );
       }
 
