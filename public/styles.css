@@ -326,6 +326,39 @@ body {
     0 18px 45px rgba(0, 0, 0, 0.1);
 }
 
+/* A heading row that can also carry a way out, so a page that is a detour from the list
+   can be left from the corner the way a dialog is, without hunting for the button at the
+   bottom. Smaller than the heading, so it never competes with it. */
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 50%;
+  background: rgba(7, 16, 38, 0.6);
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.page-close:hover,
+.page-close:focus-visible {
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.52);
+  background: rgba(30, 41, 59, 0.92);
+}
+
 .card h2 {
   margin: 0 0 10px;
   font-size: 17px;
@@ -409,6 +442,11 @@ code {
   margin-top: 16px;
   display: flex;
   gap: 12px;
+}
+
+/* The way back sits in the middle of its row on pages that are a detour from the list. */
+.actions.center {
+  justify-content: center;
 }
 
 .primary-button {
