@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sends one request email through whatever Database/.env configures, so a mail
+// Sends one request email through whatever .env configures, so a mail
 // setup can be checked without waiting for somebody to ask for an item.
 //
 //   node testEmail.js you@example.com        (npm run email:test -- you@example.com)
@@ -24,7 +24,7 @@ const config = emailConfig();
 if (!config.configured) {
   console.error(`Email is not configured: ${config.reason}.`);
   console.error(
-    'Set EMAIL_FROM in Database/.env, and either a sendmail binary on this host or RESEND_API_KEY.'
+    'Set EMAIL_FROM in .env, and either a sendmail binary on this host or RESEND_API_KEY.'
   );
   process.exit(1);
 }

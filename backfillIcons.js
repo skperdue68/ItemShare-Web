@@ -18,10 +18,10 @@ import { getItemIdsMissingIcons, getUncachedIconItems } from './lib/store.js';
 import { backfillItemIcons } from './lib/iconBackfill.js';
 import { resolveIconPathByItemId } from './lib/icons.js';
 
-// Same absolute path the server reads, so `node Database/backfillIcons.js` from
+// Same absolute path the server reads, so `node backfillIcons.js` from
 // the repository root finds the credentials too. Loading `dotenv/config` instead
 // resolves .env against the shell's directory, which silently fell back to
-// root with an empty password when run anywhere but Database/.
+// root with an empty password when run anywhere but this folder.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, '.env');
 const hasEnvFile = existsSync(envPath);

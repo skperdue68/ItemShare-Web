@@ -6,11 +6,9 @@
   "description": "ItemShare MariaDB ingest CLI and upload website",
   "scripts": {
     "start": "node server.js",
-    "ingest": "node ingest.js",
     "backfill": "node backfillIcons.js",
     "email:test": "node testEmail.js",
     "seed:demo": "node seedDemo.js",
-    "check": "node ingest.js ../SampleData/Sample1/ItemShareSavedVars.lua --dry-run",
     "simulate": "node simulate.js"
   },
   "dependencies": {

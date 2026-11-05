@@ -16,7 +16,7 @@
 //
 // The site holds the socket connections, so the script cannot push on its own. After
 // each action it asks the running site to announce what happened; that needs
-// SIMULATE_TOKEN in Database/.env (the same file the site reads) and the site
+// SIMULATE_TOKEN in .env (the same file the site reads) and the site
 // running. Without it the data still changes - you just see it on the next refresh.
 //
 // Everything it creates is labelled with a `simulator` identity, so the same three
