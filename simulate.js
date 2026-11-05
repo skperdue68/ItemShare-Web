@@ -27,11 +27,12 @@
 // people come back instead of a new set on every run, and --reset removes them all.
 
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import dotenv from 'dotenv';
 
 import { describeConnectionFailure, openDatabase, readConfig } from './lib/database.js';
+import { tokenFingerprint } from './lib/simulateToken.js';
 import {
   cancelOwnRequest,
   createRequest,
@@ -43,7 +44,17 @@ import {
 } from './lib/store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '.env') });
+const ENV_PATH = path.join(__dirname, '.env');
+dotenv.config({ path: ENV_PATH });
+
+// Every line this script prints goes through here. With the site and the simulator in
+// one terminal there is otherwise no way to tell a handover somebody made from one the
+// simulation made; the site labels its own side of it the same way.
+const LABEL = '[SIMULATE] ';
+
+const say = (text) => console.log(`${LABEL}${text}`);
+const warn = (text) => console.warn(`${LABEL}${text}`);
+const fail = (text) => console.error(`${LABEL}${text}`);
 
 const HOLD_MINUTES = 5;
 const LOCATIONS = ['Inventory', 'Bank', 'Furnishing Vault', 'Craft Bag'];
@@ -501,6 +512,7 @@ async function removeFromBasket(connection, person) {
     ? {
         person: person.account,
         item: outcome.itemName || row.item_name || 'an item',
+        quantity: Number(row.quantity) || 1,
         fromBasket: true,
       }
     : null;
@@ -576,11 +588,124 @@ function siteBaseUrl() {
   };
 }
 
-// The same eight characters the site prints at start-up: compare the two lines to see
-// whether both processes are holding the same token.
-function tokenFingerprint(value) {
-  const trimmed = String(value || '').trim();
-  return trimmed ? createHash('sha1').update(trimmed).digest('hex').slice(0, 8) : 'none';
+/**
+ * The quieter way two processes hold different tokens while .env is correct on disk:
+ * dotenv never overwrites a variable that is already in the environment, so a token
+ * exported in this shell - or left over from an earlier export - wins over the file
+ * without a word. The file is read here directly so the difference can be said out loud.
+ */
+function warnIfEnvIgnored(token) {
+  let fromFile = '';
+
+  try {
+    fromFile = String(dotenv.parse(fs.readFileSync(ENV_PATH)).SIMULATE_TOKEN || '').trim();
+  } catch {
+    return;
+  }
+
+  if (fromFile && fromFile !== token) {
+    warn(
+      'the environment already had SIMULATE_TOKEN, so .env was ignored.\n' +
+        `  This run sends ${tokenFingerprint(token)}, while ${ENV_PATH} holds ${tokenFingerprint(
+          fromFile
+        )}.\n` +
+        '  Unset it for this run - env -u SIMULATE_TOKEN npm run simulate - or change the\n' +
+        '  exported value to match the file.'
+    );
+  }
+}
+
+/**
+ * What a refusal actually means, in terms a person can act on.
+ *
+ * The site compares the header with the token it read from its own `.env` when it
+ * started, so there are only three answers and they look nothing alike:
+ *
+ *   403 with two fingerprints  that site holds a different token from this run.
+ *   404, no token set         that site never loaded a token at all.
+ *   404, no reason            no such route: not this site, or a version from before it.
+ *
+ * Both fingerprints are printed together, because that is the whole comparison: same
+ * number, same token; different number, a second `.env` somewhere.
+ */
+function describeRefusal({ status, body, token }) {
+  const mine = tokenFingerprint(token);
+  const answer = body && typeof body === 'object' ? body : {};
+  const reason = String(answer.reason || '');
+  const theirs = String(answer.site || '');
+
+  if (reason === 'token-mismatch') {
+    return [
+      `live pushes refused by ${SITE_URL} (address from ${SITE.source}): this run holds ${mine}, that site holds ${theirs}.`,
+      '  Two different tokens. The site reads SIMULATE_TOKEN from its own .env at start-up,',
+      '  so setting it on this machine changes nothing unless that same site was restarted',
+      '  with the same value. It prints the fingerprint it holds as it boots.',
+    ].join('\n');
+  }
+
+  if (reason === 'token-not-set') {
+    return [
+      `live pushes refused by ${SITE_URL} (address from ${SITE.source}): that site has no SIMULATE_TOKEN at all.`,
+      '  It is reading a different .env from this run, or it started before the token was',
+      '  added. Set SIMULATE_TOKEN where that site runs, then restart it.',
+    ].join('\n');
+  }
+
+  if (status === 404) {
+    return [
+      `live pushes refused by ${SITE_URL} (HTTP 404, address from ${SITE.source}): nothing answers the simulate route there.`,
+      '  Either that address is not this ItemShare (check BASE_URL or --url), or the site is',
+      '  older than this check. The data still changes; open pages see it on their next',
+      '  refresh.',
+    ].join('\n');
+  }
+
+  return `live pushes refused by ${SITE_URL} (HTTP ${status}, address from ${SITE.source}); open pages were not told what changed.`;
+}
+
+/**
+ * Says once, at start-up, whether the site will accept this run's announcements.
+ *
+ * Without it the first sign of trouble is a line per action, minutes in. This is the
+ * same token check the nudge uses and it pushes nothing.
+ */
+async function checkLivePushes(token) {
+  warnIfEnvIgnored(token);
+
+  if (!token) {
+    say(
+      'live pushes off: set SIMULATE_TOKEN in .env and restart the site to have open pages refresh.'
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch(`${SITE_URL}/simulate/check`, {
+      method: 'POST',
+      headers: { 'x-itemshare-simulate': token },
+    });
+
+    if (response.ok) {
+      say(
+        `live pushes armed for ${SITE_URL} (token ${tokenFingerprint(
+          token
+        )}; the site holds the same one). Address from ${SITE.source}.`
+      );
+      return;
+    }
+
+    warn(
+      describeRefusal({
+        status: response.status,
+        body: await response.json().catch(() => null),
+        token,
+      })
+    );
+  } catch (error) {
+    warn(
+      `could not reach ${SITE_URL} (address from ${SITE.source}; ${error.message}). The data still changes; open pages see it on their next refresh.`
+    );
+  }
 }
 
 async function nudge(summary) {
@@ -603,29 +728,30 @@ async function nudge(summary) {
     });
 
     if (!response.ok) {
-      // 404 is the site's own answer when its token is blank or different, deliberately
-      // indistinguishable from a missing route, so say which knob to check.
-      const hint =
-        response.status === 404
-          ? ` (it hides the route unless SIMULATE_TOKEN matches; this run sent ${tokenFingerprint(token)})`
-          : '';
-
-      return `the site answered ${response.status}${hint} at ${SITE_URL}/simulate/nudge, so open pages were not told`;
+      // Say what the site itself reported rather than guessing at it: its answer names the
+      // token it holds, so both fingerprints sit next to each other in one line. Every
+      // message names the address it asked, because "404" is as often the wrong site as
+      // the wrong token.
+      return describeRefusal({
+        status: response.status,
+        body: await response.json().catch(() => null),
+        token,
+      });
     }
 
     const result = await response.json().catch(() => ({}));
     const clients = Number(result.clients) || 0;
 
     return clients === 0
-      ? 'no pages open to refresh'
-      : `${clients} open page${clients === 1 ? '' : 's'} told to refresh`;
+      ? 'live: no pages open to refresh'
+      : `live: ${clients} open page${clients === 1 ? '' : 's'} told to refresh`;
   } catch (error) {
-    return `could not reach the site on ${SITE_URL} (${error.message})`;
+    return `live: could not reach the site on ${SITE_URL} (${error.message})`;
   }
 }
 
 // Ctrl+C stops after the action in flight and cuts the wait short, so stopping is
-// immediate rather than "in up to ten seconds".
+// immediate rather than "in up to thirty seconds".
 let stopping = false;
 let wake = null;
 
@@ -661,11 +787,15 @@ const rounds = once
   : Number.isFinite(wanted) && wanted > 0
     ? Math.trunc(wanted)
     : Number.POSITIVE_INFINITY;
-const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 10000));
+const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 30000));
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
 const SITE = siteBaseUrl();
 const SITE_URL = SITE.url;
+
+// Before the database is touched, because a token that does not match is a configuration
+// problem and this line is more useful on its own than buried under a connection error.
+await checkLivePushes(String(process.env.SIMULATE_TOKEN || '').trim());
 
 const config = readConfig();
 let connection;
@@ -673,7 +803,7 @@ let connection;
 try {
   ({ connection } = await openDatabase(config));
 } catch (error) {
-  console.error(describeConnectionFailure(error, config));
+  fail(describeConnectionFailure(error, config));
   process.exit(1);
 }
 
@@ -718,19 +848,19 @@ try {
     );
     await connection.execute(`DELETE FROM itemshare_users WHERE id IN (${userMarks})`, userIds);
 
-    console.log(`Removed ${PEOPLE.length} simulated people and everything they shared.`);
+    say(`Removed ${PEOPLE.length} simulated people and everything they shared.`);
   } else {
     const mine = await realAccounts(connection);
     const guilds = await sharedGuilds(connection, mine);
 
     if (mine.length === 0) {
-      console.error(
+      fail(
         'No real ESO account found. Upload your ItemShareSavedVars.lua on the site first,\n' +
           'so the simulated people have a guildmate to share with.'
       );
       process.exitCode = 1;
     } else if (guilds.size === 0) {
-      console.error(
+      fail(
         'That account is in no guilds, so nothing would be visible to anyone.\n' +
           'Upload a file from an account that is in a guild.'
       );
@@ -748,12 +878,12 @@ try {
             ? ['request', 'send', 'cancel', 'timeout']
             : ['request', 'send', 'cancel', 'timeout', 'save'];
 
-      console.log(
+      say(
         `Simulating ${PEOPLE.length} people into ${guilds.size} guild${
           guilds.size === 1 ? '' : 's'
         } alongside ${mine.join(', ')}.`
       );
-      console.log(
+      say(
         `${only ? `Only ${only}` : 'A mix of asks, sends, cancels, timeouts and re-saves'}${
           Number.isFinite(rounds)
             ? `, ${rounds} action${rounds === 1 ? '' : 's'}`
@@ -761,16 +891,8 @@ try {
         }${every > 0 ? `, one every ${Math.round(every / 1000)}s` : ''}.`
       );
 
-      if (String(process.env.SIMULATE_TOKEN || '').trim()) {
-        console.log(
-          `Live pushes: ${SITE_URL}/simulate/nudge (token ${tokenFingerprint(
-            process.env.SIMULATE_TOKEN
-          )}, from ${SITE.source})`
-        );
-      }
-
       if (!Number.isFinite(rounds) || rounds > 1) {
-        console.log('Press Ctrl+C to stop.');
+        say('press Ctrl+C to stop.');
       }
 
       let acted = 0;
@@ -789,46 +911,57 @@ try {
             line = `${done.person} asked ${done.owner} for ${done.quantity} x ${done.item}${
               done.sent ? ' and sent it straight away' : ' (still in their basket)'
             }`;
-          } else {
-            line = `nothing free to ask for right now (${person.account})`;
           }
         } else if (action === 'send') {
           const done = await sendBasket(connection, person, mine);
 
-          line = done
-            ? `${done.person} sent ${done.sent} request${done.sent === 1 ? '' : 's'} (${done.copies} cop${
-                done.copies === 1 ? 'y' : 'ies'
-              }) for ${describeItems(done.items)} to ${done.owners.join(
-                ', '
-              )} - the owner would be emailed`
-            : `nothing for ${person.account} to send`;
+          if (done) {
+            line = `${done.person} sent ${done.sent} request${
+              done.sent === 1 ? '' : 's'
+            } (${done.copies} cop${done.copies === 1 ? 'y' : 'ies'}) for ${describeItems(
+              done.items
+            )} to ${done.owners.join(', ')} - the owner would be emailed`;
+          }
         } else if (action === 'cancel') {
-          // Only a basket row can be taken back now: once a request has been sent it
-          // stays in the requester's history, so there is nothing here to cancel.
+          // Only a basket row can be cancelled: once a request has been sent it stays in
+          // the requester's history, so this says what was cancelled and that it had not
+          // been sent yet.
           const done = await removeFromBasket(connection, person);
 
-          line = done
-            ? `${done.person} took back their request for ${done.item}`
-            : `nothing in ${person.account}'s basket to take back`;
+          if (done) {
+            line = `${done.person} cancelled their request for ${done.quantity} x ${
+              done.item
+            } before it was sent`;
+          }
         } else if (action === 'timeout') {
           const done = await timeoutBasket(connection, person, mine);
 
-          line = done
-            ? `${done.person} let the basket clock run out, so ${describeItems([
-                done.item,
-              ])} went back to being available`
-            : `nothing to time out for ${person.account}`;
+          if (done) {
+            line = `${done.person} let the basket clock run out, so ${describeItems([
+              done.item,
+            ])} went back to being available`;
+          }
         } else {
           const done = await saveSomething(connection, person, guilds);
           line = `${done.person} saved again: ${done.items} items, now in ${done.where}`;
         }
 
-        console.log(`[${new Date().toLocaleTimeString()}] ${line}`);
+        if (!line) {
+          // Nothing happened - no stock free, no basket to empty. An entry saying so would
+          // put an action on the list that the site never saw, so nothing is printed and
+          // nothing is announced.
+          if (every > 0 && acted < rounds && !stopping) {
+            await sleep(every);
+          }
+          continue;
+        }
+
+        say(`[${new Date().toLocaleTimeString()}] ${line}`);
 
         const live = await nudge(line);
 
         if (live) {
-          console.log(`  live: ${live}`);
+          say(live);
         }
 
         if (every > 0 && acted < rounds && !stopping) {
@@ -836,7 +969,7 @@ try {
         }
       }
 
-      console.log(
+      say(
         `Stopped after ${acted} action${acted === 1 ? '' : 's'}. ` +
           'Undo everything with: npm run simulate -- --reset'
       );

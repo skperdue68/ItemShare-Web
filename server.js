@@ -5,8 +5,9 @@
 //
 //   npm start            (reads .env)
 
-import { timingSafeEqual, createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { timingSafeEqual } from 'node:crypto';
+import { tokenFingerprint } from './lib/simulateToken.js';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -29,7 +30,9 @@ import {
   getAlwaysShareForViewer,
   getBasketRows,
   getDraftBasket,
+  getFulfillForm,
   getOwnerContacts,
+  getOwnerRequests,
   getRequesterRequests,
   getSubmittedRequests,
   getSharedItemsForViewer,
@@ -37,7 +40,10 @@ import {
   getViewerFacets,
   getViewerGuilds,
   getBrowsingAccount,
+  issueRequestEmailToken,
   linkAccountToUser,
+  recordFulfillment,
+  recordOwnerAnswer,
   replaceAccounts,
   setBrowsingAccount,
   signInWithProvider,
@@ -49,7 +55,13 @@ import { getItemTip } from './lib/uesp.js';
 import { buildProviders } from './lib/providers.js';
 import { attachRealtime } from './lib/realtime.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
-import { renderListRegion, renderMessagePage, renderPage } from './lib/views.js';
+import {
+  renderListRegion,
+  renderMessagePage,
+  renderOwnerRequestsPage,
+  renderPage,
+  renderRequestFulfillPage,
+} from './lib/views.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +72,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.join(__dirname, '.env');
 const hasEnvFile = existsSync(envPath);
 dotenv.config({ path: envPath });
+
+// When this process read .env. Every token in the log belongs to this moment, which is
+// what makes "I changed .env" visibly different from "this site is using it".
+const STARTED_LABEL = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
 
 const PORT = Number(process.env.PORT || 3000);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -185,8 +201,11 @@ async function emailOwners({ user, submitted, contacts }) {
     const group = groups.get(contact.email);
     group.owners.add(String(row.owner_account_name));
     group.items.push({
+      // The row id is what the answer form sends back; the quantity is what was asked
+      // for, so the form opens with the number the owner is answering.
+      id: Number(row.id) || 0,
       name: row.item_name || 'Item',
-      quantity: Number(row.quantity) || 1,
+      quantity: Math.max(1, Number(row.quantity_requested) || Number(row.quantity) || 1),
       type: row.item_type_name || '',
       trait: row.trait || '',
       enchant: row.enchant_name || '',
@@ -214,12 +233,35 @@ async function emailOwners({ user, submitted, contacts }) {
   let skipped = 0;
 
   for (const group of groups.values()) {
+    // One token per message: every row in this email is answered by the same form, and
+    // the token is the only thing that lets it be answered at all. Without BASE_URL
+    // there is no address to build, so the message goes out as a plain list.
+    let formUrl = '';
+
+    if (config.siteUrl) {
+      try {
+        const token = await withDatabase((connection) =>
+          issueRequestEmailToken(
+            connection,
+            group.items.map((item) => item.id)
+          )
+        );
+
+        if (token) {
+          formUrl = `${config.siteUrl}/requests/fulfill/${token}`;
+        }
+      } catch (error) {
+        console.warn(`Email: no answer form for ${group.email}: ${error.message}`);
+      }
+    }
+
     const message = renderRequestEmail({
       requester: personLabel(user),
       requesterAccount,
       ownerAccount: [...group.owners].join(', '),
       items: group.items,
       siteUrl: config.siteUrl,
+      formUrl,
     });
 
     const result = await sendEmail({ to: group.email, ...message }, config);
@@ -642,6 +684,350 @@ app.post('/requests/submit', async (req, res) => {
     res.json({ ok: true, sent: outcome.sent, basket: outcome.basket, emailed: mail.sent });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
+// ---------------------------------------------- the owner's own list of requests
+// The answer form in the email, for somebody who is already signed in. Nobody should
+// have to keep a month-old message to say they mailed a stack, and the page knows which
+// accounts are theirs, so it does not need a token to know what it may answer.
+
+/** `?answered=2-1` means two handed over and one cancelled; anything else is ignored. */
+function readAnsweredCounts(value) {
+  const match = /^(\d{1,3})-(\d{1,3})$/.exec(String(value || ''));
+
+  return match ? { fulfilled: Number(match[1]), cancelled: Number(match[2]) } : null;
+}
+
+function signedOutOwnerPage(req, res) {
+  sendPage(req, res, 401, {
+    heading: 'Sign in to see what is waiting on your items',
+    message: 'Requests are aimed at a person\'s ESO accounts, so this page needs to know who you are.',
+    details: 'Sign in from the header, then open this page again.',
+    tone: 'notice',
+  });
+}
+
+app.get('/owner/requests', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    signedOutOwnerPage(req, res);
+    return;
+  }
+
+  try {
+    const data = await withDatabase(async (connection) => {
+      const accounts = await getViewerAccounts(connection, user.id);
+
+      return {
+        accounts,
+        requests: await getOwnerRequests(
+          connection,
+          accounts.map((row) => row.eso_account_name)
+        ),
+      };
+    });
+
+    res.type('html').send(
+      renderOwnerRequestsPage({
+        accounts: data.accounts,
+        rows: data.requests,
+        answered: readAnsweredCounts(req.query.answered),
+        user,
+        providers: enabledProviders,
+      })
+    );
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'Your requests could not be loaded',
+      message: error.message,
+      details: 'Nothing was changed. Try again in a moment.',
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/owner/requests', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    signedOutOwnerPage(req, res);
+    return;
+  }
+
+  const { sent, error: invalid } = readSentQuantities(req.body);
+
+  // The list is reloaded for every outcome, because an answer changes what is in it.
+  const renderList = async (status, notice) => {
+    const data = await withDatabase(async (connection) => {
+      const accounts = await getViewerAccounts(connection, user.id);
+
+      return {
+        accounts,
+        requests: await getOwnerRequests(
+          connection,
+          accounts.map((row) => row.eso_account_name)
+        ),
+      };
+    });
+
+    res.status(status).type('html').send(
+      renderOwnerRequestsPage({
+        accounts: data.accounts,
+        rows: data.requests,
+        notice,
+        values: sent,
+        user,
+        providers: enabledProviders,
+      })
+    );
+  };
+
+  if (invalid) {
+    try {
+      await renderList(400, invalid);
+    } catch (error) {
+      sendPage(req, res, 500, {
+        heading: 'That could not be recorded',
+        message: error.message,
+        details: 'Nothing was changed. Try again in a moment.',
+        tone: 'error',
+      });
+    }
+    return;
+  }
+
+  try {
+    const outcome = await withDatabase(async (connection) => {
+      const accounts = await getViewerAccounts(connection, user.id);
+
+      return recordOwnerAnswer(connection, {
+        accountNames: accounts.map((row) => row.eso_account_name),
+        sentById: sent,
+      });
+    });
+
+    if (outcome.fulfilled + outcome.cancelled > 0) {
+      notifyItemsChanged(
+        'request',
+        `A request was answered: ${outcome.copies} cop${
+          outcome.copies === 1 ? 'y' : 'ies'
+        } handed over, ${outcome.cancelled} cancelled`
+      );
+    }
+
+    // Post, then redirect: a refresh shows the page again instead of answering again,
+    // and the rows that were answered are simply gone from the list.
+    res.redirect(303, `/owner/requests?answered=${outcome.fulfilled}-${outcome.cancelled}`);
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That could not be recorded',
+      message: error.message,
+      details: 'Nothing was changed. Try again in a moment.',
+      tone: 'error',
+    });
+  }
+});
+
+// ------------------------------------------ answering a request from email
+// The token in the address is the credential: an owner reading mail on a phone is not
+// going to sign in first. It is single use, it expires, and it only names the rows of
+// that one message - so the worst a forwarded link can do is answer those rows, once.
+//
+// GET shows the form (and is what the fallback link in the message opens); POST records
+// it. A form that acted on GET would be answered by any mail client that prefetches
+// links, before the owner had read the message.
+const EMAIL_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
+
+/**
+ * The numbers from a submitted answer form, keyed by request id.
+ *
+ * Each row posts on its own - a `row` field naming the request and one `quantity` -
+ * because a message is rarely answered in one go, and a single button for eight rows
+ * made a partial answer look like a decision about all of them. Fields named
+ * `quantity_<id>` are still read, so a page left open from before that change works.
+ * Whole numbers only, and a row the form did not carry is not guessed at.
+ */
+function readSentQuantities(body) {
+  const fields = body || {};
+  const sent = new Map();
+  const entries = [];
+
+  if (fields.row !== undefined) {
+    entries.push([fields.quantity, Number(String(fields.row).trim())]);
+  } else {
+    for (const [name, value] of Object.entries(fields)) {
+      const match = /^quantity_(\d+)$/.exec(name);
+
+      if (match) {
+        entries.push([value, Number(match[1])]);
+      }
+    }
+  }
+
+  if (entries.length === 0) {
+    return { sent, error: 'That form had nothing to record. Open the link from the email again.' };
+  }
+
+  for (const [value, id] of entries) {
+    const raw = String(value ?? '').trim();
+
+    if (!/^\d+$/.test(raw) || !Number.isInteger(id) || id <= 0) {
+      return { sent, error: 'That box needs a whole number: how many you sent, or 0 for none.' };
+    }
+
+    sent.set(id, Number(raw));
+  }
+
+  return { sent, error: '' };
+}
+
+function sendAnsweredAlready(req, res) {
+  sendPage(req, res, 410, {
+    heading: 'That request has already been answered',
+    message: 'The link has been used, the request was cancelled, or the form has expired.',
+    details: 'Nothing was changed. Use the newest request email, or sign in on the site.',
+  });
+}
+
+app.get('/requests/fulfill/:token', async (req, res) => {
+  const token = String(req.params.token || '');
+  // The token is in the address bar, so this page must not hand it on in a Referer
+  // header to anything it links to.
+  res.set('Referrer-Policy', 'no-referrer');
+
+  if (!EMAIL_TOKEN_PATTERN.test(token)) {
+    sendPage(req, res, 404, {
+      heading: 'That link is not a request form',
+      message: 'The address is incomplete, so there is nothing here to answer.',
+      details: 'Open the link from the request email again, or sign in on the site to see your own list.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const form = await withDatabase((connection) => getFulfillForm(connection, token));
+
+    if (!form) {
+      sendAnsweredAlready(req, res);
+      return;
+    }
+
+    res.type('html').send(
+      renderRequestFulfillPage({
+        token,
+        rows: form.rows,
+        user: req.session ? req.session.user || null : null,
+        providers: enabledProviders,
+      })
+    );
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'The form could not be loaded',
+      message: error.message,
+      details: 'Nothing was changed. Try the link again in a moment.',
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/requests/fulfill/:token', async (req, res) => {
+  const token = String(req.params.token || '');
+  res.set('Referrer-Policy', 'no-referrer');
+
+  if (!EMAIL_TOKEN_PATTERN.test(token)) {
+    sendPage(req, res, 404, {
+      heading: 'That link is not a request form',
+      message: 'The address is incomplete, so there is nothing here to answer.',
+      details: 'Open the link from the request email again.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  const { sent, error: invalid } = readSentQuantities(req.body);
+
+  if (invalid) {
+    // Show the form again with what they typed: retyping a screen of numbers because one
+    // box held a letter is the sort of thing that makes people give up on the site.
+    try {
+      const form = await withDatabase((connection) => getFulfillForm(connection, token));
+
+      if (!form) {
+        sendAnsweredAlready(req, res);
+        return;
+      }
+
+      res.status(400).type('html').send(
+        renderRequestFulfillPage({
+          token,
+          rows: form.rows,
+          notice: invalid,
+          values: sent,
+          user: req.session ? req.session.user || null : null,
+          providers: enabledProviders,
+        })
+      );
+    } catch (error) {
+      sendPage(req, res, 500, {
+        heading: 'The form could not be loaded',
+        message: error.message,
+        details: 'Nothing was changed. Try again in a moment.',
+        tone: 'error',
+      });
+    }
+    return;
+  }
+
+  try {
+    const outcome = await withDatabase((connection) =>
+      recordFulfillment(connection, { token, sentById: sent })
+    );
+
+    if (!outcome) {
+      sendAnsweredAlready(req, res);
+      return;
+    }
+
+    const summary = outcome.rows
+      .map((row) =>
+        row.status === 'fulfilled'
+          ? `${row.sent}${row.sent === row.asked ? '' : ` of ${row.asked}`} x ${
+              row.itemName || 'item'
+            } recorded as sent`
+          : `${row.itemName || 'An item'} marked as nothing sent`
+      )
+      .join('; ');
+
+    if (outcome.fulfilled + outcome.cancelled > 0) {
+      notifyItemsChanged(
+        'request',
+        `A request was answered: ${outcome.copies} cop${
+          outcome.copies === 1 ? 'y' : 'ies'
+        } handed over, ${outcome.cancelled} cancelled`
+      );
+    }
+
+    res.type('html').send(
+      renderMessagePage({
+        title: 'Request answered - ItemShare',
+        heading: 'Thanks - that is recorded',
+        message: summary ? `${summary}.` : 'Nothing was waiting on that link any more.',
+        details:
+          'The shared counts are updated, and the person who asked can see what became of their request.',
+        user: req.session ? req.session.user || null : null,
+        providers: enabledProviders,
+      })
+    );
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That could not be recorded',
+      message: error.message,
+      details: 'Nothing was changed. Try again in a moment.',
+      tone: 'error',
+    });
   }
 });
 
@@ -1118,33 +1504,124 @@ async function backfillIcons(reason) {
 // the endpoint off unless someone deliberately set one.
 const SIMULATE_TOKEN = String(process.env.SIMULATE_TOKEN || '').trim();
 
-// Eight hex characters of a hash, never the token itself. `npm run simulate` prints the
-// fingerprint of what it holds in the same form, so a mismatch is spotted by comparing
-// two lines instead of by guessing at a trailing space or a second .env.
-const tokenFingerprint = (value) => {
-  const trimmed = String(value || '').trim();
-  return trimmed ? createHash('sha1').update(trimmed).digest('hex').slice(0, 8) : 'none';
-};
+/** What `.env` holds for SIMULATE_TOKEN right now. '' when there is no file or no value. */
+function simulateTokenInFile() {
+  try {
+    return String(dotenv.parse(readFileSync(envPath)).SIMULATE_TOKEN || '').trim();
+  } catch {
+    return '';
+  }
+}
 
+/** A fingerprint, or the words for "there is none" - never the token itself. */
+const describeToken = (value) => (value ? tokenFingerprint(value) : 'no token');
+
+// Where the running value came from, decided once. A value exported in the environment
+// wins over the file without dotenv saying so, and the log must not claim the file then.
+const SIMULATE_TOKEN_SOURCE = (() => {
+  const fromFile = simulateTokenInFile();
+
+  return fromFile && fromFile === SIMULATE_TOKEN ? envPath : 'the environment';
+})();
+
+/**
+ * Why the file and this process disagree, in the words that match the cause. A token
+ * exported in the shell outranks the file, and a file edited after start-up cannot be in
+ * this process - telling somebody "the file changed" when the file is right and the shell
+ * is wrong sends them to edit the wrong thing.
+ */
+function simulateTokenDrift() {
+  if (!hasEnvFile) {
+    return '';
+  }
+
+  const onDisk = simulateTokenInFile();
+
+  if (!onDisk || onDisk === SIMULATE_TOKEN) {
+    return '';
+  }
+
+  return SIMULATE_TOKEN_SOURCE === 'the environment'
+    ? ` ${envPath} holds ${describeToken(
+        onDisk
+      )}, but this process took ${describeToken(
+        SIMULATE_TOKEN
+      )} from the environment (dotenv never overwrites a variable that is already set), so the file was ignored. Unset SIMULATE_TOKEN for this process, or change it to match the file.`
+    : ` ${envPath} now holds ${describeToken(
+        onDisk
+      )}, and this process loaded ${describeToken(
+        SIMULATE_TOKEN
+      )} at ${STARTED_LABEL} - the file changed afterwards, so restart the site.`;
+}
+
+// The same fingerprint function the simulator uses (lib/simulateToken.js), so the two log
+// lines compare directly: same number, same token; different number, a second .env or a
+// site that was never restarted after the token was set.
 let simulateRefusalLogged = false;
+
+// Constant-time, with the length checked first because timingSafeEqual throws on a length
+// mismatch. A blank token on either side is a plain no.
+function simulateTokenMatches(given) {
+  if (!SIMULATE_TOKEN || !given) {
+    return false;
+  }
+
+  const expected = Buffer.from(SIMULATE_TOKEN, 'utf8');
+  const actual = Buffer.from(String(given), 'utf8');
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+// Said once per process: the simulator asks every thirty seconds, so a line per attempt
+// would bury everything else in the log while saying the same thing.
+function refuseSimulate(res, token) {
+  if (!simulateRefusalLogged) {
+    simulateRefusalLogged = true;
+    // The most confusing case is a token that was added or changed after this process
+    // read the file: the value in .env looks right and this process cannot see it yet.
+    const changed = simulateTokenDrift();
+
+    console.warn(
+      SIMULATE_TOKEN
+        ? `[SIMULATE] nudge refused: the run sent ${
+            token ? `token ${tokenFingerprint(token)}` : 'no token at all'
+          }, this site holds ${describeToken(
+            SIMULATE_TOKEN
+          )}, loaded at ${STARTED_LABEL} from ${SIMULATE_TOKEN_SOURCE}.${changed}`
+        : `[SIMULATE] nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden.${changed}`
+    );
+  }
+
+  // The answer says which of the two it is and which fingerprint this site holds - never
+  // the token - so the run can put both numbers side by side. A bare 404 left the
+  // operator with nothing to compare and no way to tell a wrong token from a wrong
+  // address, which is the whole reason this took so long to find.
+  res.status(SIMULATE_TOKEN ? 403 : 404).json({
+    ok: false,
+    reason: SIMULATE_TOKEN ? 'token-mismatch' : 'token-not-set',
+    site: SIMULATE_TOKEN ? tokenFingerprint(SIMULATE_TOKEN) : 'none',
+  });
+}
+
+// What `npm run simulate` calls before its first action: the same token test and no
+// broadcast, so a mismatch is one clear line at the start of a run rather than a silent
+// 404 per action ten minutes in.
+app.post('/simulate/check', (req, res) => {
+  const token = String(req.get('x-itemshare-simulate') || '').trim();
+
+  if (!simulateTokenMatches(token)) {
+    refuseSimulate(res, token);
+    return;
+  }
+
+  res.json({ ok: true, clients: realtime.clients() });
+});
 
 app.post('/simulate/nudge', (req, res) => {
   const token = String(req.get('x-itemshare-simulate') || '').trim();
 
-  if (!SIMULATE_TOKEN || token !== SIMULATE_TOKEN) {
-    // Said once, not once per nudge: the simulator asks every ten seconds.
-    if (!simulateRefusalLogged) {
-      simulateRefusalLogged = true;
-      console.warn(
-        SIMULATE_TOKEN
-          ? `Simulate nudge refused: the run sent ${
-              token ? `token ${tokenFingerprint(token)}` : 'no token'
-            }, this site holds ${tokenFingerprint(SIMULATE_TOKEN)}. Both must read the same SIMULATE_TOKEN.`
-          : 'Simulate nudge refused: SIMULATE_TOKEN is not set on this site, so the route stays hidden. Set it in .env and restart.'
-      );
-    }
-
-    res.status(404).end();
+  if (!simulateTokenMatches(token)) {
+    refuseSimulate(res, token);
     return;
   }
 
@@ -1294,11 +1771,31 @@ httpServer.listen(PORT, () => {
       ? `Sign-in providers: ${enabledProviders.map((provider) => provider.label).join(', ')}`
       : 'Sign-in providers: none (set DISCORD_* or GOOGLE_* env vars)'
   );
-  console.log(
-    SIMULATE_TOKEN
-      ? `Live pushes: armed for npm run simulate (token ${tokenFingerprint(SIMULATE_TOKEN)})`
-      : 'Live pushes: off - set SIMULATE_TOKEN in .env and restart to let npm run simulate refresh open pages'
-  );
+  // What a simulator run will be met with, and where that value came from. "Armed" hid
+  // the two things a person actually needs: which file was read, and when - a token set
+  // afterwards cannot be in this process, and the warning below says so in words.
+  const tokenOnDisk = hasEnvFile ? simulateTokenInFile() : '';
+
+  if (SIMULATE_TOKEN) {
+    console.log(
+      `Live pushes: on - this site holds ${describeToken(
+        SIMULATE_TOKEN
+      )}, loaded at ${STARTED_LABEL} from ${SIMULATE_TOKEN_SOURCE}`
+    );
+  } else {
+    console.log(
+      `Live pushes: off - no SIMULATE_TOKEN ${
+        hasEnvFile ? `in ${envPath}` : `and no .env at ${envPath}`
+      } when this site started at ${STARTED_LABEL}; set one and restart to let npm run simulate refresh open pages`
+    );
+  }
+
+  const drift = simulateTokenDrift();
+
+  if (drift) {
+    console.warn(`Live pushes:${drift}`);
+  }
+
   console.log(`Env file: ${hasEnvFile ? envPath : `${envPath} not found - copy .env.example to .env`}`);
   console.log(`Sign-in stays active for ${SESSION_TTL_DAYS} days (SESSION_TTL_DAYS), stored in MariaDB`);
   console.log(

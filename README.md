@@ -234,6 +234,10 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/auth/:provider/callback` | Finish it |
 | `POST` | `/logout` | Delete the session row and clear the cookie |
 | `POST` | `/simulate/nudge` | Token-authenticated "something changed" push, used by `npm run simulate` |
+| `GET` | `/requests/fulfill/:token` | The answer form a request email links to; the token in the address is the credential |
+| `POST` | `/requests/fulfill/:token` | Records what the owner says they sent: `0` cancels that row, anything else hands it over |
+| `GET` | `/owner/requests` | Signed-in list of what is waiting on your own items, with the same number boxes |
+| `POST` | `/owner/requests` | Records an answer given on the site, then redirects back so a refresh cannot answer twice |
 
 Socket.IO shares the HTTP server under `/socket.io`, so live updates need no second
 port and no extra proxy rule.
@@ -621,7 +625,7 @@ real in the database, one at a time:
 
 | Flag | Meaning |
 | --- | --- |
-| `--every <ms>` | Pause between actions in milliseconds. Default `10000`. `0` runs with no pause |
+| `--every <ms>` | Pause between actions in milliseconds. Default `30000`. `0` runs with no pause |
 | `--rounds <n>` | Stop after `n` actions instead of running until interrupted |
 | `--once` | Exactly one action, then exit. Implies no pause |
 | `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, cancelling, timing out) or `items` (just re-saving files) |
@@ -629,7 +633,7 @@ real in the database, one at a time:
 | `--url <address>` | The site to ask for the live push. Defaults to `BASE_URL`, falling back to `http://127.0.0.1:<PORT>`. A missing `http://` is filled in |
 
 ```bash
-npm run simulate                        # until Ctrl+C, one action every 10s
+npm run simulate                        # until Ctrl+C, one action every 30s
 npm run simulate -- --every 4000        # one action every four seconds
 npm run simulate -- --rounds 12         # stop after twelve actions
 npm run simulate -- --once              # exactly one action, then exit
@@ -640,15 +644,46 @@ npm run simulate -- --url https://itemshare.example.com   # notify that site ins
 ```
 
 Without `--rounds` or `--once` it keeps going until Ctrl+C. `--every` defaults to no
-pause when combined with `--once`, so a single action is not followed by a ten-second
+pause when combined with `--once`, so a single action is not followed by a thirty-second
 wait before exiting.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
-runs; without it the data still changes and you see it on the next refresh, and no
-`live:` line is printed after an action because there is no delivery to report.
-The site prints *Live pushes: armed (token …)* at start-up and the simulator prints the same
-eight-character fingerprint on its `Live pushes:` line, so if the two differ you are comparing
-two different tokens rather than guessing.
+runs; without it the data still changes and you see it on the next refresh, and no live
+line is printed after an action because there is no delivery to report.
+
+Before the first action the simulator asks the site whether it will accept the token
+(`POST /simulate/check`, the same check the nudge uses, pushing nothing) and prints one
+line either way. Both processes hash the token with the same function
+(`lib/simulateToken.js`), so the two fingerprints can always be compared:
+
+- **`live pushes armed ... the site holds the same one`** - same token, nothing to do.
+- **`refused ... this run holds 7229d63d, that site holds 4b1f0e93`** - two different
+  tokens (HTTP 403). The site reads `SIMULATE_TOKEN` from its own `.env` when it starts,
+  so a token set on the machine running the simulator does nothing unless that same site
+  was restarted holding it.
+- **`refused ... that site has no SIMULATE_TOKEN at all`** - HTTP 404 with
+  `token-not-set`: a different `.env`, or a site started before the token was added.
+- **`refused ... (HTTP 404): nothing answers the simulate route there`** - that address is
+  not this ItemShare (check `BASE_URL` or `--url`), or the site predates this check.
+
+The site's answer to a refusal is JSON carrying the fingerprint it holds and never the
+token, and its own log line names both fingerprints, so the comparison works from either
+end. The simulator also catches the quiet case where `dotenv` ignored `.env` because the
+variable was already exported in the shell.
+
+The site says the same thing about itself at start-up - which token it holds, when it read
+it, and from which file:
+
+```
+Live pushes: on - this site holds 4b1f0e93, loaded at 2026-11-05 17:20:31 UTC from /srv/itemshare/.env
+Live pushes: off - no SIMULATE_TOKEN in /srv/itemshare/.env when this site started at 2026-11-05 17:20:31 UTC; set one and restart to let npm run simulate refresh open pages
+```
+
+If `.env` is edited while the site is running, the next refused nudge says so instead of
+leaving you to wonder why the value on disk does not work: *`.env now holds 7229d63d, and
+this process loaded 4b1f0e93 at ... - the file changed afterwards, so restart the site`*.
+A token exported in the shell is reported as coming from the environment rather than from
+the file, because that is where the running value actually came from.
 
 The address it asks is `BASE_URL`, the same value the site builds its own links and
 sign-in redirects from, so a reverse proxy, another port or another host needs no extra
@@ -662,10 +697,20 @@ every run, and `--reset` takes all of them out again.
 Their activity appears in the log as a sentence rather than a revision number:
 
 ```
-Live: @DemoTrader asked @YourAccount for 2 x Soul Gem; @QuietSmith saved again: 2 items, now in Bank / Craft Bag - 1 open page told to refresh
-Live: @NightMarket sent 2 requests for Briarheart Greatsword, Dwemer Frame to @YourAccount - the owner would be emailed
-Live: @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
+[SIMULATE] 19:42:08 @DemoTrader asked @YourAccount for 2 x Soul Gem (still in their basket)
+[SIMULATE] live: 1 open page told to refresh
+Live: [SIMULATE] @DemoTrader asked @YourAccount for 2 x Soul Gem - 1 open page told to refresh
+
+[SIMULATE] 19:42:38 @NightMarket cancelled their request for 2 x Dwemer Frame before it was sent
+[SIMULATE] live: no pages open to refresh
+
+[SIMULATE] 19:43:08 @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
 ```
+
+Every line the simulator prints starts with `[SIMULATE]`, and so does anything the site
+pushes because of it, so a simulated handover is never mistaken for one that happened. An
+action that found nothing to do - no free stock, an empty basket - prints nothing at all
+and announces nothing: a line about a no-op made the log look busier than the site was.
 
 "1 open page told to refresh" is the delivery detail: how many browsers were connected at
 that moment, each of which refetches its own list. It says nothing about how many people
@@ -807,7 +852,8 @@ kept - so a database dump is the whole backup.
 **After deploying, check:** the page loads over https, a sign-in round trip completes, an
 upload lands, the Request tab shows items, picking one shows the basket clock, sending it
 appears in *Your requests* with a send time, and
-`SELECT filename FROM itemshare_schema_migrations;` lists migrations through `017`.
+`SELECT filename FROM itemshare_schema_migrations;` lists migrations through `019`, an owner
+answers their request email, and the requester's list says what was handed over.
 
 ## Troubleshooting
 
@@ -850,13 +896,51 @@ something in it before a second person uploads.
 neither a `sendmail` on the host nor a `RESEND_API_KEY`. `npm run email:test -- you@example.com`
 reports which.
 
+## Answering a request
+
+Every request email carries a form: one row per name, the number asked for already in its
+box, and a **Save** button on that row. The owner sets a row to what actually left their
+bag and saves it. `0` means nothing was sent from that row, and that request is cancelled.
+
+A message is rarely answered in one go - half a stack today, the rest next week - so each
+row is submitted on its own. Saving one row records only that row: the others stay
+pending, and the same link answers them later.
+
+- The form posts to `/requests/fulfill/:token`, one row at a time. The token is
+  unguessable, stored only as a SHA-256 hash, and expires after 30 days. It is cleared from
+  the rows it answers, so the link keeps working for the rest of the message and stops
+  working for a row already recorded - a double click or a link a mail client prefetched
+  changes nothing.
+- A Save button posts that row's `row` and `quantity`. A page opened before per-row saving
+  still works: `quantity_<id>` fields are read the same way.
+- GET shows the form and POST records it. The link in the message exists because most mail
+  clients strip forms out of HTML, so the same form is also a page on the site.
+- The same form is a signed-in page, `/owner/requests`, reachable from the account menu
+  as *Requests for me*. It lists what is waiting on the person's own ESO accounts, oldest
+  ask first, and posts to itself before redirecting, so the rows just answered disappear
+  from the list instead of being answerable twice.
+- The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
+  was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the
+  requester's history instead of looking complete.
+- Free copies are `item_count - outstanding requests - copies mailed since the owner's last
+  upload`. That last term is why a handover shows up at once, and why it is not subtracted
+  twice: the next upload's own count already leaves those copies out.
+
+`npm run test:fulfillment` walks exactly that sequence against a real database: it runs
+every migration, shares ten copies, asks for three, answers "two sent", then uploads eight
+and checks the free count at each step. The last stage gives one message two rows of
+different items, answers one of them, and checks that the other stays pending and holding
+its copy, that saving the answered row again changes nothing, and that the link only stops
+working once every row has been answered. It drops and rebuilds its database first, so
+`ITEMSHARE_DATABASE` has to end in `_test` (`itemshare_test` by default).
+
+It needs a reachable MariaDB; without one it stops before touching anything and says so.
+
 ## Not done yet
 
-**Handing a request over.** Requests are recorded, reserved, emailed and cancelled
-correctly, but nothing marks one as delivered and an owner gets no in-page notice of their
-own. `itemshare_requests.status` already carries `fulfilled` and `declined` alongside
-`pending` and `cancelled`, and `closed_at` is there for that step, but no code sets
-either of the two - so a request that is handed over in game simply stays *Waiting*.
+**`declined`.** A request the owner cannot fill is recorded as `cancelled` with the
+owner's reason on it, so the `declined` status in the enum is still unused. Nothing
+depends on it.
 
 **Surfacing stored detail.** The `eso_data` column holds getters the site does not render
 yet (required level, champion points, style among them). They are captured and stored,
