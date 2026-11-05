@@ -370,9 +370,27 @@ body {
 }
 
 /* The owner's list inside the modal: the dialog supplies the frame, so the card does not
-   draw a second one, and the way back to the list is the close control above it. */
-.owner-modal {
-  padding: 20px 22px 22px;
+   draw a second one, and the way back to the list is the close control above it.
+
+   This one is not a question with two answers, it is a five-column table with a row of
+   controls in the last cell. At a dialog's width every date wrapped onto two lines and
+   the table scrolled sideways for no reason, so it takes most of the window instead: on
+   a 1920 screen that is about four fifths of it, and the columns fit side by side. */
+.modal-wide.owner-modal {
+  width: min(1500px, 90vw);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 22px 24px 24px;
+}
+
+/* Inside that width the short columns have room for one line, which is the point of it.
+   The item name and its meta line still wrap: a long name should not push the controls
+   off the row it belongs to. */
+.owner-modal .fulfill-shell .seen-cell,
+.owner-modal .fulfill-shell .num,
+.owner-modal .fulfill-shell .fulfill-cell,
+.owner-modal .fulfill-shell .owner {
+  white-space: nowrap;
 }
 
 .owner-modal .card {
