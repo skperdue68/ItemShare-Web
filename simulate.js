@@ -408,14 +408,19 @@ async function sharedGuilds(connection, accounts) {
 }
 
 /**
- * Asks for something of the real owner's, the way someone browsing the Request tab
+ * Asks for something a guildmate has spare, the way someone browsing the Request tab
  * would: the copies that are free, a quantity that fits, and usually a send.
+ *
+ * Anything visible will do, and that includes the other simulated people's items - they
+ * are guildmates with spares like anyone else, and skipping them left every request
+ * landing on the one real owner. Only this person's own account is left out, because the
+ * store refuses a request for your own copy.
  */
-async function requestSomething(connection, person, mine, { send = Math.random() < 0.5 } = {}) {
-  const rows = await getSharedItemsForViewer(connection, [person.account], { limit: 200 });
+async function requestSomething(connection, person, { send = Math.random() < 0.5 } = {}) {
+  const rows = await getSharedItemsForViewer(connection, [person.account], { limit: 500 });
   const candidates = rows.filter(
     (row) =>
-      mine.includes(String(row.account_name)) &&
+      String(row.account_name) !== person.account &&
       Number(row.item_count) > Number(row.reserved || 0)
   );
 
@@ -459,13 +464,13 @@ async function requestSomething(connection, person, mine, { send = Math.random()
  * the site emails the owner about; here the sentence says who would have been
  * emailed rather than sending anything.
  */
-async function sendBasket(connection, person, mine) {
+async function sendBasket(connection, person) {
   let rows = (await getBasketRows(connection, person.userId)).filter(
     (row) => row.status === 'draft'
   );
 
   if (rows.length === 0) {
-    const asked = await requestSomething(connection, person, mine, { send: false });
+    const asked = await requestSomething(connection, person, { send: false });
 
     if (!asked || !asked.item) {
       return null;
@@ -523,8 +528,8 @@ async function removeFromBasket(connection, person) {
  * past its deadline and the site's own sweeper is run: the rows end up exactly as
  * they would for somebody who walked away and came back.
  */
-async function timeoutBasket(connection, person, mine) {
-  const asked = await requestSomething(connection, person, mine, { send: false });
+async function timeoutBasket(connection, person) {
+  const asked = await requestSomething(connection, person, { send: false });
 
   if (!asked || !asked.item) {
     return null;
@@ -754,12 +759,11 @@ async function nudge(summary) {
       });
     }
 
-    const result = await response.json().catch(() => ({}));
-    const clients = Number(result.clients) || 0;
-
-    return clients === 0
-      ? 'live: no pages open to refresh'
-      : `live: ${clients} open page${clients === 1 ? '' : 's'} told to refresh`;
+    // Delivered, and that is the whole of it. How many pages were open is a detail the
+    // site already prints on its own `Live:` line, because the site is the one holding
+    // the connections; repeating it here put a second line under every action for a
+    // number nobody acts on.
+    return '';
   } catch (error) {
     return `live: could not reach the site on ${SITE_URL} (${error.message})`;
   }
@@ -802,7 +806,13 @@ const rounds = once
   : Number.isFinite(wanted) && wanted > 0
     ? Math.trunc(wanted)
     : Number.POSITIVE_INFINITY;
-const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 30000));
+// `--every 0` means no pause, and 0 is falsy: treating an absent flag and a zero the
+// same way made the documented "0 runs with no pause" wait thirty seconds an action.
+const everyGiven = valueAfter('--every');
+const every = Math.max(
+  0,
+  everyGiven === '' ? (once ? 0 : 30000) : Number(everyGiven) || 0
+);
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
 const SITE = siteBaseUrl();
@@ -920,7 +930,7 @@ try {
         let line = '';
 
         if (action === 'request') {
-          const done = await requestSomething(connection, person, mine);
+          const done = await requestSomething(connection, person);
 
           if (done && done.item) {
             line = `${done.person} asked ${done.owner} for ${done.quantity} x ${done.item}${
@@ -928,7 +938,7 @@ try {
             }`;
           }
         } else if (action === 'send') {
-          const done = await sendBasket(connection, person, mine);
+          const done = await sendBasket(connection, person);
 
           if (done) {
             line = `${done.person} sent ${done.sent} request${
@@ -949,7 +959,7 @@ try {
             } before it was sent`;
           }
         } else if (action === 'timeout') {
-          const done = await timeoutBasket(connection, person, mine);
+          const done = await timeoutBasket(connection, person);
 
           if (done) {
             line = `${done.person} let the basket clock run out, so ${describeItems([
@@ -958,7 +968,7 @@ try {
           }
         } else {
           const done = await saveSomething(connection, person, guilds);
-          line = `${done.person} saved again: ${done.items} items - ${done.where}`;
+          line = `${done.person} Inventory Refreshed - ${done.items} items: ${done.where}`;
         }
 
         if (!line) {

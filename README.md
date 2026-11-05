@@ -626,13 +626,15 @@ Drives three made-up people through the same store code the site uses, so a list
 one real owner has traffic on it. Every scenario a request can go through happens for
 real in the database, one at a time:
 
-- **asking** - something of yours goes into their basket, on the same clock
+- **asking** - something a guildmate has spare goes into their basket, on the same clock;
+  anybody visible is fair game, the other simulated people included, not just you
 - **sending** - the basket is committed, the moment a real person's send would email you;
   the log says who *would* have been emailed instead of sending anything
 - **cancelling** - either a request already waiting, or one taken back out of the basket
 - **timing out** - the basket's deadline is pushed past, and the site's own sweeper runs
 - **re-saving** - items move between bags, bank and furnishing vault, stacks change and
-  pending requests are re-settled against the new file
+  pending requests are re-settled against the new file; logged as `<name> Inventory
+  Refreshed` with where each item landed
 
 | Flag | Meaning |
 | --- | --- |
@@ -659,8 +661,9 @@ pause when combined with `--once`, so a single action is not followed by a thirt
 wait before exiting.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
-runs; without it the data still changes and you see it on the next refresh, and no live
-line is printed after an action because there is no delivery to report.
+runs; without it the data still changes and you see it on the next refresh. Either way
+the simulator prints only what it did: how many browsers received the push is the site's
+detail, because the site is the one holding the connections.
 
 Before the first action the simulator asks the site whether it will accept the token
 (`POST /simulate/check`, the same check the nudge uses, pushing nothing) and prints one
@@ -709,13 +712,13 @@ Their activity appears in the log as a sentence rather than a revision number:
 
 ```
 [SIMULATE] 19:42:08 @DemoTrader asked @YourAccount for 2 x Soul Gem (still in their basket)
-[SIMULATE] live: 1 open page told to refresh
 Live: [SIMULATE] @DemoTrader asked @YourAccount for 2 x Soul Gem - 1 open page told to refresh
 
 [SIMULATE] 19:42:38 @NightMarket cancelled their request for 2 x Dwemer Frame before it was sent
-[SIMULATE] live: no pages open to refresh
 
 [SIMULATE] 19:43:08 @QuietSmith let the basket clock run out, so Alinor Bookshelf, Grand went back to being available
+
+[SIMULATE] 19:43:38 @QuietSmith Inventory Refreshed - 3 items: 2 in Bank, 1 in Furnishing Vault
 ```
 
 Every line the simulator prints starts with `[SIMULATE]`, and so does anything the site
@@ -723,9 +726,10 @@ pushes because of it, so a simulated handover is never mistaken for one that hap
 action that found nothing to do - no free stock, an empty basket - prints nothing at all
 and announces nothing: a line about a no-op made the log look busier than the site was.
 
-"1 open page told to refresh" is the delivery detail: how many browsers were connected at
-that moment, each of which refetches its own list. It says nothing about how many people
-use the site - closing the page drops it to zero.
+The `Live:` line is the site's own and carries the delivery detail - `- 1 open page told
+to refresh`, or `- no pages open, so nothing was pushed` - because the site is what holds
+the connections. It says nothing about how many people use the site; closing the page
+drops it to zero. The simulator does not repeat it: it prints the action and moves on.
 
 The simulator never sends mail - the email module is only reached from the site's own send
 route - so a simulated send changes the data and says who would have been emailed.
