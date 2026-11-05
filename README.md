@@ -646,6 +646,9 @@ wait before exiting.
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
 runs; without it the data still changes and you see it on the next refresh, and no
 `live:` line is printed after an action because there is no delivery to report.
+The site prints *Live pushes: armed (token …)* at start-up and the simulator prints the same
+eight-character fingerprint on its `Live pushes:` line, so if the two differ you are comparing
+two different tokens rather than guessing.
 
 The address it asks is `BASE_URL`, the same value the site builds its own links and
 sign-in redirects from, so a reverse proxy, another port or another host needs no extra

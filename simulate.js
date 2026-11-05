@@ -27,6 +27,7 @@
 
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import dotenv from 'dotenv';
 
 import { describeConnectionFailure, openDatabase, readConfig } from './lib/database.js';
@@ -558,6 +559,13 @@ function siteBaseUrl() {
   return withScheme.replace(/\/+$/, '');
 }
 
+// The same eight characters the site prints at start-up: compare the two lines to see
+// whether both processes are holding the same token.
+function tokenFingerprint(value) {
+  const trimmed = String(value || '').trim();
+  return trimmed ? createHash('sha1').update(trimmed).digest('hex').slice(0, 8) : 'none';
+}
+
 async function nudge(summary) {
   const token = String(process.env.SIMULATE_TOKEN || '').trim();
 
@@ -581,7 +589,9 @@ async function nudge(summary) {
       // 404 is the site's own answer when its token is blank or different, deliberately
       // indistinguishable from a missing route, so say which knob to check.
       const hint =
-        response.status === 404 ? ' (it hides the route unless SIMULATE_TOKEN matches)' : '';
+        response.status === 404
+          ? ` (it hides the route unless SIMULATE_TOKEN matches; this run sent ${tokenFingerprint(token)})`
+          : '';
 
       return `the site answered ${response.status}${hint}, so open pages were not told`;
     }
@@ -734,7 +744,9 @@ try {
       );
 
       if (String(process.env.SIMULATE_TOKEN || '').trim()) {
-        console.log(`Live pushes: ${SITE_URL}/simulate/nudge`);
+        console.log(
+          `Live pushes: ${SITE_URL}/simulate/nudge (token ${tokenFingerprint(process.env.SIMULATE_TOKEN)})`
+        );
       }
 
       if (!Number.isFinite(rounds) || rounds > 1) {
