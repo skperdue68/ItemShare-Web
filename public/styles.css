@@ -1808,3 +1808,22 @@ th .sort-link {
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* The dropdown's list is drawn by the browser, not by this file: options took the select's
+   composited rgba() background and the inherited muted text, so an unselected option came
+   out grey on grey. The control gets an opaque colour and the options their own
+   light-on-dark pair; the checked one keeps the accent blue. */
+.browsing-picker select {
+  background-color: #0e1a33;
+  color: var(--text);
+}
+
+.browsing-picker select option {
+  background-color: #0e1a33;
+  color: var(--text);
+}
+
+.browsing-picker select option:checked {
+  background-color: #2454bd;
+  color: #ffffff;
+}
