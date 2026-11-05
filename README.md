@@ -234,6 +234,10 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/auth/:provider/callback` | Finish it |
 | `POST` | `/logout` | Delete the session row and clear the cookie |
 | `POST` | `/simulate/nudge` | Token-authenticated "something changed" push, used by `npm run simulate` |
+| `GET` | `/requests/fulfill/:token` | The answer form a request email links to; the token in the address is the credential |
+| `POST` | `/requests/fulfill/:token` | Records what the owner says they sent: `0` cancels that row, anything else hands it over |
+| `GET` | `/owner/requests` | Signed-in list of what is waiting on your own items, with the same number boxes |
+| `POST` | `/owner/requests` | Records an answer given on the site, then redirects back so a refresh cannot answer twice |
 
 Socket.IO shares the HTTP server under `/socket.io`, so live updates need no second
 port and no extra proxy rule.
@@ -621,7 +625,7 @@ real in the database, one at a time:
 
 | Flag | Meaning |
 | --- | --- |
-| `--every <ms>` | Pause between actions in milliseconds. Default `10000`. `0` runs with no pause |
+| `--every <ms>` | Pause between actions in milliseconds. Default `30000`. `0` runs with no pause |
 | `--rounds <n>` | Stop after `n` actions instead of running until interrupted |
 | `--once` | Exactly one action, then exit. Implies no pause |
 | `--only <kind>` | Restrict to one kind of action: `requests` (asking, sending, cancelling, timing out) or `items` (just re-saving files) |
@@ -629,7 +633,7 @@ real in the database, one at a time:
 | `--url <address>` | The site to ask for the live push. Defaults to `BASE_URL`, falling back to `http://127.0.0.1:<PORT>`. A missing `http://` is filled in |
 
 ```bash
-npm run simulate                        # until Ctrl+C, one action every 10s
+npm run simulate                        # until Ctrl+C, one action every 30s
 npm run simulate -- --every 4000        # one action every four seconds
 npm run simulate -- --rounds 12         # stop after twelve actions
 npm run simulate -- --once              # exactly one action, then exit
@@ -640,15 +644,21 @@ npm run simulate -- --url https://itemshare.example.com   # notify that site ins
 ```
 
 Without `--rounds` or `--once` it keeps going until Ctrl+C. `--every` defaults to no
-pause when combined with `--once`, so a single action is not followed by a ten-second
+pause when combined with `--once`, so a single action is not followed by a thirty-second
 wait before exiting.
 
 Set `SIMULATE_TOKEN` in `.env` and restart the site to have open pages refresh as it
 runs; without it the data still changes and you see it on the next refresh, and no
 `live:` line is printed after an action because there is no delivery to report.
-The site prints *Live pushes: armed (token …)* at start-up and the simulator prints the same
-eight-character fingerprint on its `Live pushes:` line, so if the two differ you are comparing
-two different tokens rather than guessing.
+
+Before the first action the simulator asks the site whether it will accept the token
+(`POST /simulate/check`, the same check the nudge uses, pushing nothing) and prints one
+line either way. *Armed* means the site holds the same token; a refusal names the
+fingerprint this run sent, says the site answers 404 when its own token is blank or
+different, and prints the `.env` path this process read - which is the actual answer to
+"they are both in .env, why do they disagree": usually a second `.env`, or a site that
+was not restarted after the token was added. Both processes hash the token with the same
+function (`lib/simulateToken.js`), so the two fingerprints are always comparable.
 
 The address it asks is `BASE_URL`, the same value the site builds its own links and
 sign-in redirects from, so a reverse proxy, another port or another host needs no extra
@@ -805,7 +815,8 @@ kept - so a database dump is the whole backup.
 **After deploying, check:** the page loads over https, a sign-in round trip completes, an
 upload lands, the Request tab shows items, picking one shows the basket clock, sending it
 appears in *Your requests* with a send time, and
-`SELECT filename FROM itemshare_schema_migrations;` lists migrations through `017`.
+`SELECT filename FROM itemshare_schema_migrations;` lists migrations through `019`, an owner
+answers their request email, and the requester's list says what was handed over.
 
 ## Troubleshooting
 
@@ -848,13 +859,38 @@ something in it before a second person uploads.
 neither a `sendmail` on the host nor a `RESEND_API_KEY`. `npm run email:test -- you@example.com`
 reports which.
 
+## Answering a request
+
+Every request email carries a form: one row per name, the number asked for already in each
+box, and one **Done** button. The owner changes each number to what actually left their bag
+and presses it. `0` means nothing was sent, and that request is cancelled.
+
+- The form posts to `/requests/fulfill/:token`. The token is unguessable, stored only as a
+  SHA-256 hash, expires after 30 days, and is cleared the moment the form is answered - so a
+  double click, a re-sent message or a link a mail client prefetched changes nothing.
+- GET shows the form and POST records it. The link in the message exists because most mail
+  clients strip forms out of HTML, so the same form is also a page on the site.
+- The same form is a signed-in page, `/owner/requests`, reachable from the account menu
+  as *Requests for me*. It lists what is waiting on the person's own ESO accounts, oldest
+  ask first, and posts to itself before redirecting, so the rows just answered disappear
+  from the list instead of being answerable twice.
+- The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
+  was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the
+  requester's history instead of looking complete.
+- Free copies are `item_count - outstanding requests - copies mailed since the owner's last
+  upload`. That last term is why a handover shows up at once, and why it is not subtracted
+  twice: the next upload's own count already leaves those copies out.
+
+`npm run test:fulfillment` walks exactly that sequence against a real database: it runs
+every migration, shares ten copies, asks for three, answers "two sent", then uploads eight
+and checks the free count at each step. It drops and rebuilds its database first, so
+`ITEMSHARE_DATABASE` has to end in `_test` (`itemshare_test` by default).
+
 ## Not done yet
 
-**Handing a request over.** Requests are recorded, reserved, emailed and cancelled
-correctly, but nothing marks one as delivered and an owner gets no in-page notice of their
-own. `itemshare_requests.status` already carries `fulfilled` and `declined` alongside
-`pending` and `cancelled`, and `closed_at` is there for that step, but no code sets
-either of the two - so a request that is handed over in game simply stays *Waiting*.
+**`declined`.** A request the owner cannot fill is recorded as `cancelled` with the
+owner's reason on it, so the `declined` status in the enum is still unused. Nothing
+depends on it.
 
 **Surfacing stored detail.** The `eso_data` column holds getters the site does not render
 yet (required level, champion points, style among them). They are captured and stored,

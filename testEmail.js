@@ -31,16 +31,24 @@ if (!config.configured) {
 
 // Two pretend items, so the message has a real list, a quality colour each and the
 // detail line an owner would use to tell two copies of a name apart.
+const sampleToken = '0'.repeat(64);
 const message = renderRequestEmail({
   requester: 'Test Requester',
   requesterAccount: '@TestRequester',
   ownerAccount: '@TestOwner',
   items: [
-    { name: 'Briarheart Dagger', type: 'Weapon', trait: 'Sharpened', enchant: '', quality: 4, quantity: 2 },
-    { name: 'Soul Gem', type: 'Miscellaneous', trait: '', enchant: '', quality: 1, quantity: 5 },
+    { id: 1, name: 'Briarheart Dagger', type: 'Weapon', trait: 'Sharpened', enchant: '', quality: 4, quantity: 2 },
+    { id: 2, name: 'Soul Gem', type: 'Miscellaneous', trait: '', enchant: '', quality: 1, quantity: 5 },
   ],
   siteUrl: config.siteUrl,
+  // Real messages carry a token issued for their own rows; this one is a sample, so the
+  // form is here to look at but cannot record anything.
+  formUrl: config.siteUrl ? `${config.siteUrl}/requests/fulfill/${sampleToken}` : '',
 });
+
+if (message.html.includes(sampleToken)) {
+  console.log('The Done button uses a sample link: it shows the form, but records nothing.');
+}
 
 console.log(
   `Transport: ${config.provider}${config.provider === 'sendmail' ? ` (${config.sendmail})` : ''}`

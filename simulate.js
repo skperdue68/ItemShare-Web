@@ -26,11 +26,12 @@
 // people come back instead of a new set on every run, and --reset removes them all.
 
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import dotenv from 'dotenv';
 
 import { describeConnectionFailure, openDatabase, readConfig } from './lib/database.js';
+import { tokenFingerprint } from './lib/simulateToken.js';
 import {
   cancelOwnRequest,
   createRequest,
@@ -42,7 +43,8 @@ import {
 } from './lib/store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '.env') });
+const ENV_PATH = path.join(__dirname, '.env');
+dotenv.config({ path: ENV_PATH });
 
 const HOLD_MINUTES = 5;
 const LOCATIONS = ['Inventory', 'Bank', 'Furnishing Vault', 'Craft Bag'];
@@ -559,11 +561,78 @@ function siteBaseUrl() {
   return withScheme.replace(/\/+$/, '');
 }
 
-// The same eight characters the site prints at start-up: compare the two lines to see
-// whether both processes are holding the same token.
-function tokenFingerprint(value) {
-  const trimmed = String(value || '').trim();
-  return trimmed ? createHash('sha1').update(trimmed).digest('hex').slice(0, 8) : 'none';
+/**
+ * The quieter way two processes hold different tokens while .env is correct on disk:
+ * dotenv never overwrites a variable that is already in the environment, so a token
+ * exported in this shell - or left over from an earlier export - wins over the file
+ * without a word. The file is read here directly so the difference can be said out loud.
+ */
+function warnIfEnvIgnored(token) {
+  let fromFile = '';
+
+  try {
+    fromFile = String(dotenv.parse(fs.readFileSync(ENV_PATH)).SIMULATE_TOKEN || '').trim();
+  } catch {
+    return;
+  }
+
+  if (fromFile && fromFile !== token) {
+    console.warn(
+      'Live pushes: SIMULATE_TOKEN was already set in this environment, so .env was ignored.\n' +
+        `  This run sends ${tokenFingerprint(token)}, while ${ENV_PATH} holds ${tokenFingerprint(
+          fromFile
+        )}.\n` +
+        '  Unset it for this run - env -u SIMULATE_TOKEN npm run simulate - or change the\n' +
+        '  exported value to match the file.'
+    );
+  }
+}
+
+/**
+ * Says once, at start-up, whether the site will accept this run's announcements.
+ *
+ * Without it the first sign of trouble is a `live:` line per action, minutes in, and
+ * "the site answered 404" is a poor way to learn that the site was never restarted after
+ * SIMULATE_TOKEN was added to .env. This is the same token check the nudge uses and it
+ * pushes nothing.
+ */
+async function checkLivePushes(token) {
+  warnIfEnvIgnored(token);
+
+  if (!token) {
+    console.log(
+      'Live pushes: off - set SIMULATE_TOKEN in .env and restart the site to have open pages refresh.'
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch(`${SITE_URL}/simulate/check`, {
+      method: 'POST',
+      headers: { 'x-itemshare-simulate': token },
+    });
+
+    if (response.ok) {
+      console.log(
+        `Live pushes: armed for ${SITE_URL} (token ${tokenFingerprint(
+          token
+        )}; the site holds the same one)`
+      );
+      return;
+    }
+
+    console.warn(
+      `Live pushes: the site refused token ${tokenFingerprint(token)} (HTTP ${response.status}).\n` +
+        '  It answers 404 when its own SIMULATE_TOKEN is blank or different, so check that\n' +
+        '  the site reads the same .env as this run and that it was restarted after the\n' +
+        `  token was set. This run read: ${ENV_PATH}`
+    );
+  } catch (error) {
+    console.warn(
+      `Live pushes: could not reach ${SITE_URL}/simulate/check (${error.message}).\n` +
+        '  The data still changes; open pages will see it on their next refresh.'
+    );
+  }
 }
 
 async function nudge(summary) {
@@ -590,7 +659,9 @@ async function nudge(summary) {
       // indistinguishable from a missing route, so say which knob to check.
       const hint =
         response.status === 404
-          ? ` (it hides the route unless SIMULATE_TOKEN matches; this run sent ${tokenFingerprint(token)})`
+          ? ` (the site holds a different SIMULATE_TOKEN or none - restart it after editing .env; this run sent ${tokenFingerprint(
+              token
+            )})`
           : '';
 
       return `the site answered ${response.status}${hint}, so open pages were not told`;
@@ -608,7 +679,7 @@ async function nudge(summary) {
 }
 
 // Ctrl+C stops after the action in flight and cuts the wait short, so stopping is
-// immediate rather than "in up to ten seconds".
+// immediate rather than "in up to thirty seconds".
 let stopping = false;
 let wake = null;
 
@@ -644,10 +715,14 @@ const rounds = once
   : Number.isFinite(wanted) && wanted > 0
     ? Math.trunc(wanted)
     : Number.POSITIVE_INFINITY;
-const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 10000));
+const every = Math.max(0, Number(valueAfter('--every')) || (once ? 0 : 30000));
 const only = valueAfter('--only');
 const removing = process.argv.includes('--reset');
 const SITE_URL = siteBaseUrl();
+
+// Before the database is touched, because a token that does not match is a configuration
+// problem and this line is more useful on its own than buried under a connection error.
+await checkLivePushes(String(process.env.SIMULATE_TOKEN || '').trim());
 
 const config = readConfig();
 let connection;
@@ -742,12 +817,6 @@ try {
             : ', running until you stop it'
         }${every > 0 ? `, one every ${Math.round(every / 1000)}s` : ''}.`
       );
-
-      if (String(process.env.SIMULATE_TOKEN || '').trim()) {
-        console.log(
-          `Live pushes: ${SITE_URL}/simulate/nudge (token ${tokenFingerprint(process.env.SIMULATE_TOKEN)})`
-        );
-      }
 
       if (!Number.isFinite(rounds) || rounds > 1) {
         console.log('Press Ctrl+C to stop.');
