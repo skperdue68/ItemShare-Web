@@ -302,9 +302,10 @@ plus whatever is already in your own basket, never more than the raw `item_count
 two people can never be promised the same five. A number picked there is the total you
 want to hold, so the same item stays one row in the basket.
 
-A standing offer has no count behind it, so it always means one copy, and it can only be
-asked for while the owner has one in a bag right now. When they do not, the row says
-*Not in a bag right now* and the server refuses the request either way.
+A standing offer has no count behind it, so it always means one copy. It is only listed
+while the owner actually has one in a bag and nobody has reserved it yet: an offer they
+cannot honour is not a row at all, so the list never shows something that would be
+refused on the next click. The server refuses such a request either way.
 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
