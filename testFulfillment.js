@@ -21,6 +21,7 @@ import { openDatabase, readConfig } from './lib/database.js';
 import { extractShareData } from './lib/savedVars.js';
 import {
   createRequest,
+  getAlwaysShareForViewer,
   getFulfillForm,
   getOwnerRequests,
   getRequesterRequests,
@@ -992,6 +993,108 @@ ${guildedItems('@TestV3')}
   );
   ok('the count is what is held minus what is kept back', lockpick.itemCount, 175);
   ok('the account comes from the table it sits under', lockpick.accountName, '@TestMinimal');
+
+  console.log('\n16. A schema 4 file keeps its reserve in its own table');
+
+  // The shape the addon writes now: no `count` and no `reserve` on the entry, the amount
+  // kept back in a `reserves` table keyed by link, and an always-shared item that is not
+  // repeated in `sharedItems`.
+  const v4File = `ItemShareSavedVars =
+{
+  ["Default"] =
+  {
+    ["@TestV4"] =
+    {
+      ["$AccountWide"] =
+      {
+        ["version"] = 4,
+        ["schema"] = 4,
+        ["addonVersion"] = "1.10.1",
+        ["guilds"] = { ["9301"] = "Reserve Guild" },
+        ["reserves"] = { ["|H0:item:57151:154|h|h"] = 5, ["|H0:item:424242:1|h|h"] = 3 },
+        ["characterGuilds"] =
+        {
+          ["Tester"] =
+          {
+            ["guildIds"] = { 9301 },
+            ["updatedAt"] = 1793916710,
+          },
+        },
+        ["sharedItems"] =
+        {
+          ["|H0:item:57151:154|h|h||bank"] =
+          {
+            ["itemName"] = "Sanded Maple",
+            ["itemLink"] = "|H0:item:57151:154|h|h",
+            ["locationKey"] = "bank",
+            ["characterName"] = "Tester",
+            ["heldCount"] = 200,
+          },
+        },
+        ["alwaysShare"] =
+        {
+          ["|H0:item:87695:4:1|h|h"] =
+          {
+            ["itemName"] = "Ghastly Eye Bowl",
+            ["itemLink"] = "|H0:item:87695:4:1|h|h",
+            ["characterName"] = "Tester",
+            ["lastUpdatedAt"] = 1793916741,
+          },
+        },
+      },
+    },
+  },
+}`;
+
+  const v4 = extractShareData(v4File);
+  const [reservedStack] = v4.items;
+
+  ok('the reserve table is matched by item link', reservedStack.reserveQuantity, 5);
+  // The second reserve belongs to an item that is not being shared at all. Holding some
+  // back is not the same as offering the rest, so it must not become a row.
+  ok('a reserve on its own shares nothing', v4.items.length, 1);
+  ok('the stack offers what is held minus the reserve', reservedStack.itemCount, 195);
+  ok('the bag still says how much was there', reservedStack.heldQuantity, 200);
+  ok(
+    'an always-shared item arrives with no count of its own',
+    v4.alwaysShare.map((entry) => [entry.itemName, entry.itemCount, entry.reserveQuantity]),
+    [['Ghastly Eye Bowl', undefined, 0]]
+  );
+
+  await storeFile('@TestV4', v4, 'ItemShareSavedVars.lua');
+
+  ok(
+    'the upload stores the reserve, not the bag count',
+    (await storedRows('@TestV4')).map((row) => [row[1], row[2]]),
+    [['Sanded Maple', 195]]
+  );
+  ok(
+    'the reserve is kept for the note under the item name',
+    (
+      await connection.execute(
+        'SELECT reserve_quantity FROM itemshare_shared_items WHERE account_name = ?',
+        ['@TestV4']
+      )
+    )[0].map((row) => Number(row.reserve_quantity)),
+    [5]
+  );
+  ok(
+    'the reserve for an unshared item adds no row',
+    Number(
+      (
+        await connection.execute(
+          'SELECT COUNT(*) AS rowCount FROM itemshare_shared_items WHERE account_name = ?',
+          ['@TestV4']
+        )
+      )[0][0].rowCount
+    ),
+    1
+  );
+  ok(
+    'the owner sees the offer although the item is not shared as stock',
+    (await getAlwaysShareForViewer(connection, ['@TestV4'])).map((row) => row.item_name),
+    ['Ghastly Eye Bowl']
+  );
 
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
