@@ -556,6 +556,21 @@ function describeItems(names) {
   return `${list.slice(0, 3).join(', ')} and ${list.length - 3} more`;
 }
 
+/**
+ * Where a re-saved person's items are now, counted per place: "2 in Bank, 1 in Craft
+ * Bag". Naming the first two places on their own could not be squared with the item
+ * count beside it - three items and two places read like one had gone missing.
+ */
+function describeLocations(places) {
+  const counts = new Map();
+
+  for (const place of places) {
+    counts.set(place, (counts.get(place) || 0) + 1);
+  }
+
+  return [...counts].map(([place, count]) => `${count} in ${place}`).join(', ');
+}
+
 /** Saves their file again: items move, stacks change, requests get re-settled. */
 async function saveSomething(connection, person, guilds) {
   person.round += 1;
@@ -564,7 +579,7 @@ async function saveSomething(connection, person, guilds) {
   return {
     person: person.account,
     items: result.itemCount,
-    where: person.items.map((_, index) => locationFor(person, index)).slice(0, 2).join(' / '),
+    where: describeLocations(person.items.map((_, index) => locationFor(person, index))),
   };
 }
 
@@ -943,7 +958,7 @@ try {
           }
         } else {
           const done = await saveSomething(connection, person, guilds);
-          line = `${done.person} saved again: ${done.items} items, now in ${done.where}`;
+          line = `${done.person} saved again: ${done.items} items - ${done.where}`;
         }
 
         if (!line) {
