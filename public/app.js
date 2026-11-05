@@ -1115,10 +1115,193 @@ document.addEventListener('click', (event) => {
   }
 });
 
+// ------------------------------------------------- requests waiting on your items
+// The answering list used to be a page of its own, so opening it lost the item list and
+// coming back was a full reload. It is fetched as a fragment and shown over the list
+// instead: one small request to open it, one to answer a row, and the list underneath
+// is already the right one to return to.
+let ownerRequestsModal = null;
+
+function closeOwnerRequestsModal() {
+  if (ownerRequestsModal) {
+    ownerRequestsModal.remove();
+    ownerRequestsModal = null;
+  }
+
+  document.removeEventListener('keydown', onOwnerRequestsKey);
+}
+
+function onOwnerRequestsKey(event) {
+  if (event.key === 'Escape') {
+    closeOwnerRequestsModal();
+  }
+}
+
+function ownerRequestsCard() {
+  return ownerRequestsModal ? ownerRequestsModal.querySelector('[data-owner-requests]') : null;
+}
+
+function showOwnerRequestsCard(html) {
+  if (!ownerRequestsModal) {
+    return;
+  }
+
+  const modal = ownerRequestsModal.querySelector('.modal');
+
+  if (!modal) {
+    return;
+  }
+
+  modal.innerHTML = html;
+
+  const close = modal.querySelector('[data-owner-requests-close]');
+
+  if (close) {
+    close.focus();
+  }
+}
+
+async function fetchOwnerRequests(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      'X-ItemShare-Fragment': '1',
+      Accept: 'text/html',
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Your requests could not be loaded. Nothing was changed.');
+  }
+
+  return response.text();
+}
+
+async function openOwnerRequests() {
+  closeOwnerRequestsModal();
+
+  const panel = document.getElementById('accountMenuPanel');
+  const panelButton = document.getElementById('accountMenuButton');
+
+  if (panel) {
+    panel.hidden = true;
+  }
+
+  if (panelButton) {
+    panelButton.setAttribute('aria-expanded', 'false');
+  }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal modal-wide owner-modal" role="dialog" aria-modal="true" aria-label="Requests for your items">
+      <p class="muted">Loading what is waiting on your items...</p>
+    </div>`;
+  document.body.appendChild(backdrop);
+  ownerRequestsModal = backdrop;
+  document.addEventListener('keydown', onOwnerRequestsKey);
+
+  backdrop.addEventListener('click', (event) => {
+    if (event.target === backdrop) {
+      closeOwnerRequestsModal();
+    }
+  });
+
+  try {
+    showOwnerRequestsCard(await fetchOwnerRequests('/owner/requests'));
+  } catch (error) {
+    closeOwnerRequestsModal();
+    showToast(error.message, 'err');
+  }
+}
+
+// A row answers itself: the form posts the same fields the page posts, but the reply is
+// the list again rather than a redirect, so the modal keeps its place and the answered
+// row is simply not in it any more.
+async function answerOwnerRequest(form, submitter = null) {
+  const buttons = Array.from(form.querySelectorAll('button'));
+
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
+
+  // Save and Not fulfilled are the same form, and which one was pressed is the whole
+  // answer: a FormData built from the form alone leaves the submit button out.
+  const body = new FormData(form);
+
+  if (submitter && submitter.name) {
+    body.append(submitter.name, submitter.value);
+  }
+
+  try {
+    showOwnerRequestsCard(
+      await fetchOwnerRequests('/owner/requests', { method: 'POST', body })
+    );
+
+    const card = ownerRequestsCard();
+    const recorded = card ? card.querySelector('.status.ok') : null;
+
+    if (recorded) {
+      showToast(recorded.textContent.trim(), 'ok');
+    }
+
+    refreshAfterChange();
+  } catch (error) {
+    buttons.forEach((button) => {
+      button.disabled = false;
+    });
+    showToast(error.message, 'err');
+  }
+}
+
+document.addEventListener('click', (event) => {
+  if (event.target.closest && event.target.closest('[data-owner-requests-close]')) {
+    event.preventDefault();
+    closeOwnerRequestsModal();
+    return;
+  }
+
+  if (event.defaultPrevented || event.button !== 0) {
+    return;
+  }
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+
+  const opener = event.target.closest ? event.target.closest('a[href="/owner/requests"]') : null;
+
+  if (!opener || opener.target === '_blank') {
+    return;
+  }
+
+  event.preventDefault();
+  openOwnerRequests();
+});
+
+document.addEventListener('submit', (event) => {
+  const form = event.target;
+
+  if (!ownerRequestsModal || !form.closest || !form.closest('[data-owner-requests]')) {
+    return;
+  }
+
+  if (form.getAttribute('action') !== '/owner/requests') {
+    return;
+  }
+
+  event.preventDefault();
+  answerOwnerRequest(form, event.submitter || null);
+});
+
 // ------------------------------------------------------------ leaving the page
 // The browser's own beforeunload dialog cannot be styled, so the prompt here is a
 // real one and beforeunload is only the last resort for a closed tab or a form post.
 let leavePrompt = null;
+// Set once the styled prompt has been answered with "Leave anyway", so the browser's own
+// unstyled dialog does not ask the same question a second time during that navigation.
+let leaveConfirmed = false;
 
 function closeLeavePrompt() {
   if (leavePrompt) {
@@ -1146,11 +1329,7 @@ function openLeavePrompt(href) {
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="leaveTitle">
       <h2 id="leaveTitle">You have unsubmitted item requests</h2>
       <p class="muted" data-leave-sentence></p>
-      <p class="muted">
-        They are held for a few more minutes. If you leave without sending them, the items
-        go back to being available to everyone else - which is what will happen anyway when
-        the clock runs out.
-      </p>
+      <p class="muted" data-leave-detail></p>
       <div class="leave-actions">
         <button class="filter-clear" type="button" data-stay>Stay on this page</button>
         <button class="primary-button" type="button" data-leave-anyway>Leave anyway</button>
@@ -1160,6 +1339,18 @@ function openLeavePrompt(href) {
   // Written as text rather than markup: it is a count, but the habit is worth keeping.
   backdrop.querySelector('[data-leave-sentence]').textContent =
     held === 1 ? '1 item is waiting to be sent.' : `${held} items are waiting to be sent.`;
+
+  // The basket lives on the site, not in this tab, so leaving does not throw it away:
+  // saying it did would be the lie the old wording told, and the person comes back to
+  // the same basket and the same clock.
+  const detail = backdrop.querySelector('[data-leave-detail]');
+
+  if (detail) {
+    detail.textContent =
+      held === 1
+        ? 'It is held on the site, not in this tab, so it will still be here when you come back. If you never send it, the item goes back to being available to everyone else when the clock runs out.'
+        : 'They are held on the site, not in this tab, so they will still be here when you come back. If you never send them, the items go back to being available to everyone else when the clock runs out.';
+  }
 
   document.body.appendChild(backdrop);
   leavePrompt = backdrop;
@@ -1173,6 +1364,7 @@ function openLeavePrompt(href) {
 
     if (event.target.closest && event.target.closest('[data-leave-anyway]')) {
       closeLeavePrompt();
+      leaveConfirmed = true;
       window.location.assign(href);
     }
   });
@@ -1207,12 +1399,29 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  // Only another site is worth a warning. A basket is held on the server, so walking from
+  // one page of this site to another keeps it, and warning about it there was a question
+  // with nothing behind it - the same basket was waiting on the way back.
+  if (!leavesThisSite(link)) {
+    return;
+  }
+
   event.preventDefault();
   openLeavePrompt(href);
 });
 
+function leavesThisSite(link) {
+  try {
+    return new URL(link.href, window.location.href).origin !== window.location.origin;
+  } catch (error) {
+    return false;
+  }
+}
+
 window.addEventListener('beforeunload', (event) => {
-  if (basketHeldItems() === 0) {
+  // Already answered above: the browser's own dialog would be the same warning twice,
+  // unstyled and out of place.
+  if (leaveConfirmed || basketHeldItems() === 0) {
     return undefined;
   }
 
