@@ -846,3 +846,11 @@ either of the two - so a request that is handed over in game simply stays *Waiti
 **Surfacing stored detail.** The `eso_data` column holds getters the site does not render
 yet (required level, champion points, style among them). They are captured and stored,
 and nothing shows them.
+
+- server-aware identity: guild ids and account names are only unique within a
+  megaserver, so NA, EU and PTS data can collide. The same numeric `guild_id` on two
+  worlds becomes one guild, and the same `@handle` on two worlds becomes one account
+  whose uploads overwrite each other. Fixing it needs a server column on
+  `itemshare_accounts` and `itemshare_guilds`, composite keys, and the addon writing
+  the world into the file, because the parser cannot infer it from guild ids or names.
+  Harmless while everyone plays on one megaserver.
