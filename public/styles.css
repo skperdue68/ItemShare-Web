@@ -1019,6 +1019,7 @@ a.primary-button {
   margin: 0 0 14px;
   font-size: 13px;
   color: var(--muted-strong);
+  text-align: center;
 }
 
 .browsing-single {
@@ -1724,8 +1725,13 @@ tr.row-fading td {
   gap: 8px;
 }
 
+/* The chip row keeps the height of one line even when nothing is chosen, so the filter
+   card does not jump the moment the first chip appears. It is a floor, not a fixed
+   size: more chips still wrap and push the card taller. */
 .filter-chips:empty {
-  display: none;
+  display: flex;
+  min-height: 28px;
+  align-content: flex-start;
 }
 
 .filter-chip {
@@ -1783,4 +1789,17 @@ tr.row-fading td {
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+/* The sort headings are buttons now, so the order can be cycled without leaving the
+   page and without a ?sort= in the address bar. A button needs the reset a link gets
+   for free: no chrome of its own, and the table's own font and colour. */
+th .sort-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
 }
