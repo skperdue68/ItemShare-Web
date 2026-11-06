@@ -172,34 +172,29 @@ upload that trusted it stored the items under an account the file did not contai
 is to say it stored none of them. A copy that names another account of the same file is
 still honoured, because that is a deliberate move between accounts.
 
-### The two saved-variables layouts
+### How guilds are read
 
-Both layouts the addon has written are read the same way, and produce the same stored
-rows:
+The addon writes guild data once, at the top of each account's scope, and items carry no
+guild fields at all:
 
-- **v2** (`version` 2, addon 1.9.0 and older) - every `sharedItems` / `alwaysShare` entry
-  carries `guildIds`, `guildNames` and `guildsCapturedAt`, and the account-wide registry
-  is called `knownGuilds`.
-- **v3** (`version` 3, addon 1.10.0+) - one `guilds` table keyed by guild id replaces
-  `knownGuilds`, entries carry no guild fields at all, and the link is
-  `entry.characterName` -> `characterGuilds[character]` -> its `guildIds` -> `guilds[id]`.
+- `guilds` - one registry, keyed by guild id, holding every guild name the account knows.
+- `characterGuilds[character]` - that character's `guildIds`, and when they were captured.
+- an item's guilds are therefore `entry.characterName` -> `characterGuilds[character]` ->
+  its `guildIds` -> `guilds[id]`.
 
-The shape is detected from the contents, never from the file name: `guilds` without
-`knownGuilds` is v3, `knownGuilds` is v2. Guild names come from the registry whenever
-one is present, and the old per-entry names are still read, so a v2 file keeps the names
-it carried. Every registered guild is upserted - including one that no item names - so a
-name never goes stale and the upload's guild count stays right. A character the file has
-no snapshot for falls back to the account's own membership, so its items are attributed
-to the whole account rather than to nobody.
+Guild names always come from the registry. Every registered guild is upserted - including
+one that no item names - so a name never goes stale and the upload's guild count stays
+right. A character the file has no snapshot for falls back to the account's own
+membership, so its items are attributed to the whole account rather than to nobody.
 
 Two fields the addon is about to drop are already tolerated: a row with no `itemKey` is
 keyed by its `itemLink` plus the `locationKey` it was found in, and a row with no `count`
 takes `heldCount` minus `reserve`.
 
-For one release the addon also writes `ItemShareExport.lua`, a compatibility file in the
-**old** layout, so uploads keep working while both are understood. Either file can be
-uploaded; `ItemShareSavedVars.lua` is the one to prefer, and the compatibility file goes
-away in the release after this one.
+Only this layout is read. An older file - `knownGuilds`, guild fields copied onto every
+item, an `ItemShareExport.lua` compatibility copy - still parses, but its guilds are not
+read at all, so its items arrive with no guilds and nobody can see them. Re-export with
+the current addon instead.
 
 ## Automatic uploads
 
@@ -257,7 +252,7 @@ token travels in a header and the file contents are plain text over the wire.
 | --- | --- | --- |
 | `GET` | `/` | The page: tabs, filters, the item table |
 | `GET` | `/items` | The item-list region only, as a fragment, for live refresh. `503` means "leave the screen alone" |
-| `POST` | `/upload` | Accept a saved-variables upload (v3, or an older layout) |
+| `POST` | `/upload` | Accept a `ItemShareSavedVars.lua` upload |
 | `POST` | `/ingest` | Accept the same file from a watcher, token-authenticated |
 | `POST` | `/browsing-account` | Choose the ESO account browsing uses; a form post that redirects back to `/` |
 | `POST` | `/requests` | Put an item in the basket, or top up its quantity |
@@ -320,10 +315,25 @@ bookmarked and works with scripts off. The sort order is deliberately not among 
 it is a reading preference kept in a cookie, which keeps links clean and stops one
 person's sorting being handed to whoever opens their link.
 
-An owner can keep part of a stack back in game with a *share reserve*. The site lists
-what is actually being offered - the reserve is subtracted before upload - and shows the
-reserve as a small amber note under the item name (`keeping 12 back of 20`), so a stack
-offering 8 does not look like an owner who only has 8.
+An owner can keep part of a stack back in game with a *share reserve*. The addon writes
+the reserve into `locationReserves` beside the item list rather than inside the item,
+keyed by the item link and the location it was set in - `link||locationKey`. That is the
+only reserve layout read: holding back 113 of the 400 soul gems in house storage 8 leaves
+the 800 in the bag and the 1614 in the bank alone, and the same item in three places is
+three rows of which only the one the reserve was set on is short.
+
+The older `reserves` table, keyed by the link alone, is not a fallback for this. A file
+carrying only that is a file the addon no longer writes, so its reserve is ignored and no
+stack is reduced - exactly as the v2 guild tables are ignored rather than guessed at.
+
+The reserve is applied before storing: `item_count` is what is really being
+offered (400 held less 113 kept back is 287 shared), and the reserve itself is kept so it
+can be shown as a small amber note under the item name (`keeping 113 back of 400`). A
+stack offering 8 does not look like an owner who only has 8.
+
+A reserve never shares anything by itself. It only reduces a stack that is already in the
+file's item list, so a reserve for an item that is not being shared is ignored: setting a
+reserve creates no offer, no row and no request button.
 
 Visibility joins three tables: the item's guilds (`itemshare_shared_item_guilds`), the
 viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_guilds`).
@@ -341,10 +351,12 @@ claimed plus whatever is already in your own basket, never more than the raw `it
 so two people can never be promised the same five. What is picked there is the total you
 want to hold, so the same item stays one row in the basket.
 
-A standing offer has no count behind it, so it always means one copy. It is only listed
-while the owner actually has one in a bag and nobody has reserved it yet: an offer they
-cannot honour is not a row at all, so the list never shows something that would be
-refused on the next click. The server refuses such a request either way.
+A standing offer has no count behind it, so it always means one copy, one at a time: it is
+listed as **Offered 1** until that copy is claimed, and then it leaves the list. It is not
+hidden while the owner has nothing in a bag, because the file no longer says: schema 4
+keeps an always-shared item out of `sharedItems`, so the offer itself is the only evidence
+that the owner wants to hand it out. The server refuses a second request for the same
+offer either way, so two people cannot be promised the same handover.
 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".

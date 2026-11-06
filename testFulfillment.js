@@ -21,6 +21,7 @@ import { openDatabase, readConfig } from './lib/database.js';
 import { extractShareData } from './lib/savedVars.js';
 import {
   createRequest,
+  getAlwaysShareForViewer,
   getFulfillForm,
   getOwnerRequests,
   getRequesterRequests,
@@ -643,10 +644,19 @@ try {
         {
             ["$AccountWide"] =
             {
-                ["addonVersion"] = "1.9.0",
-                ["knownGuilds"] =
+                ["version"] = 3,
+                ["addonVersion"] = "1.10.0",
+                ["guilds"] =
                 {
-                    [${GUILD}] = "Test Guild",
+                    ["${GUILD}"] = "Test Guild",
+                },
+                ["characterGuilds"] =
+                {
+                    ["Tester"] =
+                    {
+                        ["guildIds"] = { ${GUILD} },
+                        ["updatedAt"] = 1793866476,
+                    },
                 },
                 ["sharedItems"] =
                 {
@@ -656,10 +666,6 @@ try {
                         ["characterName"] = "Tester",
                         ["itemName"] = "Copied Item",
                         ["count"] = 3,
-                        ["guildIds"] =
-                        {
-                            [1] = ${GUILD},
-                        },
                     },
                     ["moved-key"] =
                     {
@@ -674,6 +680,7 @@ try {
                     ["offer-key"] =
                     {
                         ["accountName"] = "@TestOriginal",
+                        ["characterName"] = "Tester",
                         ["itemName"] = "Copied Offer",
                     },
                 },
@@ -683,7 +690,8 @@ try {
         {
             ["$AccountWide"] =
             {
-                ["addonVersion"] = "1.9.0",
+                ["version"] = 3,
+                ["addonVersion"] = "1.10.0",
                 ["sharedItems"] =
                 {
                 },
@@ -724,11 +732,10 @@ try {
     2
   );
 
-  console.log('\n13. A version 3 file stores exactly what a version 2 file stored');
+  console.log('\n13. A version 3 file stores its items under all five guilds');
 
-  // Five guilds, five items. v2 copies the guilds onto every item and keeps a name map;
-  // v3 keeps one registry and a per-character id list, and puts no guild field on an
-  // item at all. The stored rows are what has to match, so they are what is compared.
+  // Five guilds, five items, one registry and one character snapshot. The whole link is
+  // character -> guildIds -> registry, because the items carry no guild fields at all.
   const FIVE_GUILDS = [
     [9001, 'Test Guild'],
     [9002, 'Second Guild'],
@@ -737,65 +744,20 @@ try {
     [9005, 'Fifth Guild'],
   ];
   const GUILD_IDS = FIVE_GUILDS.map(([guildId]) => guildId);
-  const GUILD_NAMES = FIVE_GUILDS.map(([, name]) => name);
   const guildPairs = (indent) =>
-    FIVE_GUILDS.map(([guildId, name]) => `${indent}[${guildId}] = "${name}",`).join('\n');
-  const pairTables = (indent) =>
-    FIVE_GUILDS.map(
-      ([guildId, name]) => `${indent}{ ["guildId"] = ${guildId}, ["guildName"] = "${name}" },`
-    ).join('\n');
-
-  const guildedItems = (account, { withGuilds }) =>
-    Array.from({ length: 5 }, (_, index) => {
-      const guildFields = withGuilds
-        ? `
-            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
-            ["guildNames"] = { ${GUILD_NAMES.map((name) => `"${name}"`).join(', ')} },
-            ["guildsCapturedAt"] = 1793866476,`
-        : '';
-
-      return `          ["guilded-key-${index + 1}"] =
+    FIVE_GUILDS.map(([guildId, name]) => `${indent}["${guildId}"] = "${name}",`).join('\n');
+  const guildedItems = (account) =>
+    Array.from(
+      { length: 5 },
+      (_, index) => `          ["guilded-key-${index + 1}"] =
           {
             ["accountName"] = "${account}",
             ["characterName"] = "Tester",
             ["itemName"] = "Guilded Item ${index + 1}",
             ["count"] = ${index + 4},
-            ["locationKey"] = "inventory:tester",${guildFields}
-          },`;
-    }).join('\n');
-
-  const v2File = `ItemShareSavedVars =
-{
-  ["Default"] =
-  {
-    ["@TestV2"] =
-    {
-      ["$AccountWide"] =
-      {
-        ["addonVersion"] = "1.9.0",
-        ["knownGuilds"] =
-        {
-${guildPairs('          ')}
-        },
-        ["characterGuilds"] =
-        {
-          ["Tester"] =
-          {
-            ["guilds"] =
-            {
-${pairTables('              ')}
-            },
-            ["guildIds"] = { ${GUILD_IDS.join(', ')} },
-          },
-        },
-        ["sharedItems"] =
-        {
-${guildedItems('@TestV2', { withGuilds: true })}
-        },
-      },
-    },
-  },
-}`;
+            ["locationKey"] = "inventory:tester",
+          },`
+    ).join('\n');
 
   const v3File = `ItemShareSavedVars =
 {
@@ -822,36 +784,25 @@ ${guildPairs('          ')}
         ["guildsUpdatedAt"] = 1793866476,
         ["sharedItems"] =
         {
-${guildedItems('@TestV3', { withGuilds: false })}
+${guildedItems('@TestV3')}
         },
       },
     },
   },
 }`;
 
-  const parsedV2 = extractShareData(v2File);
   const parsedV3 = extractShareData(v3File);
 
   ok(
-    'the v3 registry gives every guild its name',
+    'the registry gives every guild its name',
     [...parsedV3.guilds.entries()].sort((a, b) => a[0] - b[0]),
     FIVE_GUILDS
   );
+  ok('the file finds five items', parsedV3.items.length, 5);
   ok(
-    'the v2 knownGuilds map gives the same five',
-    [...parsedV2.guilds.entries()].sort((a, b) => a[0] - b[0]),
-    FIVE_GUILDS
-  );
-  ok('both files find five items', [parsedV2.items.length, parsedV3.items.length], [5, 5]);
-  ok(
-    'each v3 item follows its character to all five guilds',
+    'each item follows its character to all five guilds',
     parsedV3.items.map((item) => item.guildIds.slice().sort((a, b) => a - b)),
     parsedV3.items.map(() => GUILD_IDS)
-  );
-  ok(
-    'each v2 item keeps the five it carried',
-    parsedV2.items.map((item) => item.guildIds.slice().sort((a, b) => a - b)),
-    parsedV2.items.map(() => GUILD_IDS)
   );
 
   const storeFile = (account, parsed, sourceFile) =>
@@ -868,11 +819,9 @@ ${guildedItems('@TestV3', { withGuilds: false })}
       { sourceFile }
     );
 
-  const v2Upload = (await storeFile('@TestV2', parsedV2, 'ItemShareExport.lua'))[0];
   const v3Upload = (await storeFile('@TestV3', parsedV3, 'ItemShareSavedVars.lua'))[0];
 
-  ok('the v2 upload records five guilds', v2Upload.guildCount, 5);
-  ok('the v3 upload records five guilds too', v3Upload.guildCount, 5);
+  ok('the upload records five guilds', v3Upload.guildCount, 5);
 
   const storedRows = async (accountName) => {
     const [rows] = await connection.execute(
@@ -895,10 +844,13 @@ ${guildedItems('@TestV3', { withGuilds: false })}
     ]);
   };
 
-  const v2Rows = await storedRows('@TestV2');
   const v3Rows = await storedRows('@TestV3');
 
-  ok('the same five rows and the same guild links come out of either file', v3Rows, v2Rows);
+  ok(
+    'five rows, keyed and counted as the file says',
+    v3Rows.map((row) => [row[0], row[2]]),
+    ['1', '2', '3', '4', '5'].map((step) => [`guilded-key-${step}`, Number(step) + 3])
+  );
   ok(
     'every item is offered to all five guilds',
     v3Rows.map((row) => row[3]),
@@ -914,7 +866,7 @@ ${guildedItems('@TestV3', { withGuilds: false })}
     FIVE_GUILDS
   );
   ok(
-    'the v3 account is in exactly five guilds',
+    'the account is in exactly five guilds',
     Number(
       (
         await connection.execute(
@@ -1041,6 +993,210 @@ ${guildedItems('@TestV3', { withGuilds: false })}
   );
   ok('the count is what is held minus what is kept back', lockpick.itemCount, 175);
   ok('the account comes from the table it sits under', lockpick.accountName, '@TestMinimal');
+
+  console.log('\n16. A schema 4 file keeps its reserve in its own table');
+
+  // The shape the addon writes now: no `count` and no `reserve` on the entry, the amount
+  // kept back in `locationReserves` keyed by link and location, and an always-shared item
+  // that is not repeated in `sharedItems`.
+  const v4File = `ItemShareSavedVars =
+{
+  ["Default"] =
+  {
+    ["@TestV4"] =
+    {
+      ["$AccountWide"] =
+      {
+        ["version"] = 4,
+        ["schema"] = 4,
+        ["addonVersion"] = "1.10.1",
+        ["guilds"] = { ["9301"] = "Reserve Guild" },
+        ["locationReserves"] =
+        {
+          ["|H0:item:57151:154|h|h||bank"] = 5,
+          ["|H0:item:424242:1|h|h||bank"] = 3,
+        },
+        ["characterGuilds"] =
+        {
+          ["Tester"] =
+          {
+            ["guildIds"] = { 9301 },
+            ["updatedAt"] = 1793916710,
+          },
+        },
+        ["sharedItems"] =
+        {
+          ["|H0:item:57151:154|h|h||bank"] =
+          {
+            ["itemName"] = "Sanded Maple",
+            ["itemLink"] = "|H0:item:57151:154|h|h",
+            ["locationKey"] = "bank",
+            ["characterName"] = "Tester",
+            ["heldCount"] = 200,
+          },
+        },
+        ["alwaysShare"] =
+        {
+          ["|H0:item:87695:4:1|h|h"] =
+          {
+            ["itemName"] = "Ghastly Eye Bowl",
+            ["itemLink"] = "|H0:item:87695:4:1|h|h",
+            ["characterName"] = "Tester",
+            ["lastUpdatedAt"] = 1793916741,
+          },
+        },
+      },
+    },
+  },
+}`;
+
+  const v4 = extractShareData(v4File);
+  const [reservedStack] = v4.items;
+
+  ok('the reserve is matched by item link and location', reservedStack.reserveQuantity, 5);
+  // The second reserve belongs to an item that is not being shared at all. Holding some
+  // back is not the same as offering the rest, so it must not become a row.
+  ok('a reserve on its own shares nothing', v4.items.length, 1);
+  ok('the stack offers what is held minus the reserve', reservedStack.itemCount, 195);
+  ok('the bag still says how much was there', reservedStack.heldQuantity, 200);
+  ok(
+    'an always-shared item arrives with no count of its own',
+    v4.alwaysShare.map((entry) => [entry.itemName, entry.itemCount, entry.reserveQuantity]),
+    [['Ghastly Eye Bowl', undefined, 0]]
+  );
+
+  await storeFile('@TestV4', v4, 'ItemShareSavedVars.lua');
+
+  ok(
+    'the upload stores the reserve, not the bag count',
+    (await storedRows('@TestV4')).map((row) => [row[1], row[2]]),
+    [['Sanded Maple', 195]]
+  );
+  ok(
+    'the reserve is kept for the note under the item name',
+    (
+      await connection.execute(
+        'SELECT reserve_quantity FROM itemshare_shared_items WHERE account_name = ?',
+        ['@TestV4']
+      )
+    )[0].map((row) => Number(row.reserve_quantity)),
+    [5]
+  );
+  ok(
+    'the reserve for an unshared item adds no row',
+    Number(
+      (
+        await connection.execute(
+          'SELECT COUNT(*) AS rowCount FROM itemshare_shared_items WHERE account_name = ?',
+          ['@TestV4']
+        )
+      )[0][0].rowCount
+    ),
+    1
+  );
+  ok(
+    'the owner sees the offer although the item is not shared as stock',
+    (await getAlwaysShareForViewer(connection, ['@TestV4'])).map((row) => row.item_name),
+    ['Ghastly Eye Bowl']
+  );
+
+  console.log('\n17. Addon 1.10.7 keeps its reserve per location');
+
+  // The same Soul Gem link in three places, with 113 of the 400 in house storage 8 kept
+  // back. The reserve belongs to that stack, so the bank and bag stacks stay whole.
+  const soulGemLink = '|H0:item:33271:31:50:0:0:0:0:0:0:0:0:0:0:0:0:36:0:0:0:0:0|h|h';
+  const soulGemFile = (linkReserves, locationReserves = `{ ["${soulGemLink}||housestorage:8"] = 113 }`) => `ItemShareSavedVars =
+{
+    ["Default"] =
+    {
+        ["@TestLoc"] =
+        {
+            ["$AccountWide"] =
+            {
+                ["schema"] = 4,
+                ["version"] = 4,
+                ["addonVersion"] = "1.10.7",
+                ["guilds"] = { ["813755"] = "Ghost Bane" },
+                ["characterGuilds"] =
+                {
+                    ["Aurielle Fairdew"] =
+                    {
+                        ["guildIds"] = { 813755 },
+                        ["updatedAt"] = 1793924974,
+                    },
+                },
+                ["reserves"] = ${linkReserves},
+                ["locationReserves"] = ${locationReserves},
+                ["alwaysShare"] = { },
+                ["sharedItems"] =
+                {
+                    ["${soulGemLink}||bank"] =
+                    {
+                        ["itemName"] = "Soul Gem",
+                        ["itemLink"] = "${soulGemLink}",
+                        ["locationKey"] = "bank",
+                        ["sharedFrom"] = "Bank",
+                        ["characterName"] = "Aurielle Fairdew",
+                        ["heldCount"] = 1614,
+                    },
+                    ["${soulGemLink}||housestorage:8"] =
+                    {
+                        ["itemName"] = "Soul Gem",
+                        ["itemLink"] = "${soulGemLink}",
+                        ["locationKey"] = "housestorage:8",
+                        ["sharedFrom"] = "House Storage 8",
+                        ["characterName"] = "Aurielle Fairdew",
+                        ["heldCount"] = 400,
+                    },
+                    ["${soulGemLink}||inventory:aurielle fairdew"] =
+                    {
+                        ["itemName"] = "Soul Gem",
+                        ["itemLink"] = "${soulGemLink}",
+                        ["locationKey"] = "inventory:aurielle fairdew",
+                        ["sharedFrom"] = "Inventory (Aurielle Fairdew)",
+                        ["characterName"] = "Aurielle Fairdew",
+                        ["heldCount"] = 800,
+                    },
+                },
+            },
+        },
+    },
+}`;
+
+  const byLocation = (data) =>
+    data.items.map((entry) => [entry.locationKey, entry.reserveQuantity, entry.itemCount]);
+
+  ok('the location reserve is read from its own table', byLocation(extractShareData(soulGemFile('{ }'))), [
+    ['bank', 0, 1614],
+    ['housestorage:8', 113, 287],
+    ['inventory:aurielle fairdew', 0, 800],
+  ]);
+  // The older link-only table is not a fallback: a file that carries only that keeps
+  // nothing back, rather than having its reserve guessed at for every stack.
+  ok(
+    'an older link-only reserve is ignored',
+    byLocation(extractShareData(soulGemFile(`{ ["${soulGemLink}"] = 7 }`, '{ }'))),
+    [
+      ['bank', 0, 1614],
+      ['housestorage:8', 0, 400],
+      ['inventory:aurielle fairdew', 0, 800],
+    ]
+  );
+
+  await storeFile('@TestLoc', extractShareData(soulGemFile('{ }')), 'ItemShareSavedVars.lua');
+  const [soulRows] = await connection.execute(
+    'SELECT location_key, item_count, reserve_quantity FROM itemshare_shared_items WHERE account_name = ? ORDER BY location_key',
+    ['@TestLoc']
+  );
+  ok(
+    'one location is short by its reserve and the others are whole',
+    soulRows.map((row) => [row.location_key, Number(row.item_count), Number(row.reserve_quantity)]),
+    [
+      ['bank', 1614, 0],
+      ['housestorage:8', 287, 113],
+      ['inventory:aurielle fairdew', 800, 0],
+    ]
+  );
 
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
