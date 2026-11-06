@@ -440,6 +440,27 @@ so a request to an unclaimed account sends nothing. With no transport configured
 site works normally and the log says
 `Email: N request emails not sent - set EMAIL_FROM ...`.
 
+### Answer emails
+
+When an owner answers - on the site or from the form in the email - the person who asked
+is told what happened. The copies arrive in the game's own mailbox and the game says
+nothing about them, so without this the only way to find out is to open ESO and look.
+
+One message per person, not per request or per account: somebody who asked from two ESO
+accounts has one address and gets one list. The subject says which case it is - *request
+was fulfilled*, *request was not fulfilled*, or *requests were answered* when the rows
+disagree - and each line carries its own result, so `2 of 3 sent` sits next to `not
+fulfilled` rather than behind one bold claim. A partial handover counts as fulfilled: the
+point of the message is that there is something to collect. Cancelled rows say the owner
+had nothing to send and that nothing is waiting in the mailbox, so nobody signs in and
+goes looking for an item that was never mailed.
+
+The address is the asker's own sign-in address (`itemshare_users.email`). A person who
+never linked one gets no message and the answer still records itself; with no transport
+configured the log says `Email: N answer email(s) not sent - ...`. The answer is committed
+before any mail is attempted, and a failure to work out who to tell is caught, so a mail
+problem can never undo a handover or turn it into an error page for the owner.
+
 Two settings keep testing out of a guildmate's inbox:
 
 - `EMAIL_OVERRIDE_TO=you@example.com` sends **every** message to that address instead of
@@ -455,9 +476,10 @@ live for people outside the testing.
 
 `npm run email:test -- you@example.com` sends one of these messages through exactly the
 configuration the site uses, printing the transport, sender and subject first, then the
-result. It opens no database connection and changes nothing, so it separates "the mail
-server works" from "the site is configured" - if it says the message was handed over and
-nothing arrives, the problem is the MTA's queue or DNS, not ItemShare.
+result. Add `answer` as a second argument to look at the reply the asker gets instead. It
+opens no database connection and changes nothing, so it separates "the mail server works"
+from "the site is configured" - if it says the message was handed over and nothing
+arrives, the problem is the MTA's queue or DNS, not ItemShare.
 
 ## Item icons
 
@@ -601,9 +623,10 @@ flag, refreshed at every sign-in so it stays correct if somebody changes it.
 
 The address is personal data and is only ever read server-side. It is shown back to its
 own owner on the page and never included in item lists or any other member's view.
-`getOwnerNotificationEmail(connection, accountName)` in `lib/store.js` is the single
-helper for finding an owner's address when a request needs to notify them, and the
-request email is its only caller.
+`lib/store.js` is where an address is looked up, and nowhere else reads it:
+`getOwnerContacts` maps the ESO accounts named in a basket to the person who owns each of
+them, one entry per account, and `getRequesterNotifications` reads the asker's own address
+for an answer email.
 
 ## Commands
 
@@ -822,6 +845,14 @@ The address is a plain argument, not a flag, and it must contain an `@`:
 ```bash
 npm run email:test -- you@example.com
 node testEmail.js you@example.com
+```
+
+A second, optional argument picks which message is sent: `request` (the default, what an
+owner receives), `fulfilled`, `cancelled`, or `answer` for both outcomes in one message -
+the mixed case, with a partial handover beside a refusal:
+
+```bash
+npm run email:test -- you@example.com answer
 ```
 
 It opens no database connection and changes nothing, so it separates "the mail server

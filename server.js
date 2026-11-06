@@ -33,6 +33,7 @@ import {
   getFulfillForm,
   getOwnerContacts,
   getOwnerRequests,
+  getRequesterNotifications,
   getRequesterRequests,
   getSubmittedRequests,
   getSharedItemsForViewer,
@@ -51,7 +52,7 @@ import {
   submitDrafts,
 } from './lib/store.js';
 import { filterList } from './lib/filters.js';
-import { emailConfig, renderRequestEmail, sendEmail } from './lib/email.js';
+import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from './lib/email.js';
 import { getItemTip } from './lib/uesp.js';
 import { buildProviders } from './lib/providers.js';
 import { attachRealtime } from './lib/realtime.js';
@@ -288,6 +289,89 @@ async function emailOwners({ user, submitted, contacts }) {
     `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${
       skipped ? `, ${skipped} failed` : ''
     }${config.overrideTo ? ` (all to ${config.overrideTo}, from EMAIL_OVERRIDE_TO)` : ''}`
+  );
+
+  return { sent, skipped };
+}
+
+/**
+ * Tells the people who asked what became of their request, one message per person.
+ *
+ * The copies land in the game's mailbox, and the game does not announce them, so the
+ * message exists to say there is something to collect - or that there is not, and why.
+ * Rows are grouped by address rather than by request, because somebody who asked from
+ * two ESO accounts is one person and needs one message.
+ *
+ * Runs after the answer is committed and never throws: a bad mail day must not turn a
+ * handover that was recorded into an error page for the owner.
+ */
+async function emailAnswered(rows) {
+  const ids = (rows || [])
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (ids.length === 0) {
+    return { sent: 0, skipped: 0 };
+  }
+
+  let notices;
+
+  try {
+    notices = await withDatabase((connection) => getRequesterNotifications(connection, ids));
+  } catch (error) {
+    console.warn(
+      `Email: could not work out who to tell about ${ids.length} answered request(s): ${error.message}`
+    );
+    return { sent: 0, skipped: 0 };
+  }
+
+  if (!notices || notices.length === 0) {
+    return { sent: 0, skipped: 0 };
+  }
+
+  const groups = new Map();
+
+  for (const notice of notices) {
+    if (!groups.has(notice.email)) {
+      groups.set(notice.email, { email: notice.email, name: notice.displayName || '', rows: [] });
+    }
+
+    groups.get(notice.email).rows.push(notice);
+  }
+
+  const config = emailConfig();
+
+  if (!config.configured) {
+    console.log(
+      `Email: ${groups.size} answer email${groups.size === 1 ? '' : 's'} not sent - ${
+        config.reason || 'no mail transport is configured'
+      }`
+    );
+    return { sent: 0, skipped: groups.size };
+  }
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (const group of groups.values()) {
+    const message = renderStatusEmail({
+      requesterName: group.name,
+      rows: group.rows,
+      siteUrl: config.siteUrl,
+    });
+
+    const result = await sendEmail({ to: group.email, ...message }, config);
+
+    if (result.ok) {
+      sent += 1;
+    } else {
+      skipped += 1;
+      console.warn(`Email: could not tell ${group.email}: ${result.error}`);
+    }
+  }
+
+  console.log(
+    `Email: sent ${sent} answer email${sent === 1 ? '' : 's'}${skipped ? `, ${skipped} failed` : ''}`
   );
 
   return { sent, skipped };
@@ -902,6 +986,10 @@ app.post('/owner/requests', upload.none(), async (req, res) => {
       );
     }
 
+    // The person who asked hears about it too: the copies are waiting in their in-game
+    // mailbox and nothing in the game says so.
+    await emailAnswered(outcome.rows);
+
     if (wantsFragment(req)) {
       // The whole outcome, not just the counts: the card's confirmation names the item,
       // the copies and the requester, and the row it came from is about to disappear.
@@ -1101,6 +1189,8 @@ app.post('/requests/fulfill/:token', async (req, res) => {
         } handed over, ${outcome.cancelled} cancelled`
       );
     }
+
+    await emailAnswered(outcome.rows);
 
     res.type('html').send(
       renderMessagePage({
