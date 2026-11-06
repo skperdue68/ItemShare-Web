@@ -394,10 +394,10 @@ Attaching a name is enough to ask for items - uploading is what tells the site w
 guilds that name is in, and with those known the list narrows to the guilds the browsing
 account belongs to.
 
-The list and the controls are on the page itself, in **Your ESO accounts**: every attached
-name has a **Remove** button of its own, and the box under the list attaches another. The
-avatar menu's **Add or remove ESO accounts** opens the same list, with each account's
-guilds, as a dialog.
+Adding and removing attached names lives in the **Add or remove ESO accounts** dialog: the
+avatar menu opens it, every account there has its own **Remove** button, and the box under
+the list attaches another. The **Your ESO accounts** card on the page is a summary of the
+same list.
 
 A visitor who is not signed in at all sees the same list, under the same hero, and can
 ask for any of it. **The first request asks for three things** - the ESO account name it
