@@ -441,6 +441,12 @@ offer either way, so two people cannot be promised the same handover.
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
 
+The email that reaches the owner says which item, how many, and **where that copy was
+believed to be** - the same `Location` the list shows, taken from the owner's own saved
+file at the moment the request was made. It is a place to look rather than a promise: an
+owner who moves the stack and saves again does not rewrite requests that are already
+waiting, and a standing offer carries no location to name.
+
 A request is recorded against the account you are browsing as - that is the character
 the owner is told to mail - so the account picker changes where a handover happens, not
 just what you can see.
