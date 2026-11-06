@@ -804,15 +804,15 @@ if (listRegion) {
       : '';
     backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
-        <h2 id="requestTitle">Ask for ${escapeText(name)}</h2>
+        <h2 id="requestTitle">Reserve ${escapeText(name)}</h2>
         <p class="muted" data-dialog-summary>${escapeText(dialogSummary(state))}</p>
         ${guestFields}
         <div class="modal-actions">
           <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
-          <button class="request-button" type="button" data-ask-one>Request 1</button>
+          <button class="request-button" type="button" data-ask-one>Reserve 1</button>
           ${
             choices
-              ? `<button class="request-button is-stack" type="button" data-ask-stack>Request stack (<span data-dialog-max>${state.max}</span>)</button>`
+              ? `<button class="request-button is-stack" type="button" data-ask-stack>Reserve stack (<span data-dialog-max>${state.max}</span>)</button>`
               : ''
           }
         </div>
@@ -932,6 +932,82 @@ if (listRegion) {
     }
   }
 
+  // A reservation is not a request. The copy leaves everyone else's list the moment it is
+  // picked, but no owner is asked until the basket is sent - so the difference is said
+  // once per session, at the moment the first copy is picked. Somebody who reads the
+  // click as the request itself walks away, and the hold simply lapses.
+  const HOLD_NOTICE_KEY = 'itemshare:hold-notice';
+
+  function holdMinutes() {
+    return Math.max(1, Number(document.body.dataset.holdMinutes) || 5);
+  }
+
+  function explainFirstHold(name, copies) {
+    try {
+      if (window.sessionStorage.getItem(HOLD_NOTICE_KEY)) {
+        return;
+      }
+      window.sessionStorage.setItem(HOLD_NOTICE_KEY, '1');
+    } catch (error) {
+      // Storage off or full: saying it again on the next hold beats never saying it.
+    }
+
+    const minutes = holdMinutes();
+    const what = copies > 1 ? `${copies} copies of ${name}` : name;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="holdTitle">
+        <h2 id="holdTitle">Reserved - not sent yet</h2>
+        <p>${escapeText(what)} ${copies > 1 ? 'are' : 'is'} held for you and off everyone else's list.</p>
+        <p class="muted">Nothing has been asked for until you press <strong>Send requests</strong>. The hold ends in ${minutes} minute${minutes === 1 ? '' : 's'}, then the ${copies > 1 ? 'copies go' : 'copy goes'} back.</p>
+        <div class="modal-actions">
+          <button class="filter-clear" type="button" data-close-hold>Keep looking</button>
+          <button class="primary-button" type="button" data-send-hold>Send requests</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(backdrop);
+
+    function onKey(event) {
+      if (event.key === 'Escape') {
+        close();
+      }
+    }
+
+    const close = () => {
+      backdrop.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop || event.target.closest('[data-close-hold]')) {
+        close();
+        return;
+      }
+
+      if (event.target.closest('[data-send-hold]')) {
+        close();
+        const button = document.querySelector('[data-submit-requests]');
+
+        if (button) {
+          button.click();
+        } else {
+          refreshAfterChange();
+          showToast('Press Send requests above the list to ask for it.', 'ok');
+        }
+      }
+    });
+
+    document.addEventListener('keydown', onKey);
+
+    const send = backdrop.querySelector('[data-send-hold]');
+
+    if (send) {
+      send.focus();
+    }
+  }
+
   async function sendRequest({
     kind,
     id,
@@ -978,12 +1054,14 @@ if (listRegion) {
       // number that stuck is the one to report, not the one that was picked.
       const asked = Number(result.quantity) || quantity;
 
+      explainFirstHold(name, asked);
+
       showToast(
         result.combined
           ? `Your basket now holds ${asked} of ${name}.`
           : asked > 1
-            ? `Asked for ${asked} of ${name}.`
-            : `Asked for ${name}.`,
+            ? `Reserved ${asked} of ${name}.`
+            : `Reserved ${name}.`,
         'ok'
       );
       refreshAfterChange();
