@@ -256,6 +256,13 @@ try {
     (await getAlwaysShareForViewer(connection, [])).length,
     0
   );
+  // An account attached by hand has no guild rows - the addon has never said which
+  // guilds it is in - so the guild rule cannot apply and the list is unrestricted.
+  ok(
+    'an account with no guilds of its own still sees the shared row',
+    (await getSharedItemsForViewer(connection, ['@NoGuildsYet'])).map((row) => row.item_name),
+    [ITEM]
+  );
 
   console.log('\n2. The ask holds its copies before it is even sent');
   const requestId = await askFor(connection, askerId, sharedItemId, 3);
