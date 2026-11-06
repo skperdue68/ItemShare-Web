@@ -401,6 +401,11 @@ the request. They make a person row exactly like a password sign-up does, so the
 the request history, the owner's notification and the answer email all behave the same;
 the session remembers them, so every later request asks nothing.
 
+A guest's request is **not** held to the guild rule. The account name they typed has no
+guild membership on record, they were shown everything that is shared, and a Request
+button the server then refuses is worse than a request the owner can decline. The owner's
+email names the account and the address, so the decision stays with the owner.
+
 Two things follow from that, and both are deliberate. The address is **unverified**: the
 answer email is a link with a token, so an address typed by mistake means the answer is
 never read, and an address typed on purpose means somebody else receives it. And an

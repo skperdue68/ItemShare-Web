@@ -758,11 +758,16 @@ app.post('/requests', async (req, res) => {
           requesterAccounts: browsingAccount ? [browsingAccount] : accountNames,
           ownAccounts: accountNames,
           requesterAccount: browsingAccount,
-        itemKind,
-        itemId,
-        quantity,
-        holdMinutes: HOLD_MINUTES,
-      });
+          itemKind,
+          itemId,
+          quantity,
+          holdMinutes: HOLD_MINUTES,
+          // A guest was shown everything that is shared, and the account name they
+          // typed has no guilds on record to compare against, so the guild rule is not
+          // applied to them. Applying it refused every item on the page they were
+          // looking at. The owner still sees who asked and decides.
+          restrictToGuilds: user.provider !== 'guest',
+        });
     });
 
     // Everyone looking at that stack needs the new count straight away.
