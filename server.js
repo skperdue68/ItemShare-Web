@@ -236,6 +236,9 @@ async function emailOwners({ user, submitted, contacts }) {
       type: row.item_type_name || '',
       trait: row.trait || '',
       enchant: row.enchant_name || '',
+      // Where the owner's copy was when this was shared, so the message can say which
+      // container to open. Empty for a standing offer, which has no location of its own.
+      location: row.location_label || '',
       quality: Number(row.quality) || 0,
     });
   }
