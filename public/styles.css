@@ -2169,3 +2169,15 @@ th .sort-link {
 .guest-fields .auth-field input {
   width: 100%;
 }
+
+/* The reason a device was signed out, above the ways back in. */
+.auth-notice {
+  margin: 0 0 0.9rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 190, 90, 0.4);
+  border-radius: 0.5rem;
+  background: rgba(255, 190, 90, 0.14);
+  color: #f3d9a4;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}

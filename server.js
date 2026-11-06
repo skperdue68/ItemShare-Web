@@ -78,6 +78,7 @@ import {
 } from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
+import { takeSignOutNotice } from './lib/sessionNotice.js';
 import {
   renderListRegion,
   renderMessagePage,
@@ -515,8 +516,13 @@ async function viewerAccountNames(req, connection, user) {
   async function collectViewerData(req, filters) {
   const user = req.session ? req.session.user || null : null;
 
+  // A reset ends every session, so a device that had one is met with the reason it is
+  // signed out instead of a front page that looks like a glitch. Reading it clears it.
+  const signOutNotice = takeSignOutNotice(req.session);
+
   const data = {
     user,
+    signOutNotice,
     providers: enabledProviders,      accounts: [],
       browsingAccount: '',
       sharedItems: [],
@@ -780,6 +786,7 @@ app.post('/requests', async (req, res) => {
       user = await makeGuestPerson({ accountName, email, passwordHash });
       req.session.user = user;
       req.session.accountNames = null;
+  req.session.signOut = null;
     } catch (error) {
       res.status(error.statusCode || 500).json({ error: error.message });
       return;
@@ -1529,6 +1536,7 @@ app.get('/auth/:provider/callback', async (req, res) => {
       avatarUrl: signedIn.avatarUrl || identity.avatarUrl || '',
     };
     req.session.accountNames = null;
+  req.session.signOut = null;
 
     res.redirect('/');
   } catch (caught) {
@@ -1575,6 +1583,7 @@ function startPersonSession(req, { id, provider, providerLabel, username, email 
   // Which ESO accounts are theirs is read from the database on the next request, so a
   // session copy written before this sign-in can never decide who they are.
   req.session.accountNames = null;
+  req.session.signOut = null;
 }
 
 app.post('/auth/email', async (req, res) => {
@@ -1939,6 +1948,7 @@ app.post('/accounts/add', async (req, res) => {
     }
 
     req.session.accountNames = null;
+  req.session.signOut = null;
     res.redirect(303, '/');
   } catch (error) {
     sendPage(req, res, 500, {
@@ -1977,6 +1987,7 @@ app.post('/accounts/remove', async (req, res) => {
     }
 
     req.session.accountNames = null;
+  req.session.signOut = null;
     res.redirect(303, '/');
   } catch (error) {
     sendPage(req, res, 500, {
