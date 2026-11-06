@@ -781,6 +781,18 @@ if (listRegion) {
     // needs: the ESO account it is made from, an address to answer, and a password so the
     // request can be found again later. Together they make a real account, so the second
     // request asks nothing and the sign-in card lets them back in.
+    // Somebody signed in who has not attached an ESO account yet is asked for the one
+    // name the request needs, and nothing else: the address and the sign-in already
+    // exist, so asking for them again would be asking a question they answered.
+    const accountOnlyFields = `
+      <div class="guest-fields">
+        <label class="auth-field">
+          <span>ESO account name</span>
+          <input type="text" name="accountName" autocomplete="off" spellcheck="false"
+                 maxlength="96" placeholder="@YourAccountName" required>
+        </label>
+        <p class="auth-hint">The character the request is made from. It is attached to this sign-in, so you are only asked once.</p>
+      </div>`;
     const guestFields = document.body.dataset.guestRequest
       ? `
         <div class="guest-fields">
@@ -801,7 +813,9 @@ if (listRegion) {
           </label>
           <p class="auth-hint">Asked once. These make an account: the request is made from that character, the answer goes to that address, and the password is how you sign back in to see it.</p>
         </div>`
-      : '';
+      : document.querySelector('[data-needs-account]')
+        ? accountOnlyFields
+        : '';
     backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
         <h2 id="requestTitle">Reserve ${escapeText(name)}</h2>
@@ -1049,6 +1063,12 @@ if (listRegion) {
       if (document.body.dataset.guestRequest) {
         delete document.body.dataset.guestRequest;
       }
+
+      // The request attached the account to this sign-in, so the question is answered:
+      // the marker goes, and the next refresh draws the region without it.
+      document
+        .querySelectorAll('[data-needs-account]')
+        .forEach((marker) => marker.remove());
 
       // Asking again for something already in the basket tops that row up, so the
       // number that stuck is the one to report, not the one that was picked.
