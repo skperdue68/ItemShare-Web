@@ -52,7 +52,7 @@ import {
   submitDrafts,
 } from './lib/store.js';
 import {
-  adoptGuestDrafts,
+  claimHoldsForOwnedAccounts,
   createGuestPerson,
   createPasswordAccount,
   detachAccountFromUser,
@@ -566,6 +566,21 @@ async function viewerAccountNames(req, connection, user) {
         });
         data.alwaysShare = await getAlwaysShareForViewer(connection, accountNames, filters);
         data.requestOffers = await getAlwaysShareForViewer(connection, requestScope, filters);
+      // A hold follows the account it was asked from. Reading the basket without this
+      // leaves the state the item list already complains about: a copy held by a person
+      // this sign-in is not, with nothing to send and nothing to cancel. It runs on a
+      // page load because that is what happens after every sign-in, account change and
+      // upload, and it matches nothing at all once the state is right.
+      if (user) {
+        const claimed = await claimHoldsForOwnedAccounts(connection, { userId: user.id });
+
+        if (claimed > 0) {
+          console.log(
+            `Basket: ${claimed} held item${claimed === 1 ? '' : 's'} returned to the account owner`
+          );
+        }
+      }
+
       data.requests = user ? await getRequesterRequests(connection, user.id) : [];
       data.basketRows = user ? await getBasketRows(connection, user.id) : [];
       data.basket = user
@@ -1492,21 +1507,9 @@ app.get('/auth/:provider/callback', async (req, res) => {
     const profile = await userResponse.json();
     const identity = provider.readProfile(profile);
 
-    const signedIn = await withDatabase(async (connection) => {
-      const person = await signInWithProvider(connection, { provider: provider.key, ...identity });
-
-      // A basket built as a guest is still pointing at the throwaway person it was made
-      // for. Signing in as the owner of that ESO account gives it back.
-      const adopted = await adoptGuestDrafts(connection, { userId: person.userId });
-
-      if (adopted > 0) {
-        console.log(
-          `Sign-in: ${adopted} held item${adopted === 1 ? '' : 's'} returned to the person who asked`
-        );
-      }
-
-      return person;
-    });
+    const signedIn = await withDatabase((connection) =>
+      signInWithProvider(connection, { provider: provider.key, ...identity })
+    );
 
     req.session.user = {
       id: signedIn.userId,
@@ -1598,19 +1601,7 @@ app.post('/auth/email', async (req, res) => {
       return;
     }
 
-    await withDatabase(async (connection) => {
-      await notePasswordUsed(connection, login.userId);
-
-      // The basket a guest built from this account comes back with the sign-in that
-      // owns it, rather than sitting held by a person nobody can log in as.
-      const adopted = await adoptGuestDrafts(connection, { userId: login.userId });
-
-      if (adopted > 0) {
-        console.log(
-          `Sign-in: ${adopted} held item${adopted === 1 ? '' : 's'} returned to the person who asked`
-        );
-      }
-    });
+    await withDatabase((connection) => notePasswordUsed(connection, login.userId));
     startPersonSession(req, {
       id: login.userId,
       provider: 'password',
@@ -1717,23 +1708,9 @@ app.post('/accounts/add', async (req, res) => {
   }
 
   try {
-    const outcome = await withDatabase(async (connection) => {
-      const linked = await linkAccountToUser(connection, { accountName, userId: user.id });
-
-      // Attaching the account a guest request was made from is the same event as signing
-      // in as its owner: the basket built then belongs to this person now.
-      if (linked !== 'conflict') {
-        const adopted = await adoptGuestDrafts(connection, { userId: user.id });
-
-        if (adopted > 0) {
-          console.log(
-            `Accounts: ${adopted} held item${adopted === 1 ? '' : 's'} returned to the person who asked`
-          );
-        }
-      }
-
-      return linked;
-    });
+    const outcome = await withDatabase((connection) =>
+      linkAccountToUser(connection, { accountName, userId: user.id })
+    );
 
     if (outcome === 'conflict') {
       sendPage(req, res, 409, {
@@ -1892,12 +1869,6 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
       })),
       { sourceFile, userId: user ? user.id : null }
     );
-
-    // An upload is the other way an ESO account becomes somebody's, so a basket made as
-    // a guest from that account follows it to this sign-in.
-    if (user) {
-      await adoptGuestDrafts(connection, { userId: user.id });
-    }
 
     return summary;
   });
