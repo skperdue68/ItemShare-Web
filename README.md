@@ -337,8 +337,20 @@ reserve creates no offer, no row and no request button.
 
 Visibility joins three tables: the item's guilds (`itemshare_shared_item_guilds`), the
 viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_guilds`).
-Nothing is readable without a guild overlap, so an account in no guilds sees nothing -
-and nothing is listed at all before a first upload.
+Nothing is readable without a guild overlap, so an account in no guilds sees nothing.
+
+The one exception is somebody who has signed in but has not uploaded yet. With no ESO
+account there are no guilds to compare, so their *Request* list is everything that is
+shared, by anybody, with no guild rule at all. What they cannot do is ask for any of it:
+the **Request** button is drawn disabled, and hovering it says why.
+
+> Upload ItemShareSavedVars.lua so we know who you are - you do not need to share
+> anything.
+
+Uploading is what makes requests possible, and an empty item list is a valid file - the
+upload only has to tell the site which accounts are theirs. A visitor who is not signed in
+at all still gets the sign-in card and no items. The request route refuses an account-less
+request on its own, so the disabled button is a courtesy rather than the only guard.
 
 The overlap is resolved per list: for the account you browse as in *Request*, and across
 every linked account in *Offering*.

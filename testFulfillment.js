@@ -27,6 +27,7 @@ import {
   getRequesterNotifications,
   getRequesterRequests,
   getSharedItemsForViewer,
+  getViewerFacets,
   issueRequestEmailToken,
   linkAccountToUser,
   recordFulfillment,
@@ -233,6 +234,28 @@ try {
     await getSharedItemsForViewer(connection, [ASKER])
   ).filter((row) => row.item_name === ITEM);
   const sharedItemId = Number(shared.id);
+
+  // Somebody signed in who has not uploaded yet: no guilds to compare, so the list is
+  // everything shared. They cannot ask for it - the request route refuses - but the read
+  // has to work, because an empty list is no reason to upload.
+  console.log('\n1b. A viewer with no account of their own still sees what is shared');
+  const guestItems = await getSharedItemsForViewer(connection, []);
+  ok(
+    'the shared row is listed without any account',
+    guestItems.map((row) => row.item_name),
+    [ITEM]
+  );
+  const guestFacets = await getViewerFacets(connection, []);
+  ok(
+    'the filter options come from the same list',
+    guestFacets.owners,
+    [...new Set(guestItems.map((row) => row.account_name))]
+  );
+  ok(
+    'and nothing is offered yet',
+    (await getAlwaysShareForViewer(connection, [])).length,
+    0
+  );
 
   console.log('\n2. The ask holds its copies before it is even sent');
   const requestId = await askFor(connection, askerId, sharedItemId, 3);

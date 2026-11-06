@@ -509,7 +509,12 @@ async function viewerAccountNames(req, connection, user) {
     await withDatabase(async (connection) => {
       const accountNames = await viewerAccountNames(req, connection, user);
 
-      if (accountNames.length === 0) {
+      // A signed-in person with no upload yet still gets the lists: they have no guilds to
+      // compare against, so they are shown everything that is shared, and the page draws
+      // every request button disabled. A visitor the site does not know at all is still
+      // shown nothing. Asking for an item is refused further down either way, because a
+      // request needs an ESO account to be credited to.
+      if (accountNames.length === 0 && !user) {
         return;
       }
 

@@ -2008,3 +2008,18 @@ th .sort-link {
   font-size: 12.5px;
   color: var(--muted);
 }
+
+/* A request button for somebody the site has no ESO account for: drawn, so the column
+   still reads as a column, and unpressable. The pointer is let through to the wrapper so
+   the explanation on its title is what the hover finds. */
+.request-gate {
+  display: inline-block;
+  cursor: not-allowed;
+}
+
+.request-gate .request-button,
+.request-gate .request-button:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
