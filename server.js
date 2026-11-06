@@ -78,8 +78,10 @@ import {
 } from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
+import { isSignInDisabled } from './lib/store.js';
 import {
   ACCOUNT_UNLINKED,
+  SIGN_IN_DISABLED,
   signOutOtherSessions,
   takeSignOutNotice,
 } from './lib/sessionNotice.js';
@@ -169,6 +171,48 @@ const sessionMiddleware = session({
   cookie: { httpOnly: true, sameSite: 'lax', secure: false, maxAge: SESSION_TTL_MS },
 });
 app.use(sessionMiddleware);
+
+// A sign-in that has been switched off must not keep working through a cookie handed out
+// before the decision. Asking on every signed-in request is what makes that true for every
+// way in - password, provider, reset link - without each of them having to remember, and it
+// is one primary-key read on a table the page is about to touch anyway.
+app.use(async (req, res, next) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user || !user.id) {
+    next();
+    return;
+  }
+
+  let disabled = false;
+
+  try {
+    disabled = (await withDatabase((connection) => isSignInDisabled(connection, user.id))) === true;
+  } catch (error) {
+    // A database that cannot answer is not a reason to throw everybody out; the page has
+    // its own card for that, and the session stays as it is until the database is back.
+    next();
+    return;
+  }
+
+  if (!disabled) {
+    next();
+    return;
+  }
+
+  // The same note every other ended session carries, so the page says what happened
+  // instead of quietly showing the front door.
+  req.session.user = null;
+  req.session.accountNames = null;
+  req.session.signOut = SIGN_IN_DISABLED;
+
+  if (req.path === '/') {
+    next();
+    return;
+  }
+
+  res.redirect(303, '/');
+});
 // A stylesheet taken from a browser cache written before the deploy is the difference
 // between green and red answer buttons and two grey boxes with no layout, so it is sent
 // with no-cache and revalidated on every page: unchanged costs a 304, changed is seen.
