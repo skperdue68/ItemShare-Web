@@ -1096,6 +1096,102 @@ ${guildedItems('@TestV3')}
     ['Ghastly Eye Bowl']
   );
 
+  console.log('\n17. Addon 1.10.7 keeps its reserve per location');
+
+  // The same Soul Gem link in three places, with 113 of the 400 in house storage 8 kept
+  // back. The reserve belongs to that stack, so the bank and bag stacks stay whole.
+  const soulGemLink = '|H0:item:33271:31:50:0:0:0:0:0:0:0:0:0:0:0:0:36:0:0:0:0:0|h|h';
+  const soulGemFile = (linkReserves) => `ItemShareSavedVars =
+{
+    ["Default"] =
+    {
+        ["@TestLoc"] =
+        {
+            ["$AccountWide"] =
+            {
+                ["schema"] = 4,
+                ["version"] = 4,
+                ["addonVersion"] = "1.10.7",
+                ["guilds"] = { ["813755"] = "Ghost Bane" },
+                ["characterGuilds"] =
+                {
+                    ["Aurielle Fairdew"] =
+                    {
+                        ["guildIds"] = { 813755 },
+                        ["updatedAt"] = 1793924974,
+                    },
+                },
+                ["reserves"] = ${linkReserves},
+                ["locationReserves"] = { ["${soulGemLink}||housestorage:8"] = 113 },
+                ["alwaysShare"] = { },
+                ["sharedItems"] =
+                {
+                    ["${soulGemLink}||bank"] =
+                    {
+                        ["itemName"] = "Soul Gem",
+                        ["itemLink"] = "${soulGemLink}",
+                        ["locationKey"] = "bank",
+                        ["sharedFrom"] = "Bank",
+                        ["characterName"] = "Aurielle Fairdew",
+                        ["heldCount"] = 1614,
+                    },
+                    ["${soulGemLink}||housestorage:8"] =
+                    {
+                        ["itemName"] = "Soul Gem",
+                        ["itemLink"] = "${soulGemLink}",
+                        ["locationKey"] = "housestorage:8",
+                        ["sharedFrom"] = "House Storage 8",
+                        ["characterName"] = "Aurielle Fairdew",
+                        ["heldCount"] = 400,
+                    },
+                    ["${soulGemLink}||inventory:aurielle fairdew"] =
+                    {
+                        ["itemName"] = "Soul Gem",
+                        ["itemLink"] = "${soulGemLink}",
+                        ["locationKey"] = "inventory:aurielle fairdew",
+                        ["sharedFrom"] = "Inventory (Aurielle Fairdew)",
+                        ["characterName"] = "Aurielle Fairdew",
+                        ["heldCount"] = 800,
+                    },
+                },
+            },
+        },
+    },
+}`;
+
+  const byLocation = (data) =>
+    data.items.map((entry) => [entry.locationKey, entry.reserveQuantity, entry.itemCount]);
+
+  ok('the location reserve is read from its own table', byLocation(extractShareData(soulGemFile('{ }'))), [
+    ['bank', 0, 1614],
+    ['housestorage:8', 113, 287],
+    ['inventory:aurielle fairdew', 0, 800],
+  ]);
+  ok(
+    'a reserve on the location wins over one on the item',
+    byLocation(extractShareData(soulGemFile(`{ ["${soulGemLink}"] = 7 }`))),
+    [
+      ['bank', 7, 1607],
+      ['housestorage:8', 113, 287],
+      ['inventory:aurielle fairdew', 7, 793],
+    ]
+  );
+
+  await storeFile('@TestLoc', extractShareData(soulGemFile('{ }')), 'ItemShareSavedVars.lua');
+  const [soulRows] = await connection.execute(
+    'SELECT location_key, item_count, reserve_quantity FROM itemshare_shared_items WHERE account_name = ? ORDER BY location_key',
+    ['@TestLoc']
+  );
+  ok(
+    'one location is short by its reserve and the others are whole',
+    soulRows.map((row) => [row.location_key, Number(row.item_count), Number(row.reserve_quantity)]),
+    [
+      ['bank', 1614, 0],
+      ['housestorage:8', 287, 113],
+      ['inventory:aurielle fairdew', 800, 0],
+    ]
+  );
+
   console.log(`\n${checks} checks passed. ${config.database} left in place for inspection.`);
   console.log('Drop it with: DROP DATABASE ' + config.database + ';');
 } catch (error) {
