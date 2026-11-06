@@ -791,12 +791,38 @@ app.post('/requests', async (req, res) => {
 
   try {
     const outcome = await withDatabase(async (connection) => {
-      const accountNames = await viewerAccountNames(req, connection, user);
+      let accountNames = await viewerAccountNames(req, connection, user);
+      // A person with nothing attached yet is asked for the account at the moment they
+      // need it, and the name is attached to their sign-in as the request is made, so
+      // this happens once. Refusing instead sent them off to upload a file first, which
+      // is how you share - not how the site knows who is asking.
+      let attachedNow = false;
 
       if (accountNames.length === 0) {
-        const error = new Error('Upload your own file first: an ESO account is needed to ask from.');
-        error.statusCode = 400;
-        throw error;
+        const typed = normalizeEsoAccountName(req.body && req.body.accountName);
+
+        if (!typed) {
+          const error = new Error(
+            'Say which ESO account you play, so the owner knows who is asking.'
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const link = await linkAccountToUser(connection, { accountName: typed, userId: user.id });
+
+        if (link === 'conflict') {
+          const error = new Error(
+            `${typed} is attached to another sign-in. Ask from the ESO account you play, or attach it from the avatar menu.`
+          );
+          error.statusCode = 409;
+          throw error;
+        }
+
+        accountNames = [typed];
+        attachedNow = true;
+        // The session copy was read before the link existed.
+        req.session.accountNames = null;
       }        // The list already shows only the chosen account's guilds; the request itself
         // has to be scoped the same way, and the chosen account is the recipient.
         const browsingAccount = browsingAccountFor(
@@ -817,7 +843,10 @@ app.post('/requests', async (req, res) => {
           // typed has no guilds on record to compare against, so the guild rule is not
           // applied to them. Applying it refused every item on the page they were
           // looking at. The owner still sees who asked and decides.
-          restrictToGuilds: user.provider !== 'guest',
+          // A name attached a moment ago has no guilds on record, and a guest never has
+          // any: the guild rule cannot be applied to either without refusing every row
+          // on the page they are looking at. The owner still sees who asked.
+          restrictToGuilds: user.provider !== 'guest' && !attachedNow,
         });
     });
 
