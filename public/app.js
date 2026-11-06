@@ -316,9 +316,14 @@ if (listRegion) {
       // One copy is not a choice. A stack of one, or the last copy of a bigger stack,
       // leaves exactly one possible answer, so the click sends it instead of opening a
       // dialog whose only option is "one". A standing offer is the same case.
+      //
+      // Except for somebody the site has not met: the dialog is the only place the ESO
+      // account and the address are asked for, so it opens even for one copy. Skipping it
+      // sent a request with no person behind it, and the answer was a toast telling them
+      // to say things they had never been asked.
       const available = Math.max(1, Number(requestButton.dataset.max) || 1);
 
-      if (available <= 1) {
+      if (available <= 1 && !document.body.dataset.guestRequest) {
         sendRequest({
           kind: requestButton.dataset.kind === 'offer' ? 'offer' : 'inventory',
           id: requestButton.dataset.id,
