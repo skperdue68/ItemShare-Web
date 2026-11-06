@@ -777,9 +777,10 @@ if (listRegion) {
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
-    // The first request from somebody who has not signed in carries the two things a
-    // request needs: the ESO account it is made from, and an address to answer. The
-    // server saves them against the session, so the second request asks nothing.
+    // The first request from somebody who has not signed in carries everything a request
+    // needs: the ESO account it is made from, an address to answer, and a password so the
+    // request can be found again later. Together they make a real account, so the second
+    // request asks nothing and the sign-in card lets them back in.
     const guestFields = document.body.dataset.guestRequest
       ? `
         <div class="guest-fields">
@@ -793,7 +794,12 @@ if (listRegion) {
             <input type="email" name="email" autocomplete="email" spellcheck="false"
                    maxlength="254" placeholder="you@example.com" required>
           </label>
-          <p class="auth-hint">Asked once: the request is made from that character, and the answer goes to that address.</p>
+          <label class="auth-field">
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="new-password"
+                   minlength="8" maxlength="200" required>
+          </label>
+          <p class="auth-hint">Asked once. These make an account: the request is made from that character, the answer goes to that address, and the password is how you sign back in to see it.</p>
         </div>`
       : '';
     backdrop.innerHTML = `
@@ -830,10 +836,11 @@ if (listRegion) {
       const limit = Math.max(1, dialogState ? dialogState.max : 1);
       const accountName = backdrop.querySelector('input[name="accountName"]');
       const email = backdrop.querySelector('input[name="email"]');
+      const password = backdrop.querySelector('input[name="password"]');
 
-      // Nothing is sent until both are there: the request would have no character to come
-      // from and no address to be answered at, and a 400 after closing the dialog is a
-      // worse way to learn that than the caret sitting in the empty box.
+      // Nothing is sent until all of it is there: the request would have no character to
+      // come from, no address to be answered at, and no way back in. A 400 after closing
+      // the dialog is a worse way to learn that than the caret in the empty box.
       if (accountName && !accountName.value.trim()) {
         accountName.focus();
         return;
@@ -844,6 +851,13 @@ if (listRegion) {
         return;
       }
 
+      // The browser's minlength only guards a form submit, and this is a button click, so
+      // the length the server will insist on is checked here too.
+      if (password && password.value.length < 8) {
+        password.focus();
+        return;
+      }
+
       const picked = {
         kind,
         id: button.dataset.id,
@@ -851,6 +865,7 @@ if (listRegion) {
         name,
         accountName: accountName ? accountName.value.trim() : '',
         email: email ? email.value.trim() : '',
+        password: password ? password.value : '',
       };
 
       closeRequestDialog();
@@ -917,7 +932,15 @@ if (listRegion) {
     }
   }
 
-  async function sendRequest({ kind, id, quantity, name, accountName = '', email = '' }) {
+  async function sendRequest({
+    kind,
+    id,
+    quantity,
+    name,
+    accountName = '',
+    email = '',
+    password = '',
+  }) {
     try {
       const payload = new URLSearchParams({ kind, id, quantity });
 
@@ -927,6 +950,10 @@ if (listRegion) {
 
       if (email) {
         payload.set('email', email);
+      }
+
+      if (password) {
+        payload.set('password', password);
       }
 
       const response = await fetch('/requests', {

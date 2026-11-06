@@ -394,26 +394,35 @@ Attaching a name is enough to ask for items - uploading is what tells the site w
 guilds that name is in, and with those known the list narrows to the guilds the browsing
 account belongs to.
 
+The list and the controls are on the page itself, in **Your ESO accounts**: every attached
+name has a **Remove** button of its own, and the box under the list attaches another. The
+avatar menu's **Add or remove ESO accounts** opens the same list, with each account's
+guilds, as a dialog.
+
 A visitor who is not signed in at all sees the same list, under the same hero, and can
-ask for any of it. **The first request asks for two things** - the ESO account name it is
-made from, and an email address to send the answer to - and the dialog sends them with
-the request. They make a person row exactly like a password sign-up does, so the basket,
-the request history, the owner's notification and the answer email all behave the same;
-the session remembers them, so every later request asks nothing.
+ask for any of it. **The first request asks for three things** - the ESO account name it
+is made from, an email address to send the answer to, and a password - and the dialog
+sends them with the request. The password is what makes it an account rather than a
+one-off row: the identity and password it writes are exactly what the sign-up form
+writes, so the email sign-in card lets the same person back in later with the same
+basket, requests and attached ESO account. The session remembers them in the meantime,
+so every later request asks nothing.
 
 A guest's request is **not** held to the guild rule. The account name they typed has no
 guild membership on record, they were shown everything that is shared, and a Request
 button the server then refuses is worse than a request the owner can decline. The owner's
 email names the account and the address, so the decision stays with the owner.
 
-Two things follow from that, and both are deliberate. The address is **unverified**: the
+Three things follow from that, and all are deliberate. The address is **unverified**: the
 answer email is a link with a token, so an address typed by mistake means the answer is
-never read, and an address typed on purpose means somebody else receives it. And an
-anonymous first request creates a person, so new guest people are limited to five an hour
-per connection - an in-memory counter, cleared by a restart - because otherwise the form
-would be a way to make the site send mail to strangers. If the named ESO account already
-belongs to another sign-in, the request is refused rather than filed under somebody
-else's character.
+never read, and an address typed on purpose means somebody else receives it - which is
+why an address that already signs in with a password is refused instead of adopted,
+rather than letting a stranger type their way into somebody else's requests. An anonymous
+first request also creates a person, so new guest people are limited to five an hour per
+connection - an in-memory counter, cleared by a restart - because otherwise the form
+would be a way to make the site send mail to strangers. And if the named ESO account
+already belongs to another sign-in, the request is refused rather than filed under
+somebody else's character.
 
 The two tabs that only make sense for somebody with items and requests of their own
 (**Offering** and **Your requests**) are not drawn for a visitor, so the page offers the
