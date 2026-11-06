@@ -12,8 +12,9 @@
 // `itemshare_passwords`, scrypt with a per-password salt and the cost inside the string.
 // Nothing about the stored format changes, and no password is ever printed or logged.
 //
-// Sessions already signed in are left alone: the site keeps them in the session store,
-// so resetting a password does not sign anybody out.
+// Every session that person has is ended right after the new hash is written, and each of
+// those devices is told why on its next page (lib/sessionNotice.js). A password that changes
+// while somebody else is still signed in has not taken the account back.
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
