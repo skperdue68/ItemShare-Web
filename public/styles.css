@@ -2023,3 +2023,117 @@ th .sort-link {
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ------------------------------------------------ email sign-in and ESO accounts */
+/* The email form sits under the OAuth buttons and is the way in that needs nothing
+   configured. It is one column, in the same width as the buttons above it. */
+.auth-panel {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  margin: 22px 0 6px;
+}
+
+.auth-email {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  text-align: left;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--muted-strong);
+}
+
+.auth-field input {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: rgba(8, 18, 42, 0.55);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--accent-top);
+  box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
+}
+
+.auth-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.auth-signup summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted-strong);
+}
+
+.auth-signup summary:hover {
+  color: var(--text);
+}
+
+.auth-signup[open] summary {
+  margin-bottom: 12px;
+}
+
+/* One row per attached ESO account, Remove at the bottom of the row, the add box under
+   the list. The dialog is the only place accounts are managed. */
+.account-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.account-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.account-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-row-name {
+  font-weight: 600;
+}
+
+.account-row-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.account-row-guilds .chips {
+  margin-top: 6px;
+}
+
+.account-remove {
+  flex: 0 0 auto;
+}
+
+.account-add {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  max-width: 360px;
+}
