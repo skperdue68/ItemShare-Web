@@ -52,6 +52,7 @@ import {
   submitDrafts,
 } from './lib/store.js';
 import {
+  claimHoldsForOwnedAccounts,
   createGuestPerson,
   createPasswordAccount,
   detachAccountFromUser,
@@ -550,11 +551,36 @@ async function viewerAccountNames(req, connection, user) {
         // for Offering, where nothing a second account shares should disappear.
         const requestScope = data.browsingAccount ? [data.browsingAccount] : accountNames;
 
+        // The basket note on a row is read by person, not by the account the row belongs
+        // to, so the signed-in person's id is what has to go down to the list.
+        const viewerUserId = user ? user.id : 0;
+
         data.facets = await getViewerFacets(connection, requestScope);
-        data.sharedItems = await getSharedItemsForViewer(connection, accountNames, filters);
-        data.requestItems = await getSharedItemsForViewer(connection, requestScope, filters);
+        data.sharedItems = await getSharedItemsForViewer(connection, accountNames, {
+          ...filters,
+          viewerUserId,
+        });
+        data.requestItems = await getSharedItemsForViewer(connection, requestScope, {
+          ...filters,
+          viewerUserId,
+        });
         data.alwaysShare = await getAlwaysShareForViewer(connection, accountNames, filters);
         data.requestOffers = await getAlwaysShareForViewer(connection, requestScope, filters);
+      // A hold follows the account it was asked from. Reading the basket without this
+      // leaves the state the item list already complains about: a copy held by a person
+      // this sign-in is not, with nothing to send and nothing to cancel. It runs on a
+      // page load because that is what happens after every sign-in, account change and
+      // upload, and it matches nothing at all once the state is right.
+      if (user) {
+        const claimed = await claimHoldsForOwnedAccounts(connection, { userId: user.id });
+
+        if (claimed > 0) {
+          console.log(
+            `Basket: ${claimed} held item${claimed === 1 ? '' : 's'} returned to the account owner`
+          );
+        }
+      }
+
       data.requests = user ? await getRequesterRequests(connection, user.id) : [];
       data.basketRows = user ? await getBasketRows(connection, user.id) : [];
       data.basket = user
@@ -1832,7 +1858,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
       }
     }
 
-    return replaceAccounts(
+    const summary = await replaceAccounts(
       connection,
       parsed.accounts.map((accountName) => ({
         accountName,
@@ -1843,6 +1869,8 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
       })),
       { sourceFile, userId: user ? user.id : null }
     );
+
+    return summary;
   });
 
   // The rows are committed, so the new list is real. Announce it before the icon
