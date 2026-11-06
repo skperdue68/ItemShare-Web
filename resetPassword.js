@@ -100,6 +100,36 @@ export async function findPasswordAccount(connection, email) {
 }
 
 /**
+ * Ends every signed-in session this person has.
+ *
+ * Sessions are JSON rows in itemshare_sessions with the person under `user.id`, so the id
+ * is read out of the JSON rather than kept in a column of its own: no migration, and no
+ * second copy of the answer to disagree with the session itself. A password reset is how
+ * somebody takes an account back, so a session that was already open must not stay open -
+ * otherwise whoever knew the old password keeps their access.
+ *
+ * The website path does the same thing inside `consumePasswordReset` (lib/store.js), in
+ * the same transaction as the new hash.
+ *
+ * @returns {Promise<number>} how many sessions were ended
+ */
+export async function signOutEverywhere(connection, userId) {
+  const id = Number(userId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return 0;
+  }
+
+  const [result] = await connection.execute(
+    `DELETE FROM itemshare_sessions
+      WHERE CAST(JSON_EXTRACT(session_data, '$.user.id') AS UNSIGNED) = ?`,
+    [id]
+  );
+
+  return Number(result?.affectedRows) || 0;
+}
+
+/**
  * Writes one hash for one person. The identity row is what the sign-in reads, so this is
  * the whole reset: no other table records a password.
  */
@@ -294,6 +324,13 @@ async function main() {
       result.created
         ? `Created the password for #${result.userId}.`
         : `Replaced the password for #${result.userId}.`
+    );
+    const ended = await signOutEverywhere(connection, account.userId);
+
+    console.log(
+      ended === 0
+        ? 'No signed-in session was open for them.'
+        : `Signed out ${ended} active session${ended === 1 ? '' : 's'}.`
     );
     console.log('They can sign in with the address above and the new password.');
 
