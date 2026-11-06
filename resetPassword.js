@@ -108,6 +108,10 @@ export async function findPasswordAccount(connection, email) {
  * somebody takes an account back, so a session that was already open must not stay open -
  * otherwise whoever knew the old password keeps their access.
  *
+ * The row is stamped rather than deleted: the person is taken out of it and a note saying
+ * why is left behind, so each of those devices can be told what happened instead of
+ * arriving at the front page as a stranger (lib/sessionNotice.js).
+ *
  * The website path does the same thing inside `consumePasswordReset` (lib/store.js), in
  * the same transaction as the new hash.
  *
@@ -120,10 +124,20 @@ export async function signOutEverywhere(connection, userId) {
     return 0;
   }
 
+  // A day is long enough for a device to be picked up and looked at, and short enough that
+  // the row is only a note by the time anybody would care about it. A cookie outliving it
+  // means the page stops explaining, never that access comes back.
+  const stampedUntil = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+
   const [result] = await connection.execute(
-    `DELETE FROM itemshare_sessions
+    `UPDATE itemshare_sessions
+        SET session_data = JSON_REMOVE(
+              JSON_SET(session_data, '$.signOut', 'password-changed'),
+              '$.user', '$.accountNames'
+            ),
+            expires_at = LEAST(expires_at, ?)
       WHERE CAST(JSON_EXTRACT(session_data, '$.user.id') AS UNSIGNED) = ?`,
-    [id]
+    [stampedUntil, id]
   );
 
   return Number(result?.affectedRows) || 0;
@@ -330,7 +344,7 @@ async function main() {
     console.log(
       ended === 0
         ? 'No signed-in session was open for them.'
-        : `Signed out ${ended} active session${ended === 1 ? '' : 's'}.`
+        : `Signed out ${ended} active session${ended === 1 ? '' : 's'}; each device is told why on its next page.`
     );
     console.log('They can sign in with the address above and the new password.');
 
