@@ -2137,3 +2137,35 @@ th .sort-link {
   margin-top: 16px;
   max-width: 360px;
 }
+
+/* The divider between the OAuth buttons and the email form: one line, the word OR, and
+   nothing else competing with the buttons on either side of it. */
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.auth-or::before,
+.auth-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+/* The two boxes a guest fills in once, inside the request dialog. */
+.guest-fields {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 6px;
+}
+
+.guest-fields .auth-field input {
+  width: 100%;
+}
