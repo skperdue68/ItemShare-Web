@@ -316,18 +316,17 @@ it is a reading preference kept in a cookie, which keeps links clean and stops o
 person's sorting being handed to whoever opens their link.
 
 An owner can keep part of a stack back in game with a *share reserve*. The addon writes
-reserves into their own tables beside the item list rather than inside the item, and which
-table says how wide the reserve is:
+the reserve into `locationReserves` beside the item list rather than inside the item,
+keyed by the item link and the location it was set in - `link||locationKey`. That is the
+only reserve layout read: holding back 113 of the 400 soul gems in house storage 8 leaves
+the 800 in the bag and the 1614 in the bank alone, and the same item in three places is
+three rows of which only the one the reserve was set on is short.
 
-- `locationReserves` (addon 1.10.7 on) is keyed by the item link and the location it was
-  set in - `link||locationKey` - so holding back 113 of the 400 soul gems in house storage
-  8 leaves the 800 in the bag and the 1614 in the bank alone. The same item in three
-  places is three rows, and only the one the reserve was set on is short.
-- `reserves` is keyed by the link alone, which is what older schema 4 files carry. It
-  covers that item wherever it is, which is right for a file sharing one stack of it.
+The older `reserves` table, keyed by the link alone, is not a fallback for this. A file
+carrying only that is a file the addon no longer writes, so its reserve is ignored and no
+stack is reduced - exactly as the v2 guild tables are ignored rather than guessed at.
 
-A location reserve wins over one on the spare link, because it is the narrower match.
-Either way the reserve is applied before storing: `item_count` is what is really being
+The reserve is applied before storing: `item_count` is what is really being
 offered (400 held less 113 kept back is 287 shared), and the reserve itself is kept so it
 can be shown as a small amber note under the item name (`keeping 113 back of 400`). A
 stack offering 8 does not look like an owner who only has 8.

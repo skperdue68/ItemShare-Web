@@ -997,8 +997,8 @@ ${guildedItems('@TestV3')}
   console.log('\n16. A schema 4 file keeps its reserve in its own table');
 
   // The shape the addon writes now: no `count` and no `reserve` on the entry, the amount
-  // kept back in a `reserves` table keyed by link, and an always-shared item that is not
-  // repeated in `sharedItems`.
+  // kept back in `locationReserves` keyed by link and location, and an always-shared item
+  // that is not repeated in `sharedItems`.
   const v4File = `ItemShareSavedVars =
 {
   ["Default"] =
@@ -1011,7 +1011,11 @@ ${guildedItems('@TestV3')}
         ["schema"] = 4,
         ["addonVersion"] = "1.10.1",
         ["guilds"] = { ["9301"] = "Reserve Guild" },
-        ["reserves"] = { ["|H0:item:57151:154|h|h"] = 5, ["|H0:item:424242:1|h|h"] = 3 },
+        ["locationReserves"] =
+        {
+          ["|H0:item:57151:154|h|h||bank"] = 5,
+          ["|H0:item:424242:1|h|h||bank"] = 3,
+        },
         ["characterGuilds"] =
         {
           ["Tester"] =
@@ -1049,7 +1053,7 @@ ${guildedItems('@TestV3')}
   const v4 = extractShareData(v4File);
   const [reservedStack] = v4.items;
 
-  ok('the reserve table is matched by item link', reservedStack.reserveQuantity, 5);
+  ok('the reserve is matched by item link and location', reservedStack.reserveQuantity, 5);
   // The second reserve belongs to an item that is not being shared at all. Holding some
   // back is not the same as offering the rest, so it must not become a row.
   ok('a reserve on its own shares nothing', v4.items.length, 1);
@@ -1101,7 +1105,7 @@ ${guildedItems('@TestV3')}
   // The same Soul Gem link in three places, with 113 of the 400 in house storage 8 kept
   // back. The reserve belongs to that stack, so the bank and bag stacks stay whole.
   const soulGemLink = '|H0:item:33271:31:50:0:0:0:0:0:0:0:0:0:0:0:0:36:0:0:0:0:0|h|h';
-  const soulGemFile = (linkReserves) => `ItemShareSavedVars =
+  const soulGemFile = (linkReserves, locationReserves = `{ ["${soulGemLink}||housestorage:8"] = 113 }`) => `ItemShareSavedVars =
 {
     ["Default"] =
     {
@@ -1122,7 +1126,7 @@ ${guildedItems('@TestV3')}
                     },
                 },
                 ["reserves"] = ${linkReserves},
-                ["locationReserves"] = { ["${soulGemLink}||housestorage:8"] = 113 },
+                ["locationReserves"] = ${locationReserves},
                 ["alwaysShare"] = { },
                 ["sharedItems"] =
                 {
@@ -1167,13 +1171,15 @@ ${guildedItems('@TestV3')}
     ['housestorage:8', 113, 287],
     ['inventory:aurielle fairdew', 0, 800],
   ]);
+  // The older link-only table is not a fallback: a file that carries only that keeps
+  // nothing back, rather than having its reserve guessed at for every stack.
   ok(
-    'a reserve on the location wins over one on the item',
-    byLocation(extractShareData(soulGemFile(`{ ["${soulGemLink}"] = 7 }`))),
+    'an older link-only reserve is ignored',
+    byLocation(extractShareData(soulGemFile(`{ ["${soulGemLink}"] = 7 }`, '{ }'))),
     [
-      ['bank', 7, 1607],
-      ['housestorage:8', 113, 287],
-      ['inventory:aurielle fairdew', 7, 793],
+      ['bank', 0, 1614],
+      ['housestorage:8', 0, 400],
+      ['inventory:aurielle fairdew', 0, 800],
     ]
   );
 
