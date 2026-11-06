@@ -382,9 +382,10 @@ unrestricted instead of empty:
 the addon has not been asked yet - only an upload can say which guilds an account is in.
 
 Both see everything that is shared, by anybody. Asking is a separate question, decided by
-what is linked: with no ESO account the **Request** button is drawn disabled and hovering
-it says why, and the request route refuses an account-less ask on its own, so the
-disabled button is a courtesy rather than the only guard.
+what the request is made from rather than by what is visible: a visitor is asked for an
+ESO account name and an address the first time and that makes them a person, and somebody
+signed in without an account is told to attach one - the request route refuses neither in
+silence, and `POST /requests` refuses a guest that names no account and no address.
 
 > Upload ItemShareSavedVars.lua so we know who you are - you do not need to share
 > anything.
@@ -393,12 +394,26 @@ Attaching a name is enough to ask for items - uploading is what tells the site w
 guilds that name is in, and with those known the list narrows to the guilds the browsing
 account belongs to.
 
-A visitor who is not signed in at all sees the same list, under the same hero, and the
-hover on every request button reads *Sign in to ask for this - reading the list is free*.
+A visitor who is not signed in at all sees the same list, under the same hero, and can
+ask for any of it. **The first request asks for two things** - the ESO account name it is
+made from, and an email address to send the answer to - and the dialog sends them with
+the request. They make a person row exactly like a password sign-up does, so the basket,
+the request history, the owner's notification and the answer email all behave the same;
+the session remembers them, so every later request asks nothing.
+
+Two things follow from that, and both are deliberate. The address is **unverified**: the
+answer email is a link with a token, so an address typed by mistake means the answer is
+never read, and an address typed on purpose means somebody else receives it. And an
+anonymous first request creates a person, so new guest people are limited to five an hour
+per connection - an in-memory counter, cleared by a restart - because otherwise the form
+would be a way to make the site send mail to strangers. If the named ESO account already
+belongs to another sign-in, the request is refused rather than filed under somebody
+else's character.
+
 The two tabs that only make sense for somebody with items and requests of their own
-(**Offering** and **Your requests**) are not drawn for them, so the page offers the one
-list that applies. Nothing is hidden for effect: the list is real, and reading it is the
-reason the sign-in card sits above it rather than in front of it.
+(**Offering** and **Your requests**) are not drawn for a visitor, so the page offers the
+one list that applies. Nothing is hidden for effect: the list is real, and reading it is
+the reason the sign-in card sits above it rather than in front of it.
 
 The overlap is resolved per list: for the account you browse as in *Request*, and across
 every linked account in *Offering*.

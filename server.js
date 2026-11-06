@@ -52,6 +52,7 @@ import {
   submitDrafts,
 } from './lib/store.js';
 import {
+  createGuestPerson,
   createPasswordAccount,
   detachAccountFromUser,
   findPasswordLogin,
@@ -629,16 +630,103 @@ app.get('/items', async (req, res) => {    const data = await collectViewerData(
 
 // Asking for an item. The quantity is picked in a dialog, so this answers in JSON
 // and the page refreshes its own lists; the socket tells everyone else.
-app.post('/requests', async (req, res) => {
-  const user = req.session ? req.session.user || null : null;
+//
+// Signing in is not required to ask. The first request from somebody the site has never
+// met carries the two things a request actually needs - the ESO account it is made from
+// and an address to send the answer to - and those are enough to make a person. The
+// session remembers it, so the second request asks nothing.
 
-  if (enabledProviders.length > 0 && !user) {
-    res.status(401).json({ error: 'Sign in before asking for an item.' });
-    return;
+// Anonymous requests are the one way this site could be used to send mail to people who
+// never asked for it, so new guest people are counted per connection: more than anybody
+// needs, far fewer than a script wants. In memory on purpose - a restart clearing it
+// costs nothing, and the alternative is another table nobody reads.
+const GUEST_PER_HOUR = 5;
+const GUEST_WINDOW_MS = 60 * 60 * 1000;
+const guestWindows = new Map();
+
+function guestRequestAllowed(key, now = Date.now()) {
+  const cutoff = now - GUEST_WINDOW_MS;
+  const hits = (guestWindows.get(key) || []).filter((at) => at > cutoff);
+
+  if (hits.length >= GUEST_PER_HOUR) {
+    guestWindows.set(key, hits);
+    return false;
   }
+
+  hits.push(now);
+  guestWindows.set(key, hits);
+
+  if (guestWindows.size > 5000) {
+    for (const [entry, times] of guestWindows) {
+      if (times.every((at) => at <= cutoff)) {
+        guestWindows.delete(entry);
+      }
+    }
+  }
+
+  return true;
+}
+
+async function makeGuestPerson({ accountName, email }) {
+  return withDatabase(async (connection) => {
+    // The name shown and put in live-update text is the ESO account, never the address:
+    // the address is the one thing on this site that must not reach anybody else.
+    const person = await createGuestPerson(connection, {
+      email,
+      accountName,
+      displayName: accountName,
+    });
+
+    if (!person.created) {
+      const error = new Error(
+        `${accountName} is attached to a different sign-in. Sign in with that account, or ask from the ESO account name you play.`
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    return {
+      id: person.userId,
+      provider: 'guest',
+      providerLabel: 'a guest request',
+      username: accountName,
+      email,
+      emailVerified: false,
+      avatarUrl: '',
+    };
+  });
+}
+
+app.post('/requests', async (req, res) => {
+  let user = req.session ? req.session.user || null : null;
+
   if (!user) {
-    res.status(400).json({ error: 'Requests need a signed-in account, or nobody would know who asked.' });
-    return;
+    const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
+    const email = normalizeEmail(req.body && req.body.email);
+
+    if (!accountName || !emailLooksValid(email)) {
+      res.status(400).json({
+        error: 'Say which ESO account you play and where to send the answer.',
+        needsGuest: true,
+      });
+      return;
+    }
+
+    if (!guestRequestAllowed(req.ip || req.socket.remoteAddress || 'unknown')) {
+      res.status(429).json({
+        error: 'That is a lot of requests from this connection. Try again in an hour.',
+      });
+      return;
+    }
+
+    try {
+      user = await makeGuestPerson({ accountName, email });
+      req.session.user = user;
+      req.session.accountNames = null;
+    } catch (error) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+      return;
+    }
   }
 
   const itemKind = req.body.kind === 'offer' ? 'offer' : 'inventory';

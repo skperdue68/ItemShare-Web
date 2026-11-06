@@ -772,10 +772,30 @@ if (listRegion) {
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
+    // The first request from somebody who has not signed in carries the two things a
+    // request needs: the ESO account it is made from, and an address to answer. The
+    // server saves them against the session, so the second request asks nothing.
+    const guestFields = document.body.dataset.guestRequest
+      ? `
+        <div class="guest-fields">
+          <label class="auth-field">
+            <span>ESO account name</span>
+            <input type="text" name="accountName" autocomplete="off" spellcheck="false"
+                   maxlength="96" placeholder="@YourAccountName" required>
+          </label>
+          <label class="auth-field">
+            <span>Email address</span>
+            <input type="email" name="email" autocomplete="email" spellcheck="false"
+                   maxlength="254" placeholder="you@example.com" required>
+          </label>
+          <p class="auth-hint">Asked once: the request is made from that character, and the answer goes to that address.</p>
+        </div>`
+      : '';
     backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
         <h2 id="requestTitle">Ask for ${escapeText(name)}</h2>
         <p class="muted" data-dialog-summary>${escapeText(dialogSummary(state))}</p>
+        ${guestFields}
         <div class="modal-actions">
           <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
           <button class="request-button" type="button" data-ask-one>Request 1</button>
@@ -803,11 +823,29 @@ if (listRegion) {
     // a kind of answer before they could give one.
     const ask = (which) => {
       const limit = Math.max(1, dialogState ? dialogState.max : 1);
+      const accountName = backdrop.querySelector('input[name="accountName"]');
+      const email = backdrop.querySelector('input[name="email"]');
+
+      // Nothing is sent until both are there: the request would have no character to come
+      // from and no address to be answered at, and a 400 after closing the dialog is a
+      // worse way to learn that than the caret sitting in the empty box.
+      if (accountName && !accountName.value.trim()) {
+        accountName.focus();
+        return;
+      }
+
+      if (email && !email.value.trim()) {
+        email.focus();
+        return;
+      }
+
       const picked = {
         kind,
         id: button.dataset.id,
         quantity: which === 'stack' ? limit : 1,
         name,
+        accountName: accountName ? accountName.value.trim() : '',
+        email: email ? email.value.trim() : '',
       };
 
       closeRequestDialog();
@@ -874,18 +912,34 @@ if (listRegion) {
     }
   }
 
-  async function sendRequest({ kind, id, quantity, name }) {
+  async function sendRequest({ kind, id, quantity, name, accountName = '', email = '' }) {
     try {
+      const payload = new URLSearchParams({ kind, id, quantity });
+
+      if (accountName) {
+        payload.set('accountName', accountName);
+      }
+
+      if (email) {
+        payload.set('email', email);
+      }
+
       const response = await fetch('/requests', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ kind, id, quantity }),
+        body: payload,
       });
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(result.error || `That request failed with status ${response.status}`);
+      }
+
+      // The first request made them a person, so the page stops asking: the fields were
+      // only ever for somebody the site had never met.
+      if (document.body.dataset.guestRequest) {
+        delete document.body.dataset.guestRequest;
       }
 
       // Asking again for something already in the basket tops that row up, so the
