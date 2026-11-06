@@ -391,8 +391,14 @@ disabled button is a courtesy rather than the only guard.
 
 Attaching a name is enough to ask for items - uploading is what tells the site which
 guilds that name is in, and with those known the list narrows to the guilds the browsing
-account belongs to. A visitor who is not signed in at all still gets the sign-in card and
-no items.
+account belongs to.
+
+A visitor who is not signed in at all sees the same list, under the same hero, and the
+hover on every request button reads *Sign in to ask for this - reading the list is free*.
+The two tabs that only make sense for somebody with items and requests of their own
+(**Offering** and **Your requests**) are not drawn for them, so the page offers the one
+list that applies. Nothing is hidden for effect: the list is real, and reading it is the
+reason the sign-in card sits above it rather than in front of it.
 
 The overlap is resolved per list: for the account you browse as in *Request*, and across
 every linked account in *Offering*.
