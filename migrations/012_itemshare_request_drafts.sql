@@ -15,9 +15,11 @@
 -- basket pushes every one of that person's drafts to the same new time, so the
 -- countdown on screen is one number instead of one per row.
 
+-- IF NOT EXISTS: a migration is recorded only after every statement in it has run, so
+-- a startup interrupted here is retried with these columns already in place.
 ALTER TABLE itemshare_requests
-  ADD COLUMN expires_at DATETIME NULL DEFAULT NULL AFTER status,
-  ADD COLUMN submitted_at DATETIME NULL DEFAULT NULL AFTER expires_at;
+  ADD COLUMN IF NOT EXISTS expires_at DATETIME NULL DEFAULT NULL AFTER status,
+  ADD COLUMN IF NOT EXISTS submitted_at DATETIME NULL DEFAULT NULL AFTER expires_at;
 
 -- 'draft' is the new first state, 'expired' is why a draft died. Rows written
 -- before this migration keep their status; nothing is rewritten here.
@@ -29,4 +31,4 @@ ALTER TABLE itemshare_requests
 -- The sweeper's query is `status = 'draft' AND expires_at <= NOW()`, and the
 -- reserving queries all filter on the same pair.
 ALTER TABLE itemshare_requests
-  ADD KEY idx_itemshare_requests_expiry (status, expires_at);
+  ADD INDEX IF NOT EXISTS idx_itemshare_requests_expiry (status, expires_at);
