@@ -24,6 +24,7 @@ import {
   getAlwaysShareForViewer,
   getFulfillForm,
   getOwnerRequests,
+  getRequesterNotifications,
   getRequesterRequests,
   getSharedItemsForViewer,
   issueRequestEmailToken,
@@ -311,6 +312,21 @@ try {
     row.status_reason,
   ]), [['fulfilled', 2, 3, '2 of 3 sent']]);
 
+  // What the answer email is built from: one address per person, and the outcome of
+  // each row as it was recorded, not as it was asked for.
+  const notices = await getRequesterNotifications(connection, [requestId]);
+  ok(
+    'the person who asked can be told what became of it',
+    notices.map((row) => [row.email, row.status, row.sent, row.asked]),
+    [['asker@test.invalid', 'fulfilled', 2, 3]]
+  );
+  ok(
+    'and the message can name where the item came from',
+    notices.map((row) => [row.ownerAccount, row.itemName]),
+    [[OWNER, ITEM]]
+  );
+  ok('no answered rows means nobody to tell', (await getRequesterNotifications(connection, [])).length, 0);
+
   ok(
     'answering the same form again changes nothing',
     await recordFulfillment(connection, { token, sentById: new Map([[requestId, 3]]) }),
@@ -359,6 +375,13 @@ try {
 
   const cancelledHistory = await getRequesterRequests(connection, askerId);
   ok('the requester sees it cancelled', cancelledHistory[0].status, 'cancelled');
+
+  const cancelledNotices = await getRequesterNotifications(connection, [cancelledId]);
+  ok(
+    'a cancellation is addressed to the asker as well',
+    cancelledNotices.map((row) => [row.status, row.sent, row.asked]),
+    [['cancelled', 4, 4]]
+  );
   ok(
     'with the owner\'s reason on it',
     String(cancelledHistory[0].status_reason).includes('nothing to send'),
