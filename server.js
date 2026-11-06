@@ -23,6 +23,8 @@ import { backfillItemIcons } from './lib/iconBackfill.js';
 import {
   DEFAULT_HOLD_MINUTES,
   cancelOwnRequest,
+  createPasswordReset,
+  consumePasswordReset,
   createRequest,
   expireDueDrafts,
   fillKnownIcons,
@@ -58,9 +60,11 @@ import {
   detachAccountFromUser,
   findPasswordLogin,
   notePasswordUsed,
+  RESET_TOKEN_MINUTES,
 } from './lib/store.js';
 import { filterList } from './lib/filters.js';
 import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from './lib/email.js';
+import { renderPasswordResetEmail } from './lib/passwordResetEmail.js';
 import { getItemTip } from './lib/uesp.js';
 import { buildProviders } from './lib/providers.js';
 import { normalizeEsoAccountName } from './lib/accountNames.js';
@@ -77,6 +81,8 @@ import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
   renderListRegion,
   renderMessagePage,
+  renderForgotPasswordPage,
+  renderResetPasswordPage,
   renderOwnerRequestsCard,
   renderOwnerRequestsPage,
   renderPage,
@@ -1672,6 +1678,216 @@ app.post('/auth/email/signup', async (req, res) => {
     sendPage(req, res, 500, {
       heading: 'That account could not be made',
       message: 'Nothing was saved. Try again in a moment.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+// --------------------------------------------------------- forgotten passwords
+//
+// The way back in when the password is gone: a link by mail, one use, thirty minutes.
+//
+// The form answers the same thing whether or not the address has an account here,
+// because a form that answers differently is a way of finding out which addresses are
+// registered. The same reason keeps the mail itself plain: one link and how long it
+// lasts. `RESET_PER_HOUR` bounds the mail one connection can cause, in memory, the same
+// way the guest window above does.
+const RESET_PER_HOUR = 5;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
+const resetWindows = new Map();
+const RESET_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
+
+function resetRequestAllowed(key, now = Date.now()) {
+  const cutoff = now - RESET_WINDOW_MS;
+  const hits = (resetWindows.get(key) || []).filter((at) => at > cutoff);
+
+  if (hits.length >= RESET_PER_HOUR) {
+    resetWindows.set(key, hits);
+    return false;
+  }
+
+  hits.push(now);
+  resetWindows.set(key, hits);
+
+  if (resetWindows.size > 5000) {
+    for (const [entry, times] of resetWindows) {
+      if (times.every((at) => at <= cutoff)) {
+        resetWindows.delete(entry);
+      }
+    }
+  }
+
+  return true;
+}
+
+app.get('/auth/email/forgot', (req, res) => {
+  res.type('html').send(
+    renderForgotPasswordPage({
+      user: req.session ? req.session.user || null : null,
+      providers: enabledProviders,
+    })
+  );
+});
+
+app.post('/auth/email/forgot', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+
+  if (!emailLooksValid(email)) {
+    res.status(400).type('html').send(
+      renderForgotPasswordPage({
+        user: req.session ? req.session.user || null : null,
+        providers: enabledProviders,
+        notice: 'That does not look like an email address.',
+      })
+    );
+    return;
+  }
+
+  if (!resetRequestAllowed(req.ip || req.socket.remoteAddress || 'unknown')) {
+    sendPage(req, res, 429, {
+      heading: 'That is a lot of reset links',
+      message: 'Try again in an hour.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const reset = await withDatabase((connection) => createPasswordReset(connection, email));
+
+    if (reset) {
+      const config = emailConfig();
+      const resetUrl = config.siteUrl
+        ? `${config.siteUrl}/auth/email/reset/${reset.token}`
+        : `/auth/email/reset/${reset.token}`;
+
+      if (!config.siteUrl) {
+        console.warn(
+          'Email: BASE_URL is not set, so the reset link in the message is relative and will not work from a mail client'
+        );
+      }
+
+      const message = renderPasswordResetEmail({
+        resetUrl,
+        siteUrl: config.siteUrl,
+        expiresMinutes: RESET_TOKEN_MINUTES,
+        displayName: reset.displayName,
+      });
+
+      const result = await sendEmail({ to: reset.email || email, ...message }, config);
+
+      if (!result.ok) {
+        console.warn(`Email: could not send a reset link: ${result.error}`);
+      }
+    }
+
+    sendPage(req, res, 200, {
+      heading: 'Check your email',
+      message: 'If that address has an account here, a link to choose a new password is on its way.',
+      details: `The link works once and expires in ${RESET_TOKEN_MINUTES} minutes. Nothing changes until it is used.`,
+    });
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That link could not be sent',
+      message: 'Nothing was changed. Try again in a moment.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.get('/auth/email/reset/:token', (req, res) => {
+  const token = String(req.params.token || '');
+  // The token is in the address bar, so this page must not hand it on in a Referer.
+  res.set('Referrer-Policy', 'no-referrer');
+
+  if (!RESET_TOKEN_PATTERN.test(token)) {
+    sendPage(req, res, 404, {
+      heading: 'That link is not a reset link',
+      message: 'The address is incomplete, so there is no password to change here.',
+      details: 'Ask for a new link from the sign-in page.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  res.type('html').send(
+    renderResetPasswordPage({
+      token,
+      user: req.session ? req.session.user || null : null,
+      providers: enabledProviders,
+    })
+  );
+});
+
+app.post('/auth/email/reset/:token', async (req, res) => {
+  const token = String(req.params.token || '');
+  res.set('Referrer-Policy', 'no-referrer');
+
+  const password = String((req.body && req.body.password) || '');
+  const confirm = String((req.body && req.body.confirm) || '');
+
+  const again = (notice) =>
+    res.status(400).type('html').send(
+      renderResetPasswordPage({
+        token,
+        user: req.session ? req.session.user || null : null,
+        providers: enabledProviders,
+        notice,
+      })
+    );
+
+  if (!RESET_TOKEN_PATTERN.test(token)) {
+    sendPage(req, res, 404, {
+      heading: 'That link is not a reset link',
+      message: 'The address is incomplete, so there is no password to change here.',
+      details: 'Ask for a new link from the sign-in page.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    again(`Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
+    return;
+  }
+
+  if (password !== confirm) {
+    again('The two entries did not match. Nothing was changed.');
+    return;
+  }
+
+  try {
+    const passwordHash = await hashPassword(password);
+    const done = await withDatabase((connection) =>
+      consumePasswordReset(connection, token, passwordHash)
+    );
+
+    if (!done) {
+      sendPage(req, res, 410, {
+        heading: 'That link has expired',
+        message: 'It has already been used, or it is older than its thirty minutes.',
+        details: 'Ask for a new link from the sign-in page.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    // The link proved the address and chose the password, so this is a sign-in: making
+    // them type the pair they just picked would be a step with nothing in it.
+    startPersonSession(req, {
+      id: done.userId,
+      provider: 'password',
+      providerLabel: 'email',
+      username: done.displayName || done.email,
+      email: done.email,
+    });
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That password could not be changed',
+      message: 'Nothing was changed. Try the link again in a moment.',
       details: error.message,
       tone: 'error',
     });
