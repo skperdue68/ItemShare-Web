@@ -104,12 +104,28 @@ straight to the existing database rather than re-running migrations.
 ## Signing in
 
 Signing in does one job: it establishes who someone is, so their ESO accounts can be
-linked to them and requests can be addressed to a real person. Any Discord or Google
-account can sign in.
+linked to them and requests can be addressed to a real person. There are three ways in -
+an email address with a password, Discord, or Google - and all three end in the same
+place: a row in `itemshare_users`.
 
-Each provider is independent - configure one and only that button appears, configure
-both and there are two. With neither, the site still accepts uploads, but nothing is
-linked to a person and uploads are anonymous.
+**Email and a password.** `POST /auth/email` signs in and `POST /auth/email/signup` makes
+the account. Both are ordinary forms on the sign-in page, so they work with scripts off
+and need nothing in `.env`; the OAuth buttons are the extra rather than the requirement.
+What the page asks for is the address, because the address is what the site collects: it
+is where a request answer is sent, and it is what ties the sign-in to an ESO account. The
+password is stored as scrypt with a per-password salt (`lib/passwords.js`), one row per
+person in `itemshare_passwords`, and the address itself is the identity
+(`provider = 'password'`), so nothing downstream has to know which way somebody came in.
+
+An address typed into a form is stored **unverified** and never merges with an existing
+person: merging on an unproven address is how somebody takes over an account, so a
+password address can only ever sign in the account it made. Signing in gives the same
+answer for a wrong password and for an address nobody has - a real decoy hash costs the
+same as a real check - so the form cannot be used to find out who has an account here.
+
+**Discord and Google are optional.** Each provider is independent: configure one and only
+that button appears, configure both and there are two. They are not needed for the site to
+work, because the email form always is.
 
 **Discord.** Create an application at
 <https://discord.com/developers/applications>, add the callback URL under **OAuth2 →
@@ -133,6 +149,20 @@ Unverified addresses are never used to merge people.
 Provider definitions - endpoints, scopes, and how a profile becomes the site's fields -
 live in `lib/providers.js`, as a pure function of the profile, so they can be read
 without completing a real OAuth round trip.
+
+**Which ESO account is yours.** Signing in is not the same as saying which ESO account is
+theirs, and the site needs the second answer: a request has to name the character to mail.
+The first time somebody signs in with no ESO account attached, the *ESO accounts* dialog
+opens by itself and asks for the name. It is also where the list lives - every attached
+account with its items, guilds and last upload, a **Remove** button at the bottom of each
+row, and the box that attaches another under the list. The profile menu reopens it at any
+time.
+
+Names typed by hand are normalised the way the addon writes them (`lib/accountNames.js`):
+lower case, one `@` in front, spaces dropped, and anything that cannot be in a name
+removed. `@Name`, `@name` and ` name ` are therefore one account. Attaching an account
+does not require sharing anything, and removing one only unlinks it: its items, guilds and
+uploads stay with the account, and attaching it again takes it back.
 
 ## Uploading a file
 
@@ -262,6 +292,10 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/item-tip` | The hover card's description and set bonuses, cached |
 | `GET` | `/auth/:provider` | Start a sign-in (`discord` or `google`) |
 | `GET` | `/auth/:provider/callback` | Finish it |
+| `POST` | `/auth/email` | Sign in with an email address and password |
+| `POST` | `/auth/email/signup` | Make an account from an address and a password |
+| `POST` | `/accounts/add` | Attach an ESO account name to the signed-in person |
+| `POST` | `/accounts/remove` | Unlink one of their ESO accounts, leaving what it shared |
 | `POST` | `/logout` | Delete the session row and clear the cookie |
 | `POST` | `/simulate/nudge` | Token-authenticated "something changed" push, used by `npm run simulate` |
 | `GET` | `/requests/fulfill/:token` | The answer form a request email links to; the token in the address is the credential |
@@ -339,18 +373,32 @@ Visibility joins three tables: the item's guilds (`itemshare_shared_item_guilds`
 viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_guilds`).
 Nothing is readable without a guild overlap, so an account in no guilds sees nothing.
 
-The one exception is somebody who has signed in but has not uploaded yet. With no ESO
-account there are no guilds to compare, so their *Request* list is everything that is
-shared, by anybody, with no guild rule at all. What they cannot do is ask for any of it:
-the **Request** button is drawn disabled, and hovering it says why.
+The rule is only applied when both sides are known. A guild rule needs the viewer's
+guilds and there is no way to guess them, so when they are unknown the list is
+unrestricted instead of empty:
+
+- somebody who has signed in but attached no ESO account has no guilds at all;
+- an account typed into the *ESO accounts* dialog has no guild membership either, because
+the addon has not been asked yet - only an upload can say which guilds an account is in.
+
+Both see everything that is shared, by anybody. Asking is a separate question, decided by
+what is linked: with no ESO account the **Request** button is drawn disabled and hovering
+it says why, and the request route refuses an account-less ask on its own, so the
+disabled button is a courtesy rather than the only guard.
 
 > Upload ItemShareSavedVars.lua so we know who you are - you do not need to share
 > anything.
 
-Uploading is what makes requests possible, and an empty item list is a valid file - the
-upload only has to tell the site which accounts are theirs. A visitor who is not signed in
-at all still gets the sign-in card and no items. The request route refuses an account-less
-request on its own, so the disabled button is a courtesy rather than the only guard.
+Attaching a name is enough to ask for items - uploading is what tells the site which
+guilds that name is in, and with those known the list narrows to the guilds the browsing
+account belongs to.
+
+A visitor who is not signed in at all sees the same list, under the same hero, and the
+hover on every request button reads *Sign in to ask for this - reading the list is free*.
+The two tabs that only make sense for somebody with items and requests of their own
+(**Offering** and **Your requests**) are not drawn for them, so the page offers the one
+list that applies. Nothing is hidden for effect: the list is real, and reading it is the
+reason the sign-in card sits above it rather than in front of it.
 
 The overlap is resolved per list: for the account you browse as in *Request*, and across
 every linked account in *Offering*.
@@ -596,7 +644,8 @@ handled by one process would otherwise never reach sockets held by another.
 | `itemshare_accounts` | ESO account → person link; several accounts may belong to one person |
 | `itemshare_account_guilds` | Which guilds each ESO account belongs to |
 | `itemshare_users` | One row per person: display name, email, verified flag, avatar, and the ESO account they browse as |
-| `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord and Google |
+| `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord, Google and email |
+| `itemshare_passwords` | one scrypt hash per person, for email and password sign-in |
 | `itemshare_sessions` | Sign-in sessions, so they survive a restart |
 | `itemshare_discord_users` | Legacy Discord profile table, superseded by `itemshare_users` |
 | `itemshare_guilds` | Guild ID → name, the stable identity for a guild |

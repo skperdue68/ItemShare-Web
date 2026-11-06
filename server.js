@@ -51,10 +51,24 @@ import {
   signInWithProvider,
   submitDrafts,
 } from './lib/store.js';
+import {
+  createPasswordAccount,
+  detachAccountFromUser,
+  findPasswordLogin,
+  notePasswordUsed,
+} from './lib/store.js';
 import { filterList } from './lib/filters.js';
 import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from './lib/email.js';
 import { getItemTip } from './lib/uesp.js';
 import { buildProviders } from './lib/providers.js';
+import { normalizeEsoAccountName } from './lib/accountNames.js';
+import {
+  emailLooksValid,
+  hashPassword,
+  MIN_PASSWORD_LENGTH,
+  normalizeEmail,
+  verifyPassword,
+} from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
@@ -509,14 +523,11 @@ async function viewerAccountNames(req, connection, user) {
     await withDatabase(async (connection) => {
       const accountNames = await viewerAccountNames(req, connection, user);
 
-      // A signed-in person with no upload yet still gets the lists: they have no guilds to
-      // compare against, so they are shown everything that is shared, and the page draws
-      // every request button disabled. A visitor the site does not know at all is still
-      // shown nothing. Asking for an item is refused further down either way, because a
-      // request needs an ESO account to be credited to.
-      if (accountNames.length === 0 && !user) {
-        return;
-      }
+      // Everybody gets the lists, signed in or not. A person the site has no ESO account
+      // for has no guilds to compare against, so the guild rule is skipped and they see
+      // what is shared; a visitor who is not signed in at all is the same case with one
+      // step fewer. The page draws every request button disabled for both, and asking is
+      // refused further down, because a request needs an account to be credited to.
 
       for (const accountName of accountNames) {
         data.accounts.push({
@@ -1375,6 +1386,243 @@ app.get('/auth/:provider/callback', async (req, res) => {
       heading: 'Sign-in could not be completed',
       message: 'The provider accepted the request, but the account could not be looked up or saved.',
       details: caught.message,
+      tone: 'error',
+    });
+  }
+});
+
+// ---------------------------------------------------------- email and password
+//
+// Signing in needed a Discord or Google account, which left anybody with neither of them
+// outside the site. These two forms are the way in that needs nothing configured: one
+// signs in with an address and a password, the other makes the pair. The address is not
+// a username - it is where the note goes when somebody answers a request - which is why
+// the page says so before asking for it.
+
+// A wrong password and an address nobody uses must cost the same, or the form can be
+// used to find out which addresses have accounts here. This is a real hash of a password
+// nobody has, made once and then reused.
+let decoyHash = null;
+function decoyPasswordHash() {
+  if (!decoyHash) {
+    decoyHash = hashPassword('a password that is never anybody\u2019s');
+  }
+  return decoyHash;
+}
+
+function startPersonSession(req, { id, provider, providerLabel, username, email }) {
+  req.session.user = {
+    id,
+    provider,
+    providerLabel,
+    username,
+    email,
+    // An address typed into a form is unverified: the site has no proof anybody can read
+    // mail there, and saying otherwise would let it join an existing person's account.
+    emailVerified: false,
+    avatarUrl: '',
+  };
+  // Which ESO accounts are theirs is read from the database on the next request, so a
+  // session copy written before this sign-in can never decide who they are.
+  req.session.accountNames = null;
+}
+
+app.post('/auth/email', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const password = String((req.body && req.body.password) || '');
+
+  if (!emailLooksValid(email) || password.length === 0) {
+    sendPage(req, res, 400, {
+      heading: 'That sign-in did not work',
+      message: 'Type the email address and the password you signed up with.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const login = await withDatabase((connection) => findPasswordLogin(connection, email));
+    const matches = await verifyPassword(
+      password,
+      login ? login.passwordHash : await decoyPasswordHash()
+    );
+
+    if (!login || !matches) {
+      sendPage(req, res, 401, {
+        heading: 'That email and password do not match',
+        message: 'Check both and try again.',
+        details: 'If you have never signed in here with a password, create an account from the sign-in page.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    await withDatabase((connection) => notePasswordUsed(connection, login.userId));
+    startPersonSession(req, {
+      id: login.userId,
+      provider: 'password',
+      providerLabel: 'email',
+      username: login.displayName || login.email,
+      email: login.email,
+    });
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'Sign-in could not be completed',
+      message: 'The site could not read the account just now. Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/auth/email/signup', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const password = String((req.body && req.body.password) || '');
+
+  if (!emailLooksValid(email)) {
+    sendPage(req, res, 400, {
+      heading: 'That email address does not look right',
+      message: 'Check the address and try again.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    sendPage(req, res, 400, {
+      heading: 'That password is too short',
+      message: `Use at least ${MIN_PASSWORD_LENGTH} characters.`,
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const passwordHash = await hashPassword(password);
+    // The name in the header is the part of the address before the @: the address itself
+    // is the one thing on the page that other people must never be shown.
+    const displayName = email.split('@')[0].slice(0, 96);
+    const created = await withDatabase((connection) =>
+      createPasswordAccount(connection, { email, passwordHash, displayName })
+    );
+
+    if (!created.created) {
+      sendPage(req, res, 409, {
+        heading: 'That email already has an account',
+        message: 'Sign in with the password you chose, or with the sign-in you used before.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    startPersonSession(req, {
+      id: created.userId,
+      provider: 'password',
+      providerLabel: 'email',
+      username: displayName,
+      email,
+    });
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That account could not be made',
+      message: 'Nothing was saved. Try again in a moment.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+// --------------------------------------------------------------- ESO accounts
+//
+// Which ESO accounts belong to this sign-in. The addon tells the site this by upload,
+// but the site needs the answer before anybody uploads - it is what makes a name a
+// person, and what a request is addressed from - so the same link can be made by hand
+// here and unmade again.
+
+app.post('/accounts/add', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    res.redirect(303, '/');
+    return;
+  }
+
+  // Typed by hand, so it is made the shape the addon writes: lower case, one @ in front,
+  // no spaces. The addon and the box have to agree or the same account is two accounts.
+  const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
+
+  if (!accountName) {
+    sendPage(req, res, 400, {
+      heading: 'That is not an account name',
+      message: 'Type the ESO account name, for example @YourAccountName.',
+      details: 'Lower case, with an @ in front - the site adds the @ if you leave it out.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const outcome = await withDatabase((connection) =>
+      linkAccountToUser(connection, { accountName, userId: user.id })
+    );
+
+    if (outcome === 'conflict') {
+      sendPage(req, res, 409, {
+        heading: 'That account is already taken',
+        message: `${accountName} is attached to another sign-in.`,
+        details: 'If it is yours and you cannot get into that sign-in, the site owner can move it for you.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    req.session.accountNames = null;
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That account could not be attached',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/accounts/remove', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    res.redirect(303, '/');
+    return;
+  }
+
+  const accountName = String((req.body && req.body.accountName) || '').trim();
+
+  try {
+    // Ownership is the condition of the update itself, so a name from the form can never
+    // unlink somebody else's account.
+    const removed = await withDatabase((connection) =>
+      detachAccountFromUser(connection, { userId: user.id, accountName })
+    );
+
+    if (!removed) {
+      sendPage(req, res, 404, {
+        heading: 'That account is not attached to you',
+        message: 'Nothing was changed.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    req.session.accountNames = null;
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That account could not be removed',
+      message: 'Nothing was changed.',
+      details: error.message,
       tone: 'error',
     });
   }

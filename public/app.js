@@ -1761,11 +1761,23 @@ function openAccountsModal() {
 
   accountsModal.hidden = false;
 
+  // The account name box is the reason the dialog opened, so it takes the caret. On a
+  // visit that only looks at what is attached, the close button does.
+  const field = accountsModal.querySelector('input[name="accountName"]');
   const close = accountsModal.querySelector('[data-close-accounts]');
 
-  if (close) {
+  if (field) {
+    field.focus();
+  } else if (close) {
     close.focus();
   }
+}
+
+// Somebody who has signed in and attached no ESO account lands with the dialog already
+// open: attaching one is what turns the shared list into a list they can ask from. It is
+// drawn open without a script, so this only puts the caret where the work is.
+if (accountsModal && accountsModal.hasAttribute('data-accounts-auto') && !accountsModal.hidden) {
+  openAccountsModal();
 }
 
 document.addEventListener('click', (event) => {
