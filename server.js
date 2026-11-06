@@ -78,7 +78,11 @@ import {
 } from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
-import { takeSignOutNotice } from './lib/sessionNotice.js';
+import {
+  ACCOUNT_UNLINKED,
+  signOutOtherSessions,
+  takeSignOutNotice,
+} from './lib/sessionNotice.js';
 import {
   renderListRegion,
   renderMessagePage,
@@ -1947,8 +1951,23 @@ app.post('/accounts/add', async (req, res) => {
       return;
     }
 
+    // Unlinking takes an account out of this sign-in, so the other devices must not keep
+    // working from a picture of it that is no longer true. They are signed out and told
+    // why; this device stays, because it is the one that made the change.
+    const ended = await withDatabase((connection) =>
+      signOutOtherSessions(connection, {
+        userId: user.id,
+        keepSid: req.sessionID,
+        reason: ACCOUNT_UNLINKED,
+      })
+    );
+
+    if (ended > 0) {
+      console.log(`Unlink: signed out ${ended} other session${ended === 1 ? '' : 's'}`);
+    }
+
     req.session.accountNames = null;
-  req.session.signOut = null;
+    req.session.signOut = null;
     res.redirect(303, '/');
   } catch (error) {
     sendPage(req, res, 500, {
@@ -1986,8 +2005,23 @@ app.post('/accounts/remove', async (req, res) => {
       return;
     }
 
+    // Unlinking takes an account out of this sign-in, so the other devices must not keep
+    // working from a picture of it that is no longer true. They are signed out and told
+    // why; this device stays, because it is the one that made the change.
+    const ended = await withDatabase((connection) =>
+      signOutOtherSessions(connection, {
+        userId: user.id,
+        keepSid: req.sessionID,
+        reason: ACCOUNT_UNLINKED,
+      })
+    );
+
+    if (ended > 0) {
+      console.log(`Unlink: signed out ${ended} other session${ended === 1 ? '' : 's'}`);
+    }
+
     req.session.accountNames = null;
-  req.session.signOut = null;
+    req.session.signOut = null;
     res.redirect(303, '/');
   } catch (error) {
     sendPage(req, res, 500, {
