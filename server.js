@@ -67,6 +67,7 @@ import { normalizeEsoAccountName } from './lib/accountNames.js';
 import {
   emailLooksValid,
   hashPassword,
+  MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
   normalizeEmail,
   verifyPassword,
@@ -236,6 +237,9 @@ async function emailOwners({ user, submitted, contacts }) {
       type: row.item_type_name || '',
       trait: row.trait || '',
       enchant: row.enchant_name || '',
+      // Where the owner's copy was when this was shared, so the message can say which
+      // container to open. Empty for a standing offer, which has no location of its own.
+      location: row.location_label || '',
       quality: Number(row.quality) || 0,
     });
   }
@@ -678,7 +682,7 @@ function guestRequestAllowed(key, now = Date.now()) {
   return true;
 }
 
-async function makeGuestPerson({ accountName, email }) {
+async function makeGuestPerson({ accountName, email, passwordHash }) {
   return withDatabase(async (connection) => {
     // The name shown and put in live-update text is the ESO account, never the address:
     // the address is the one thing on this site that must not reach anybody else.
@@ -686,11 +690,17 @@ async function makeGuestPerson({ accountName, email }) {
       email,
       accountName,
       displayName: accountName,
+      passwordHash,
     });
 
     if (!person.created) {
+      // Two refusals that need different advice: an address that already signs in belongs
+      // to somebody, while a taken ESO account would file the request under another
+      // person's character.
       const error = new Error(
-        `${accountName} is attached to a different sign-in. Sign in with that account, or ask from the ESO account name you play.`
+        person.reason === 'email'
+          ? 'That email address already has an account here. Sign in with it, or use another address.'
+          : `${accountName} is attached to a different sign-in. Sign in with that account, or ask from the ESO account name you play.`
       );
       error.statusCode = 409;
       throw error;
@@ -714,10 +724,22 @@ app.post('/requests', async (req, res) => {
   if (!user) {
     const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
     const email = normalizeEmail(req.body && req.body.email);
+    const password = String((req.body && req.body.password) || '');
 
     if (!accountName || !emailLooksValid(email)) {
       res.status(400).json({
-        error: 'Say which ESO account you play and where to send the answer.',
+        error:
+          'Say which ESO account you play, where to send the answer, and a password you can sign back in with.',
+        needsGuest: true,
+      });
+      return;
+    }
+
+    // Checked before the hash so a typo is answered as a typo rather than as a failure,
+    // and so the cost of scrypt is never spent on something too short to keep.
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+      res.status(400).json({
+        error: `Use a password of at least ${MIN_PASSWORD_LENGTH} characters, so you can sign back in to see this request.`,
         needsGuest: true,
       });
       return;
@@ -731,7 +753,10 @@ app.post('/requests', async (req, res) => {
     }
 
     try {
-      user = await makeGuestPerson({ accountName, email });
+      // The password makes this an account, not a one-off: it is the pair the ordinary
+      // email sign-in reads, so the person can come back and find their requests.
+      const passwordHash = await hashPassword(password);
+      user = await makeGuestPerson({ accountName, email, passwordHash });
       req.session.user = user;
       req.session.accountNames = null;
     } catch (error) {

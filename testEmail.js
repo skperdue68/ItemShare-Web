@@ -52,8 +52,8 @@ const message =
         requesterAccount: '@TestRequester',
         ownerAccount: '@TestOwner',
         items: [
-          { id: 1, name: 'Briarheart Dagger', type: 'Weapon', trait: 'Sharpened', enchant: '', quality: 4, quantity: 2 },
-          { id: 2, name: 'Soul Gem', type: 'Miscellaneous', trait: '', enchant: '', quality: 1, quantity: 5 },
+          { id: 1, name: 'Briarheart Dagger', type: 'Weapon', trait: 'Sharpened', enchant: '', quality: 4, quantity: 2, location: 'House Storage 1' },
+          { id: 2, name: 'Soul Gem', type: 'Miscellaneous', trait: '', enchant: '', quality: 1, quantity: 5, location: 'Bank' },
         ],
         siteUrl: config.siteUrl,
         // Real messages carry a token issued for their own rows; this one is a sample, so
