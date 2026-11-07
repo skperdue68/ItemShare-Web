@@ -799,6 +799,34 @@ if (listRegion) {
     }.`;
   }
 
+  // The same password box the page's forms draw (lib/views.js), built here because this
+  // dialog is assembled after the page has loaded. `/password-toggle.js` listens on the
+  // document rather than on each box, so the eye works on these too.
+  function passwordBox({ id, label, name, hint = '' }) {
+    return `
+          <div class="auth-field">
+            <label for="${id}">${escapeText(label)}</label>
+            <span class="password-field" data-password-field>
+              <input id="${id}" type="password" name="${name}" autocomplete="new-password"
+                     minlength="8" maxlength="200" required>
+              <button class="password-toggle" type="button" data-reveal-password
+                      aria-pressed="false" aria-label="Show the password" title="Show the password">
+                <svg class="password-eye" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M1.75 12S5.6 5.5 12 5.5 22.25 12 22.25 12 18.4 18.5 12 18.5 1.75 12 1.75 12Z"
+                        fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                  <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                </svg>
+                <svg class="password-eye-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2.5 2.5 21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  <path d="M9.9 5.9A10.6 10.6 0 0 1 12 5.5c6.4 0 10.25 6.5 10.25 6.5a18.4 18.4 0 0 1-3.9 4.4M6.1 7.7A18 18 0 0 0 1.75 12S5.6 18.5 12 18.5a10.9 10.9 0 0 0 3.9-.7"
+                        fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </span>
+            ${hint ? `<span class="auth-hint">${escapeText(hint)}</span>` : ''}
+          </div>`;
+  }
+
   function openRequestDialog(button) {
     const kind = button.dataset.kind === 'offer' ? 'offer' : 'inventory';
     const numbers = dialogNumbers(button);
@@ -839,11 +867,9 @@ if (listRegion) {
             <input type="email" name="email" autocomplete="email" spellcheck="false"
                    maxlength="254" placeholder="you@example.com" required>
           </label>
-          <label class="auth-field">
-            <span>Password</span>
-            <input type="password" name="password" autocomplete="new-password"
-                   minlength="8" maxlength="200" required>
-          </label>
+          ${passwordBox({ id: 'guest-password', label: 'Password', name: 'password' })}
+          ${passwordBox({ id: 'guest-confirm', label: 'Type it again', name: 'confirm' })}
+          <p class="auth-hint dialog-note" data-dialog-note hidden></p>
           <p class="auth-hint">Asked once. These make an account: the request is made from that character, the answer goes to that address, and the password is how you sign back in to see it.</p>
         </div>`
       : document.querySelector('[data-needs-account]')
@@ -891,6 +917,25 @@ if (listRegion) {
       const accountName = backdrop.querySelector('input[name="accountName"]');
       const email = backdrop.querySelector('input[name="email"]');
       const password = backdrop.querySelector('input[name="password"]');
+      const confirm = backdrop.querySelector('input[name="confirm"]');
+      const note = backdrop.querySelector('[data-dialog-note]');
+
+      // One sentence in the dialog rather than a silent move of the caret: a password
+      // typed twice and disagreed is a typo somebody has to be told about.
+      const say = (message, field) => {
+        if (note) {
+          note.textContent = message;
+          note.hidden = false;
+        }
+
+        if (field) {
+          field.focus();
+        }
+      };
+
+      if (note) {
+        note.hidden = true;
+      }
 
       // Nothing is sent until all of it is there: the request would have no character to
       // come from, no address to be answered at, and no way back in. A 400 after closing
@@ -908,7 +953,14 @@ if (listRegion) {
       // The browser's minlength only guards a form submit, and this is a button click, so
       // the length the server will insist on is checked here too.
       if (password && password.value.length < 8) {
-        password.focus();
+        say('Use a password of at least 8 characters.', password);
+        return;
+      }
+
+      // Two boxes, because this makes an account: a typo in the only one would lock the
+      // person out of the answers they are being promised an address for.
+      if (password && confirm && confirm.value !== password.value) {
+        say('Those two passwords are not the same.', confirm);
         return;
       }
 
@@ -931,6 +983,7 @@ if (listRegion) {
         accountName: accountName ? accountName.value.trim() : '',
         email: email ? email.value.trim() : '',
         password: password ? password.value : '',
+        confirm: confirm ? confirm.value : '',
       };
 
       closeRequestDialog();
@@ -1144,6 +1197,7 @@ if (listRegion) {
     accountName = '',
     email = '',
     password = '',
+    confirm = '',
   }) {
     try {
       const payload = new URLSearchParams({ kind, id, quantity });
@@ -1158,6 +1212,10 @@ if (listRegion) {
 
       if (password) {
         payload.set('password', password);
+      }
+
+      if (confirm) {
+        payload.set('confirm', confirm);
       }
 
       const response = await fetch('/requests', {

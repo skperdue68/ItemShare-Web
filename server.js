@@ -75,6 +75,7 @@ import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
   normalizeEmail,
+  passwordConfirmationProblem,
   verifyPassword,
 } from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
@@ -750,6 +751,7 @@ app.post('/requests', async (req, res) => {
     const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
     const email = normalizeEmail(req.body && req.body.email);
     const password = String((req.body && req.body.password) || '');
+    const confirm = String((req.body && req.body.confirm) || '');
 
     if (!accountName || !emailLooksValid(email)) {
       res.status(400).json({
@@ -767,6 +769,15 @@ app.post('/requests', async (req, res) => {
         error: `Use a password of at least ${MIN_PASSWORD_LENGTH} characters, so you can sign back in to see this request.`,
         needsGuest: true,
       });
+      return;
+    }
+
+    // The dialog asks twice and the browser checks the pair, but the same rule belongs on
+    // this side: the account it is about to make is the one the password signs back in to.
+    const mismatch = passwordConfirmationProblem(password, confirm);
+
+    if (mismatch) {
+      res.status(400).json({ error: mismatch, needsGuest: true });
       return;
     }
 
@@ -1662,6 +1673,9 @@ app.post('/auth/email', async (req, res) => {
 app.post('/auth/email/signup', async (req, res) => {
   const email = normalizeEmail(req.body && req.body.email);
   const password = String((req.body && req.body.password) || '');
+  // The second box the form asks for. It is read here as well as in the browser, because
+  // a form posts whether or not a script ever ran.
+  const confirm = String((req.body && req.body.confirm) || '');
 
   if (!emailLooksValid(email)) {
     sendPage(req, res, 400, {
@@ -1676,6 +1690,19 @@ app.post('/auth/email/signup', async (req, res) => {
     sendPage(req, res, 400, {
       heading: 'That password is too short',
       message: `Use at least ${MIN_PASSWORD_LENGTH} characters.`,
+      tone: 'error',
+    });
+    return;
+  }
+
+  // Checked before the hash, so a pair that disagrees costs nothing and is answered as
+  // the typo it is rather than as an account that could not be made.
+  const mismatch = passwordConfirmationProblem(password, confirm);
+
+  if (mismatch) {
+    sendPage(req, res, 400, {
+      heading: 'Those two passwords are not the same',
+      message: mismatch,
       tone: 'error',
     });
     return;
