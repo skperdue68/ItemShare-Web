@@ -111,6 +111,11 @@ place: a row in `itemshare_users`.
 **Email and a password.** `POST /auth/email` signs in and `POST /auth/email/signup` makes
 the account. Both are ordinary forms on the sign-in page, so they work with scripts off
 and need nothing in `.env`; the OAuth buttons are the extra rather than the requirement.
+Creating the account asks for the password twice, and both copies are compared on the
+server as well as in the browser (`passwordConfirmationProblem` in `lib/passwords.js`), so
+a form posted with scripting off is held to the same rule. Every password box carries an
+eye that shows what was typed, drawn by `/password-toggle.js`, which listens once on the
+document and therefore reaches the boxes the request dialog builds after a click.
 What the page asks for is the address, because the address is what the site collects: it
 is where a request answer is sent, and it is what ties the sign-in to an ESO account. The
 password is stored as scrypt with a per-password salt (`lib/passwords.js`), one row per

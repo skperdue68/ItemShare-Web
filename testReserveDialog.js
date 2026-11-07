@@ -416,6 +416,7 @@ t('an ordinary press posts the chosen count, kind, id and name', () => {
     accountName: '',
     email: '',
     password: '',
+    confirm: '',
   });
   assert.equal(run.closes.count, run.closesAfterOpen + 1, 'a sent request closes the dialog');
 });

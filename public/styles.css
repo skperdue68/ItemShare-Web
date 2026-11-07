@@ -2070,6 +2070,71 @@ th .sort-link {
   box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
 }
 
+/* The eye on a password box. It sits inside the field's right edge, out of the way of the
+   text, and the picture swaps on `aria-pressed` so the state is never carried by the icon
+   alone. The button is transparent because it belongs to the box, not next to it. */
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  color: var(--text);
+}
+
+.password-toggle:focus-visible {
+  outline: none;
+  color: var(--text);
+  box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.45);
+}
+
+.password-toggle svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.password-toggle .password-eye-off {
+  display: none;
+}
+
+.password-toggle[aria-pressed='true'] .password-eye {
+  display: none;
+}
+
+.password-toggle[aria-pressed='true'] .password-eye-off {
+  display: block;
+}
+
+/* The one sentence the request dialog has for a pair of passwords that disagree. */
+.dialog-note {
+  color: var(--danger);
+}
+
 .auth-hint {
   font-size: 12px;
   color: var(--muted);
