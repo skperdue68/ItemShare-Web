@@ -867,7 +867,6 @@ if (listRegion) {
     // everything still available, with a box showing the same number that can be typed
     // into. Whole copies only, and never more than are left.
     const ask = () => {
-      const limit = Math.max(1, dialogState ? dialogState.max : 1);
       const amount = backdrop.querySelector('[data-reserve-amount]');
       const accountName = backdrop.querySelector('input[name="accountName"]');
       const email = backdrop.querySelector('input[name="email"]');
@@ -893,10 +892,21 @@ if (listRegion) {
         return;
       }
 
+      // The row moves while the dialog is open - somebody else claims a copy, the owner
+      // uploads a smaller count - so what is left is read again at the moment of asking.
+      // A number that no longer fits is clamped to the new top, and once every copy has
+      // gone nothing is sent at all: the dialog stays open and says so.
+      refreshDialogNumbers();
+
+      if (dialogState.max < 1) {
+        syncRequestDialog();
+        return;
+      }
+
       const picked = {
         kind,
         id: button.dataset.id,
-        quantity: choices ? clampCopies(amount ? amount.value : 1, limit) : 1,
+        quantity: choices ? clampCopies(amount ? amount.value : 1, dialogState.max) : 1,
         name,
         accountName: accountName ? accountName.value.trim() : '',
         email: email ? email.value.trim() : '',
@@ -961,13 +971,14 @@ if (listRegion) {
   }
 
   /**
-   * Keeps an open dialog honest while the list under it moves: when somebody else
-   * claims a copy, the number left, the cap on the field and the Entire stack option
-   * all follow it down, without making the person close and reopen the dialog.
+   * Re-reads the row the dialog was opened from. The list under the dialog keeps moving,
+   * so the number left comes from the row again rather than from when the dialog opened.
+   * A row with nothing left is not in the list at all - "All held" stands where its
+   * button was - and that reads here as nothing left.
    */
-  function syncRequestDialog() {
-    if (!dialog || !dialogState) {
-      return;
+  function refreshDialogNumbers() {
+    if (!dialogState) {
+      return null;
     }
 
     const fresh = document.querySelector(
@@ -978,6 +989,21 @@ if (listRegion) {
     dialogState.max = numbers.max;
     dialogState.stack = numbers.stack;
     dialogState.held = numbers.held;
+
+    return dialogState;
+  }
+
+  /**
+   * Keeps an open dialog honest while the list under it moves: when somebody else
+   * claims a copy, the number left, the top of the slider and the cap on the box all
+   * follow it down, without making the person close and reopen the dialog.
+   */
+  function syncRequestDialog() {
+    if (!dialog || !dialogState) {
+      return;
+    }
+
+    refreshDialogNumbers();
 
     const summary = dialog.querySelector('[data-dialog-summary]');
 
