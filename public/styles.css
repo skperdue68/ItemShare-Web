@@ -2018,6 +2018,167 @@ th .sort-link {
   color: var(--muted);
 }
 
+/* A request button for somebody the site has no ESO account for: drawn, so the column
+   still reads as a column, and unpressable. The pointer is let through to the wrapper so
+   the explanation on its title is what the hover finds. */
+.request-gate {
+  display: inline-block;
+  cursor: not-allowed;
+}
+
+.request-gate .request-button,
+.request-gate .request-button:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------ email sign-in and ESO accounts */
+/* The email form sits under the OAuth buttons and is the way in that needs nothing
+   configured. It is one column, in the same width as the buttons above it. */
+.auth-panel {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  margin: 22px 0 6px;
+}
+
+.auth-email {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  text-align: left;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--muted-strong);
+}
+
+.auth-field input {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: rgba(8, 18, 42, 0.55);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--accent-top);
+  box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
+}
+
+.auth-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.auth-signup summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted-strong);
+}
+
+.auth-signup summary:hover {
+  color: var(--text);
+}
+
+.auth-signup[open] summary {
+  margin-bottom: 12px;
+}
+
+/* One row per attached ESO account, Remove at the bottom of the row, the add box under
+   the list. The dialog is the only place accounts are managed. */
+.account-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.account-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.account-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-row-name {
+  font-weight: 600;
+}
+
+.account-row-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.account-row-guilds .chips {
+  margin-top: 6px;
+}
+
+.account-remove {
+  flex: 0 0 auto;
+}
+
+.account-add {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  max-width: 360px;
+}
+
+/* The divider between the OAuth buttons and the email form: one line, the word OR, and
+   nothing else competing with the buttons on either side of it. */
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.auth-or::before,
+.auth-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+/* The two boxes a guest fills in once, inside the request dialog. */
+.guest-fields {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 6px;
+}
+
+.guest-fields .auth-field input {
+  width: 100%;
+}
+
 /* ---------------------------------------------------------------- one voice for headings */
 /* Every heading reads the same. Two kinds of heading were not: a sortable one is a button
    and a countdown one carries .seen-cell, which is muted and lighter, so the same colour,
@@ -2033,8 +2194,8 @@ th.action-cell {
   text-transform: uppercase;
 }
 
-/* A sentence where a paragraph used to be, in the bag and above it: centred, bold and
-   brief, because it is a statement about what the bag means, not instructions to read. */
+/* A sentence where a paragraph used to be: centred and bold, because it is a statement
+   about what the bag means rather than instructions to read. */
 .bag-note {
   margin: 10px 0 0;
   text-align: center;
@@ -2063,7 +2224,7 @@ th.action-cell {
   border-color: #dc2626;
 }
 
-/* The sign-in address under the account list, on one line: the address itself, then the
+/* The sign-in address, on one line under the account list: the address itself, then the
    muted label, with room above it so it does not read as another account fact. */
 .email-line {
   align-items: baseline;

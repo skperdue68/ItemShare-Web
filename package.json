@@ -8,6 +8,7 @@
     "start": "node server.js",
     "backfill": "node backfillIcons.js",
     "email:test": "node testEmail.js",
+    "email:preview": "node previewEmail.js",
     "test:fulfillment": "node testFulfillment.js",
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js"

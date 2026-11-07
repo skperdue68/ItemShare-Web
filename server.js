@@ -23,6 +23,8 @@ import { backfillItemIcons } from './lib/iconBackfill.js';
 import {
   DEFAULT_HOLD_MINUTES,
   cancelOwnRequest,
+  createPasswordReset,
+  consumePasswordReset,
   createRequest,
   expireDueDrafts,
   fillKnownIcons,
@@ -33,6 +35,7 @@ import {
   getFulfillForm,
   getOwnerContacts,
   getOwnerRequests,
+  getRequesterNotifications,
   getRequesterRequests,
   getSubmittedRequests,
   getSharedItemsForViewer,
@@ -50,15 +53,36 @@ import {
   signInWithProvider,
   submitDrafts,
 } from './lib/store.js';
+import {
+  claimHoldsForOwnedAccounts,
+  createGuestPerson,
+  createPasswordAccount,
+  detachAccountFromUser,
+  findPasswordLogin,
+  notePasswordUsed,
+  RESET_TOKEN_MINUTES,
+} from './lib/store.js';
 import { filterList } from './lib/filters.js';
-import { emailConfig, renderRequestEmail, sendEmail } from './lib/email.js';
+import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from './lib/email.js';
+import { renderPasswordResetEmail } from './lib/passwordResetEmail.js';
 import { getItemTip } from './lib/uesp.js';
 import { buildProviders } from './lib/providers.js';
+import { normalizeEsoAccountName } from './lib/accountNames.js';
+import {
+  emailLooksValid,
+  hashPassword,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  normalizeEmail,
+  verifyPassword,
+} from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
   renderListRegion,
   renderMessagePage,
+  renderForgotPasswordPage,
+  renderResetPasswordPage,
   renderOwnerRequestsCard,
   renderOwnerRequestsPage,
   renderPage,
@@ -219,6 +243,9 @@ async function emailOwners({ user, submitted, contacts }) {
       type: row.item_type_name || '',
       trait: row.trait || '',
       enchant: row.enchant_name || '',
+      // Where the owner's copy was when this was shared, so the message can say which
+      // container to open. Empty for a standing offer, which has no location of its own.
+      location: row.location_label || '',
       quality: Number(row.quality) || 0,
     });
   }
@@ -243,10 +270,10 @@ async function emailOwners({ user, submitted, contacts }) {
   let skipped = 0;
 
   for (const group of groups.values()) {
-    // One token per message: every row in this email is answered by the same form, and
+    // One token per message: every row in this email is answered by the same page, and
     // the token is the only thing that lets it be answered at all. Without BASE_URL
     // there is no address to build, so the message goes out as a plain list.
-    let formUrl = '';
+    let answerUrl = '';
 
     if (config.siteUrl) {
       try {
@@ -258,10 +285,10 @@ async function emailOwners({ user, submitted, contacts }) {
         );
 
         if (token) {
-          formUrl = `${config.siteUrl}/requests/fulfill/${token}`;
+          answerUrl = `${config.siteUrl}/requests/fulfill/${token}`;
         }
       } catch (error) {
-        console.warn(`Email: no answer form for ${group.email}: ${error.message}`);
+        console.warn(`Email: no answer link for ${group.email}: ${error.message}`);
       }
     }
 
@@ -271,7 +298,7 @@ async function emailOwners({ user, submitted, contacts }) {
       ownerAccount: [...group.owners].join(', '),
       items: group.items,
       siteUrl: config.siteUrl,
-      formUrl,
+      answerUrl,
     });
 
     const result = await sendEmail({ to: group.email, ...message }, config);
@@ -285,7 +312,92 @@ async function emailOwners({ user, submitted, contacts }) {
   }
 
   console.log(
-    `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${skipped ? `, ${skipped} failed` : ''}`
+    `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${
+      skipped ? `, ${skipped} failed` : ''
+    }${config.overrideTo ? ` (all to ${config.overrideTo}, from EMAIL_OVERRIDE_TO)` : ''}`
+  );
+
+  return { sent, skipped };
+}
+
+/**
+ * Tells the people who asked what became of their request, one message per person.
+ *
+ * The copies land in the game's mailbox, and the game does not announce them, so the
+ * message exists to say there is something to collect - or that there is not, and why.
+ * Rows are grouped by address rather than by request, because somebody who asked from
+ * two ESO accounts is one person and needs one message.
+ *
+ * Runs after the answer is committed and never throws: a bad mail day must not turn a
+ * handover that was recorded into an error page for the owner.
+ */
+async function emailAnswered(rows) {
+  const ids = (rows || [])
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (ids.length === 0) {
+    return { sent: 0, skipped: 0 };
+  }
+
+  let notices;
+
+  try {
+    notices = await withDatabase((connection) => getRequesterNotifications(connection, ids));
+  } catch (error) {
+    console.warn(
+      `Email: could not work out who to tell about ${ids.length} answered request(s): ${error.message}`
+    );
+    return { sent: 0, skipped: 0 };
+  }
+
+  if (!notices || notices.length === 0) {
+    return { sent: 0, skipped: 0 };
+  }
+
+  const groups = new Map();
+
+  for (const notice of notices) {
+    if (!groups.has(notice.email)) {
+      groups.set(notice.email, { email: notice.email, name: notice.displayName || '', rows: [] });
+    }
+
+    groups.get(notice.email).rows.push(notice);
+  }
+
+  const config = emailConfig();
+
+  if (!config.configured) {
+    console.log(
+      `Email: ${groups.size} answer email${groups.size === 1 ? '' : 's'} not sent - ${
+        config.reason || 'no mail transport is configured'
+      }`
+    );
+    return { sent: 0, skipped: groups.size };
+  }
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (const group of groups.values()) {
+    const message = renderStatusEmail({
+      requesterName: group.name,
+      rows: group.rows,
+      siteUrl: config.siteUrl,
+    });
+
+    const result = await sendEmail({ to: group.email, ...message }, config);
+
+    if (result.ok) {
+      sent += 1;
+    } else {
+      skipped += 1;
+      console.warn(`Email: could not tell ${group.email}: ${result.error}`);
+    }
+  }
+
+  console.log(
+    `Email: sent ${sent} answer email${sent === 1 ? '' : 's'}${skipped ? `, ${skipped} failed` : ''}`
   );
 
   return { sent, skipped };
@@ -423,9 +535,11 @@ async function viewerAccountNames(req, connection, user) {
     await withDatabase(async (connection) => {
       const accountNames = await viewerAccountNames(req, connection, user);
 
-      if (accountNames.length === 0) {
-        return;
-      }
+      // Everybody gets the lists, signed in or not. A person the site has no ESO account
+      // for has no guilds to compare against, so the guild rule is skipped and they see
+      // what is shared; a visitor who is not signed in at all is the same case with one
+      // step fewer. The page draws every request button disabled for both, and asking is
+      // refused further down, because a request needs an account to be credited to.
 
       for (const accountName of accountNames) {
         data.accounts.push({
@@ -443,11 +557,36 @@ async function viewerAccountNames(req, connection, user) {
         // for Offering, where nothing a second account shares should disappear.
         const requestScope = data.browsingAccount ? [data.browsingAccount] : accountNames;
 
+        // The basket note on a row is read by person, not by the account the row belongs
+        // to, so the signed-in person's id is what has to go down to the list.
+        const viewerUserId = user ? user.id : 0;
+
         data.facets = await getViewerFacets(connection, requestScope);
-        data.sharedItems = await getSharedItemsForViewer(connection, accountNames, filters);
-        data.requestItems = await getSharedItemsForViewer(connection, requestScope, filters);
+        data.sharedItems = await getSharedItemsForViewer(connection, accountNames, {
+          ...filters,
+          viewerUserId,
+        });
+        data.requestItems = await getSharedItemsForViewer(connection, requestScope, {
+          ...filters,
+          viewerUserId,
+        });
         data.alwaysShare = await getAlwaysShareForViewer(connection, accountNames, filters);
         data.requestOffers = await getAlwaysShareForViewer(connection, requestScope, filters);
+      // A hold follows the account it was asked from. Reading the basket without this
+      // leaves the state the item list already complains about: a copy held by a person
+      // this sign-in is not, with nothing to send and nothing to cancel. It runs on a
+      // page load because that is what happens after every sign-in, account change and
+      // upload, and it matches nothing at all once the state is right.
+      if (user) {
+        const claimed = await claimHoldsForOwnedAccounts(connection, { userId: user.id });
+
+        if (claimed > 0) {
+          console.log(
+            `Basket: ${claimed} held item${claimed === 1 ? '' : 's'} returned to the account owner`
+          );
+        }
+      }
+
       data.requests = user ? await getRequesterRequests(connection, user.id) : [];
       data.basketRows = user ? await getBasketRows(connection, user.id) : [];
       data.basket = user
@@ -527,16 +666,124 @@ app.get('/items', async (req, res) => {    const data = await collectViewerData(
 
 // Asking for an item. The quantity is picked in a dialog, so this answers in JSON
 // and the page refreshes its own lists; the socket tells everyone else.
-app.post('/requests', async (req, res) => {
-  const user = req.session ? req.session.user || null : null;
+//
+// Signing in is not required to ask. The first request from somebody the site has never
+// met carries the two things a request actually needs - the ESO account it is made from
+// and an address to send the answer to - and those are enough to make a person. The
+// session remembers it, so the second request asks nothing.
 
-  if (enabledProviders.length > 0 && !user) {
-    res.status(401).json({ error: 'Sign in before asking for an item.' });
-    return;
+// Anonymous requests are the one way this site could be used to send mail to people who
+// never asked for it, so new guest people are counted per connection: more than anybody
+// needs, far fewer than a script wants. In memory on purpose - a restart clearing it
+// costs nothing, and the alternative is another table nobody reads.
+const GUEST_PER_HOUR = 5;
+const GUEST_WINDOW_MS = 60 * 60 * 1000;
+const guestWindows = new Map();
+
+function guestRequestAllowed(key, now = Date.now()) {
+  const cutoff = now - GUEST_WINDOW_MS;
+  const hits = (guestWindows.get(key) || []).filter((at) => at > cutoff);
+
+  if (hits.length >= GUEST_PER_HOUR) {
+    guestWindows.set(key, hits);
+    return false;
   }
+
+  hits.push(now);
+  guestWindows.set(key, hits);
+
+  if (guestWindows.size > 5000) {
+    for (const [entry, times] of guestWindows) {
+      if (times.every((at) => at <= cutoff)) {
+        guestWindows.delete(entry);
+      }
+    }
+  }
+
+  return true;
+}
+
+async function makeGuestPerson({ accountName, email, passwordHash }) {
+  return withDatabase(async (connection) => {
+    // The name shown and put in live-update text is the ESO account, never the address:
+    // the address is the one thing on this site that must not reach anybody else.
+    const person = await createGuestPerson(connection, {
+      email,
+      accountName,
+      displayName: accountName,
+      passwordHash,
+    });
+
+    if (!person.created) {
+      // Two refusals that need different advice: an address that already signs in belongs
+      // to somebody, while a taken ESO account would file the request under another
+      // person's character.
+      const error = new Error(
+        person.reason === 'email'
+          ? 'That email address already has an account here. Sign in with it, or use another address.'
+          : `${accountName} is attached to a different sign-in. Sign in with that account, or ask from the ESO account name you play.`
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    return {
+      id: person.userId,
+      provider: 'guest',
+      providerLabel: 'a guest request',
+      username: accountName,
+      email,
+      emailVerified: false,
+      avatarUrl: '',
+    };
+  });
+}
+
+app.post('/requests', async (req, res) => {
+  let user = req.session ? req.session.user || null : null;
+
   if (!user) {
-    res.status(400).json({ error: 'Requests need a signed-in account, or nobody would know who asked.' });
-    return;
+    const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
+    const email = normalizeEmail(req.body && req.body.email);
+    const password = String((req.body && req.body.password) || '');
+
+    if (!accountName || !emailLooksValid(email)) {
+      res.status(400).json({
+        error:
+          'Say which ESO account you play, where to send the answer, and a password you can sign back in with.',
+        needsGuest: true,
+      });
+      return;
+    }
+
+    // Checked before the hash so a typo is answered as a typo rather than as a failure,
+    // and so the cost of scrypt is never spent on something too short to keep.
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+      res.status(400).json({
+        error: `Use a password of at least ${MIN_PASSWORD_LENGTH} characters, so you can sign back in to see this request.`,
+        needsGuest: true,
+      });
+      return;
+    }
+
+    if (!guestRequestAllowed(req.ip || req.socket.remoteAddress || 'unknown')) {
+      res.status(429).json({
+        error: 'That is a lot of requests from this connection. Try again in an hour.',
+      });
+      return;
+    }
+
+    try {
+      // The password makes this an account, not a one-off: it is the pair the ordinary
+      // email sign-in reads, so the person can come back and find their requests.
+      const passwordHash = await hashPassword(password);
+      user = await makeGuestPerson({ accountName, email, passwordHash });
+      req.session.user = user;
+      req.session.accountNames = null;
+    } catch (error) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+      return;
+    }
   }
 
   const itemKind = req.body.kind === 'offer' ? 'offer' : 'inventory';
@@ -550,12 +797,38 @@ app.post('/requests', async (req, res) => {
 
   try {
     const outcome = await withDatabase(async (connection) => {
-      const accountNames = await viewerAccountNames(req, connection, user);
+      let accountNames = await viewerAccountNames(req, connection, user);
+      // A person with nothing attached yet is asked for the account at the moment they
+      // need it, and the name is attached to their sign-in as the request is made, so
+      // this happens once. Refusing instead sent them off to upload a file first, which
+      // is how you share - not how the site knows who is asking.
+      let attachedNow = false;
 
       if (accountNames.length === 0) {
-        const error = new Error('Upload your own file first: an ESO account is needed to ask from.');
-        error.statusCode = 400;
-        throw error;
+        const typed = normalizeEsoAccountName(req.body && req.body.accountName);
+
+        if (!typed) {
+          const error = new Error(
+            'Say which ESO account you play, so the owner knows who is asking.'
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const link = await linkAccountToUser(connection, { accountName: typed, userId: user.id });
+
+        if (link === 'conflict') {
+          const error = new Error(
+            `${typed} is attached to another sign-in. Ask from the ESO account you play, or attach it from the avatar menu.`
+          );
+          error.statusCode = 409;
+          throw error;
+        }
+
+        accountNames = [typed];
+        attachedNow = true;
+        // The session copy was read before the link existed.
+        req.session.accountNames = null;
       }        // The list already shows only the chosen account's guilds; the request itself
         // has to be scoped the same way, and the chosen account is the recipient.
         const browsingAccount = browsingAccountFor(
@@ -568,11 +841,19 @@ app.post('/requests', async (req, res) => {
           requesterAccounts: browsingAccount ? [browsingAccount] : accountNames,
           ownAccounts: accountNames,
           requesterAccount: browsingAccount,
-        itemKind,
-        itemId,
-        quantity,
-        holdMinutes: HOLD_MINUTES,
-      });
+          itemKind,
+          itemId,
+          quantity,
+          holdMinutes: HOLD_MINUTES,
+          // A guest was shown everything that is shared, and the account name they
+          // typed has no guilds on record to compare against, so the guild rule is not
+          // applied to them. Applying it refused every item on the page they were
+          // looking at. The owner still sees who asked and decides.
+          // A name attached a moment ago has no guilds on record, and a guest never has
+          // any: the guild rule cannot be applied to either without refusing every row
+          // on the page they are looking at. The owner still sees who asked.
+          restrictToGuilds: user.provider !== 'guest' && !attachedNow,
+        });
     });
 
     // Everyone looking at that stack needs the new count straight away.
@@ -900,8 +1181,14 @@ app.post('/owner/requests', upload.none(), async (req, res) => {
       );
     }
 
+    // The person who asked hears about it too: the copies are waiting in their in-game
+    // mailbox and nothing in the game says so.
+    await emailAnswered(outcome.rows);
+
     if (wantsFragment(req)) {
-      await renderList(200, '', { fulfilled: outcome.fulfilled, cancelled: outcome.cancelled });
+      // The whole outcome, not just the counts: the card's confirmation names the item,
+      // the copies and the requester, and the row it came from is about to disappear.
+      await renderList(200, '', outcome);
       return;
     }
 
@@ -1098,6 +1385,8 @@ app.post('/requests/fulfill/:token', async (req, res) => {
       );
     }
 
+    await emailAnswered(outcome.rows);
+
     res.type('html').send(
       renderMessagePage({
         title: 'Request answered - ItemShare',
@@ -1281,6 +1570,453 @@ app.get('/auth/:provider/callback', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------- email and password
+//
+// Signing in needed a Discord or Google account, which left anybody with neither of them
+// outside the site. These two forms are the way in that needs nothing configured: one
+// signs in with an address and a password, the other makes the pair. The address is not
+// a username - it is where the note goes when somebody answers a request - which is why
+// the page says so before asking for it.
+
+// A wrong password and an address nobody uses must cost the same, or the form can be
+// used to find out which addresses have accounts here. This is a real hash of a password
+// nobody has, made once and then reused.
+let decoyHash = null;
+function decoyPasswordHash() {
+  if (!decoyHash) {
+    decoyHash = hashPassword('a password that is never anybody\u2019s');
+  }
+  return decoyHash;
+}
+
+function startPersonSession(req, { id, provider, providerLabel, username, email }) {
+  req.session.user = {
+    id,
+    provider,
+    providerLabel,
+    username,
+    email,
+    // An address typed into a form is unverified: the site has no proof anybody can read
+    // mail there, and saying otherwise would let it join an existing person's account.
+    emailVerified: false,
+    avatarUrl: '',
+  };
+  // Which ESO accounts are theirs is read from the database on the next request, so a
+  // session copy written before this sign-in can never decide who they are.
+  req.session.accountNames = null;
+}
+
+app.post('/auth/email', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const password = String((req.body && req.body.password) || '');
+
+  if (!emailLooksValid(email) || password.length === 0) {
+    sendPage(req, res, 400, {
+      heading: 'That sign-in did not work',
+      message: 'Type the email address and the password you signed up with.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const login = await withDatabase((connection) => findPasswordLogin(connection, email));
+    const matches = await verifyPassword(
+      password,
+      login ? login.passwordHash : await decoyPasswordHash()
+    );
+
+    if (!login || !matches) {
+      sendPage(req, res, 401, {
+        heading: 'That email and password do not match',
+        message: 'Check both and try again.',
+        details: 'If you have never signed in here with a password, create an account from the sign-in page.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    await withDatabase((connection) => notePasswordUsed(connection, login.userId));
+    startPersonSession(req, {
+      id: login.userId,
+      provider: 'password',
+      providerLabel: 'email',
+      username: login.displayName || login.email,
+      email: login.email,
+    });
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'Sign-in could not be completed',
+      message: 'The site could not read the account just now. Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/auth/email/signup', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+  const password = String((req.body && req.body.password) || '');
+
+  if (!emailLooksValid(email)) {
+    sendPage(req, res, 400, {
+      heading: 'That email address does not look right',
+      message: 'Check the address and try again.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    sendPage(req, res, 400, {
+      heading: 'That password is too short',
+      message: `Use at least ${MIN_PASSWORD_LENGTH} characters.`,
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const passwordHash = await hashPassword(password);
+    // The name in the header is the part of the address before the @: the address itself
+    // is the one thing on the page that other people must never be shown.
+    const displayName = email.split('@')[0].slice(0, 96);
+    const created = await withDatabase((connection) =>
+      createPasswordAccount(connection, { email, passwordHash, displayName })
+    );
+
+    if (!created.created) {
+      sendPage(req, res, 409, {
+        heading: 'That email already has an account',
+        message: 'Sign in with the password you chose, or with the sign-in you used before.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    startPersonSession(req, {
+      id: created.userId,
+      provider: 'password',
+      providerLabel: 'email',
+      username: displayName,
+      email,
+    });
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That account could not be made',
+      message: 'Nothing was saved. Try again in a moment.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+// --------------------------------------------------------- forgotten passwords
+//
+// The way back in when the password is gone: a link by mail, one use, thirty minutes.
+//
+// The form answers the same thing whether or not the address has an account here,
+// because a form that answers differently is a way of finding out which addresses are
+// registered. The same reason keeps the mail itself plain: one link and how long it
+// lasts. `RESET_PER_HOUR` bounds the mail one connection can cause, in memory, the same
+// way the guest window above does.
+const RESET_PER_HOUR = 5;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
+const resetWindows = new Map();
+const RESET_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
+
+function resetRequestAllowed(key, now = Date.now()) {
+  const cutoff = now - RESET_WINDOW_MS;
+  const hits = (resetWindows.get(key) || []).filter((at) => at > cutoff);
+
+  if (hits.length >= RESET_PER_HOUR) {
+    resetWindows.set(key, hits);
+    return false;
+  }
+
+  hits.push(now);
+  resetWindows.set(key, hits);
+
+  if (resetWindows.size > 5000) {
+    for (const [entry, times] of resetWindows) {
+      if (times.every((at) => at <= cutoff)) {
+        resetWindows.delete(entry);
+      }
+    }
+  }
+
+  return true;
+}
+
+app.get('/auth/email/forgot', (req, res) => {
+  res.type('html').send(
+    renderForgotPasswordPage({
+      user: req.session ? req.session.user || null : null,
+      providers: enabledProviders,
+    })
+  );
+});
+
+app.post('/auth/email/forgot', async (req, res) => {
+  const email = normalizeEmail(req.body && req.body.email);
+
+  if (!emailLooksValid(email)) {
+    res.status(400).type('html').send(
+      renderForgotPasswordPage({
+        user: req.session ? req.session.user || null : null,
+        providers: enabledProviders,
+        notice: 'That does not look like an email address.',
+      })
+    );
+    return;
+  }
+
+  if (!resetRequestAllowed(req.ip || req.socket.remoteAddress || 'unknown')) {
+    sendPage(req, res, 429, {
+      heading: 'That is a lot of reset links',
+      message: 'Try again in an hour.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const reset = await withDatabase((connection) => createPasswordReset(connection, email));
+
+    if (reset) {
+      const config = emailConfig();
+      const resetUrl = config.siteUrl
+        ? `${config.siteUrl}/auth/email/reset/${reset.token}`
+        : `/auth/email/reset/${reset.token}`;
+
+      if (!config.siteUrl) {
+        console.warn(
+          'Email: BASE_URL is not set, so the reset link in the message is relative and will not work from a mail client'
+        );
+      }
+
+      const message = renderPasswordResetEmail({
+        resetUrl,
+        siteUrl: config.siteUrl,
+        expiresMinutes: RESET_TOKEN_MINUTES,
+        displayName: reset.displayName,
+      });
+
+      const result = await sendEmail({ to: reset.email || email, ...message }, config);
+
+      if (!result.ok) {
+        console.warn(`Email: could not send a reset link: ${result.error}`);
+      }
+    }
+
+    sendPage(req, res, 200, {
+      heading: 'Check your email',
+      message: 'If that address has an account here, a link to choose a new password is on its way.',
+      details: `The link works once and expires in ${RESET_TOKEN_MINUTES} minutes. Nothing changes until it is used.`,
+    });
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That link could not be sent',
+      message: 'Nothing was changed. Try again in a moment.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.get('/auth/email/reset/:token', (req, res) => {
+  const token = String(req.params.token || '');
+  // The token is in the address bar, so this page must not hand it on in a Referer.
+  res.set('Referrer-Policy', 'no-referrer');
+
+  if (!RESET_TOKEN_PATTERN.test(token)) {
+    sendPage(req, res, 404, {
+      heading: 'That link is not a reset link',
+      message: 'The address is incomplete, so there is no password to change here.',
+      details: 'Ask for a new link from the sign-in page.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  res.type('html').send(
+    renderResetPasswordPage({
+      token,
+      user: req.session ? req.session.user || null : null,
+      providers: enabledProviders,
+    })
+  );
+});
+
+app.post('/auth/email/reset/:token', async (req, res) => {
+  const token = String(req.params.token || '');
+  res.set('Referrer-Policy', 'no-referrer');
+
+  const password = String((req.body && req.body.password) || '');
+  const confirm = String((req.body && req.body.confirm) || '');
+
+  const again = (notice) =>
+    res.status(400).type('html').send(
+      renderResetPasswordPage({
+        token,
+        user: req.session ? req.session.user || null : null,
+        providers: enabledProviders,
+        notice,
+      })
+    );
+
+  if (!RESET_TOKEN_PATTERN.test(token)) {
+    sendPage(req, res, 404, {
+      heading: 'That link is not a reset link',
+      message: 'The address is incomplete, so there is no password to change here.',
+      details: 'Ask for a new link from the sign-in page.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    again(`Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
+    return;
+  }
+
+  if (password !== confirm) {
+    again('The two entries did not match. Nothing was changed.');
+    return;
+  }
+
+  try {
+    const passwordHash = await hashPassword(password);
+    const done = await withDatabase((connection) =>
+      consumePasswordReset(connection, token, passwordHash)
+    );
+
+    if (!done) {
+      sendPage(req, res, 410, {
+        heading: 'That link has expired',
+        message: 'It has already been used, or it is older than its thirty minutes.',
+        details: 'Ask for a new link from the sign-in page.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    // The link proved the address and chose the password, so this is a sign-in: making
+    // them type the pair they just picked would be a step with nothing in it.
+    startPersonSession(req, {
+      id: done.userId,
+      provider: 'password',
+      providerLabel: 'email',
+      username: done.displayName || done.email,
+      email: done.email,
+    });
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That password could not be changed',
+      message: 'Nothing was changed. Try the link again in a moment.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+// --------------------------------------------------------------- ESO accounts
+//
+// Which ESO accounts belong to this sign-in. The addon tells the site this by upload,
+// but the site needs the answer before anybody uploads - it is what makes a name a
+// person, and what a request is addressed from - so the same link can be made by hand
+// here and unmade again.
+
+app.post('/accounts/add', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    res.redirect(303, '/');
+    return;
+  }
+
+  // Typed by hand, so it is made the shape the addon writes: lower case, one @ in front,
+  // no spaces. The addon and the box have to agree or the same account is two accounts.
+  const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
+
+  if (!accountName) {
+    sendPage(req, res, 400, {
+      heading: 'That is not an account name',
+      message: 'Type the ESO account name, for example @YourAccountName.',
+      details: 'Lower case, with an @ in front - the site adds the @ if you leave it out.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const outcome = await withDatabase((connection) =>
+      linkAccountToUser(connection, { accountName, userId: user.id })
+    );
+
+    if (outcome === 'conflict') {
+      sendPage(req, res, 409, {
+        heading: 'That account is already taken',
+        message: `${accountName} is attached to another sign-in.`,
+        details: 'If it is yours and you cannot get into that sign-in, the site owner can move it for you.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    req.session.accountNames = null;
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That account could not be attached',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/accounts/remove', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    res.redirect(303, '/');
+    return;
+  }
+
+  const accountName = String((req.body && req.body.accountName) || '').trim();
+
+  try {
+    // Ownership is the condition of the update itself, so a name from the form can never
+    // unlink somebody else's account.
+    const removed = await withDatabase((connection) =>
+      detachAccountFromUser(connection, { userId: user.id, accountName })
+    );
+
+    if (!removed) {
+      sendPage(req, res, 404, {
+        heading: 'That account is not attached to you',
+        message: 'Nothing was changed.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    req.session.accountNames = null;
+    res.redirect(303, '/');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That account could not be removed',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
 // Log out is the only way to end a session that is not cookie expiry, so it has to
 // actually delete the row as well as the cookie: leaving either behind means the
 // next request walks straight back in.
@@ -1367,7 +2103,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
       }
     }
 
-    return replaceAccounts(
+    const summary = await replaceAccounts(
       connection,
       parsed.accounts.map((accountName) => ({
         accountName,
@@ -1378,6 +2114,8 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
       })),
       { sourceFile, userId: user ? user.id : null }
     );
+
+    return summary;
   });
 
   // The rows are committed, so the new list is real. Announce it before the icon

@@ -104,12 +104,28 @@ straight to the existing database rather than re-running migrations.
 ## Signing in
 
 Signing in does one job: it establishes who someone is, so their ESO accounts can be
-linked to them and requests can be addressed to a real person. Any Discord or Google
-account can sign in.
+linked to them and requests can be addressed to a real person. There are three ways in -
+an email address with a password, Discord, or Google - and all three end in the same
+place: a row in `itemshare_users`.
 
-Each provider is independent - configure one and only that button appears, configure
-both and there are two. With neither, the site still accepts uploads, but nothing is
-linked to a person and uploads are anonymous.
+**Email and a password.** `POST /auth/email` signs in and `POST /auth/email/signup` makes
+the account. Both are ordinary forms on the sign-in page, so they work with scripts off
+and need nothing in `.env`; the OAuth buttons are the extra rather than the requirement.
+What the page asks for is the address, because the address is what the site collects: it
+is where a request answer is sent, and it is what ties the sign-in to an ESO account. The
+password is stored as scrypt with a per-password salt (`lib/passwords.js`), one row per
+person in `itemshare_passwords`, and the address itself is the identity
+(`provider = 'password'`), so nothing downstream has to know which way somebody came in.
+
+An address typed into a form is stored **unverified** and never merges with an existing
+person: merging on an unproven address is how somebody takes over an account, so a
+password address can only ever sign in the account it made. Signing in gives the same
+answer for a wrong password and for an address nobody has - a real decoy hash costs the
+same as a real check - so the form cannot be used to find out who has an account here.
+
+**Discord and Google are optional.** Each provider is independent: configure one and only
+that button appears, configure both and there are two. They are not needed for the site to
+work, because the email form always is.
 
 **Discord.** Create an application at
 <https://discord.com/developers/applications>, add the callback URL under **OAuth2 →
@@ -133,6 +149,20 @@ Unverified addresses are never used to merge people.
 Provider definitions - endpoints, scopes, and how a profile becomes the site's fields -
 live in `lib/providers.js`, as a pure function of the profile, so they can be read
 without completing a real OAuth round trip.
+
+**Which ESO account is yours.** Signing in is not the same as saying which ESO account is
+theirs, and the site needs the second answer: a request has to name the character to mail.
+The first time somebody signs in with no ESO account attached, the *ESO accounts* dialog
+opens by itself and asks for the name. It is also where the list lives - every attached
+account with its items, guilds and last upload, a **Remove** button at the bottom of each
+row, and the box that attaches another under the list. The profile menu reopens it at any
+time.
+
+Names typed by hand are normalised the way the addon writes them (`lib/accountNames.js`):
+lower case, one `@` in front, spaces dropped, and anything that cannot be in a name
+removed. `@Name`, `@name` and ` name ` are therefore one account. Attaching an account
+does not require sharing anything, and removing one only unlinks it: its items, guilds and
+uploads stay with the account, and attaching it again takes it back.
 
 ## Uploading a file
 
@@ -164,7 +194,37 @@ The first upload from a signed-in person links their identity to the ESO account
 upload is refused rather than silently reassigned.
 
 Item rows keep the account they came from (`itemshare_shared_items.account_name`), so
-someone who plays several ESO accounts can see which account holds each item.
+someone who plays several ESO accounts can see which account holds each item. Which
+account that is comes from **where the item sits in the file** - the `["@account"]`
+table - and not from the `accountName` the addon copies into the entry. That copy still
+names the old account when a saved variables file is copied to a different one, and an
+upload that trusted it stored the items under an account the file did not contain, which
+is to say it stored none of them. A copy that names another account of the same file is
+still honoured, because that is a deliberate move between accounts.
+
+### How guilds are read
+
+The addon writes guild data once, at the top of each account's scope, and items carry no
+guild fields at all:
+
+- `guilds` - one registry, keyed by guild id, holding every guild name the account knows.
+- `characterGuilds[character]` - that character's `guildIds`, and when they were captured.
+- an item's guilds are therefore `entry.characterName` -> `characterGuilds[character]` ->
+  its `guildIds` -> `guilds[id]`.
+
+Guild names always come from the registry. Every registered guild is upserted - including
+one that no item names - so a name never goes stale and the upload's guild count stays
+right. A character the file has no snapshot for falls back to the account's own
+membership, so its items are attributed to the whole account rather than to nobody.
+
+Two fields the addon is about to drop are already tolerated: a row with no `itemKey` is
+keyed by its `itemLink` plus the `locationKey` it was found in, and a row with no `count`
+takes `heldCount` minus `reserve`.
+
+Only this layout is read. An older file - `knownGuilds`, guild fields copied onto every
+item, an `ItemShareExport.lua` compatibility copy - still parses, but its guilds are not
+read at all, so its items arrive with no guilds and nobody can see them. Re-export with
+the current addon instead.
 
 ## Automatic uploads
 
@@ -232,6 +292,10 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/item-tip` | The hover card's description and set bonuses, cached |
 | `GET` | `/auth/:provider` | Start a sign-in (`discord` or `google`) |
 | `GET` | `/auth/:provider/callback` | Finish it |
+| `POST` | `/auth/email` | Sign in with an email address and password |
+| `POST` | `/auth/email/signup` | Make an account from an address and a password |
+| `POST` | `/accounts/add` | Attach an ESO account name to the signed-in person |
+| `POST` | `/accounts/remove` | Unlink one of their ESO accounts, leaving what it shared |
 | `POST` | `/logout` | Delete the session row and clear the cookie |
 | `POST` | `/simulate/nudge` | Token-authenticated "something changed" push, used by `npm run simulate` |
 | `GET` | `/requests/fulfill/:token` | The answer form a request email links to; the token in the address is the credential |
@@ -285,15 +349,85 @@ bookmarked and works with scripts off. The sort order is deliberately not among 
 it is a reading preference kept in a cookie, which keeps links clean and stops one
 person's sorting being handed to whoever opens their link.
 
-An owner can keep part of a stack back in game with a *share reserve*. The site lists
-what is actually being offered - the reserve is subtracted before upload - and shows the
-reserve as a small amber note under the item name (`keeping 12 back of 20`), so a stack
-offering 8 does not look like an owner who only has 8.
+An owner can keep part of a stack back in game with a *share reserve*. The addon writes
+the reserve into `locationReserves` beside the item list rather than inside the item,
+keyed by the item link and the location it was set in - `link||locationKey`. That is the
+only reserve layout read: holding back 113 of the 400 soul gems in house storage 8 leaves
+the 800 in the bag and the 1614 in the bank alone, and the same item in three places is
+three rows of which only the one the reserve was set on is short.
+
+The older `reserves` table, keyed by the link alone, is not a fallback for this. A file
+carrying only that is a file the addon no longer writes, so its reserve is ignored and no
+stack is reduced - exactly as the v2 guild tables are ignored rather than guessed at.
+
+The reserve is applied before storing: `item_count` is what is really being
+offered (400 held less 113 kept back is 287 shared), and the reserve itself is kept so it
+can be shown as a small amber note under the item name (`keeping 113 back of 400`). A
+stack offering 8 does not look like an owner who only has 8.
+
+A reserve never shares anything by itself. It only reduces a stack that is already in the
+file's item list, so a reserve for an item that is not being shared is ignored: setting a
+reserve creates no offer, no row and no request button.
 
 Visibility joins three tables: the item's guilds (`itemshare_shared_item_guilds`), the
 viewer's guilds (`itemshare_account_guilds`) and the guild names (`itemshare_guilds`).
-Nothing is readable without a guild overlap, so an account in no guilds sees nothing -
-and nothing is listed at all before a first upload.
+Nothing is readable without a guild overlap, so an account in no guilds sees nothing.
+
+The rule is only applied when both sides are known. A guild rule needs the viewer's
+guilds and there is no way to guess them, so when they are unknown the list is
+unrestricted instead of empty:
+
+- somebody who has signed in but attached no ESO account has no guilds at all;
+- an account typed into the *ESO accounts* dialog has no guild membership either, because
+the addon has not been asked yet - only an upload can say which guilds an account is in.
+
+Both see everything that is shared, by anybody. Asking is a separate question, decided by
+what the request is made from rather than by what is visible: a visitor is asked for an
+ESO account name and an address the first time and that makes them a person, and somebody
+signed in without an account is told to attach one - the request route refuses neither in
+silence, and `POST /requests` refuses a guest that names no account and no address.
+
+> Upload ItemShareSavedVars.lua so we know who you are - you do not need to share
+> anything.
+
+Attaching a name is enough to ask for items - uploading is what tells the site which
+guilds that name is in, and with those known the list narrows to the guilds the browsing
+account belongs to.
+
+Adding and removing attached names lives in the **Add or remove ESO accounts** dialog: the
+avatar menu opens it, every account there has its own **Remove** button, and the box under
+the list attaches another. The **Your ESO accounts** card on the page is a summary of the
+same list.
+
+A visitor who is not signed in at all sees the same list, under the same hero, and can
+ask for any of it. **The first request asks for three things** - the ESO account name it
+is made from, an email address to send the answer to, and a password - and the dialog
+sends them with the request. The password is what makes it an account rather than a
+one-off row: the identity and password it writes are exactly what the sign-up form
+writes, so the email sign-in card lets the same person back in later with the same
+basket, requests and attached ESO account. The session remembers them in the meantime,
+so every later request asks nothing.
+
+A guest's request is **not** held to the guild rule. The account name they typed has no
+guild membership on record, they were shown everything that is shared, and a Request
+button the server then refuses is worse than a request the owner can decline. The owner's
+email names the account and the address, so the decision stays with the owner.
+
+Three things follow from that, and all are deliberate. The address is **unverified**: the
+answer email is a link with a token, so an address typed by mistake means the answer is
+never read, and an address typed on purpose means somebody else receives it - which is
+why an address that already signs in with a password is refused instead of adopted,
+rather than letting a stranger type their way into somebody else's requests. An anonymous
+first request also creates a person, so new guest people are limited to five an hour per
+connection - an in-memory counter, cleared by a restart - because otherwise the form
+would be a way to make the site send mail to strangers. And if the named ESO account
+already belongs to another sign-in, the request is refused rather than filed under
+somebody else's character.
+
+The two tabs that only make sense for somebody with items and requests of their own
+(**Offering** and **Your requests**) are not drawn for a visitor, so the page offers the
+one list that applies. Nothing is hidden for effect: the list is real, and reading it is
+the reason the sign-in card sits above it rather than in front of it.
 
 The overlap is resolved per list: for the account you browse as in *Request*, and across
 every linked account in *Offering*.
@@ -306,13 +440,21 @@ claimed plus whatever is already in your own basket, never more than the raw `it
 so two people can never be promised the same five. What is picked there is the total you
 want to hold, so the same item stays one row in the basket.
 
-A standing offer has no count behind it, so it always means one copy. It is only listed
-while the owner actually has one in a bag and nobody has reserved it yet: an offer they
-cannot honour is not a row at all, so the list never shows something that would be
-refused on the next click. The server refuses such a request either way.
+A standing offer has no count behind it, so it always means one copy, one at a time: it is
+listed as **Offered 1** until that copy is claimed, and then it leaves the list. It is not
+hidden while the owner has nothing in a bag, because the file no longer says: schema 4
+keeps an always-shared item out of `sharedItems`, so the offer itself is the only evidence
+that the owner wants to hand it out. The server refuses a second request for the same
+offer either way, so two people cannot be promised the same handover.
 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
+
+The email that reaches the owner says which item, how many, and **where that copy was
+believed to be** - the same `Location` the list shows, taken from the owner's own saved
+file at the moment the request was made. It is a place to look rather than a promise: an
+owner who moves the stack and saves again does not rewrite requests that are already
+waiting, and a standing offer carries no location to name.
 
 A request is recorded against the account you are browsing as - that is the character
 the owner is told to mail - so the account picker changes where a handover happens, not
@@ -393,11 +535,46 @@ so a request to an unclaimed account sends nothing. With no transport configured
 site works normally and the log says
 `Email: N request emails not sent - set EMAIL_FROM ...`.
 
+### Answer emails
+
+When an owner answers - on the site or from the form in the email - the person who asked
+is told what happened. The copies arrive in the game's own mailbox and the game says
+nothing about them, so without this the only way to find out is to open ESO and look.
+
+One message per person, not per request or per account: somebody who asked from two ESO
+accounts has one address and gets one list. The subject says which case it is - *request
+was fulfilled*, *request was not fulfilled*, or *requests were answered* when the rows
+disagree - and each line carries its own result, so `2 of 3 sent` sits next to `not
+fulfilled` rather than behind one bold claim. A partial handover counts as fulfilled: the
+point of the message is that there is something to collect. Cancelled rows say the owner
+had nothing to send and that nothing is waiting in the mailbox, so nobody signs in and
+goes looking for an item that was never mailed.
+
+The address is the asker's own sign-in address (`itemshare_users.email`). A person who
+never linked one gets no message and the answer still records itself; with no transport
+configured the log says `Email: N answer email(s) not sent - ...`. The answer is committed
+before any mail is attempted, and a failure to work out who to tell is caught, so a mail
+problem can never undo a handover or turn it into an error page for the owner.
+
+Two settings keep testing out of a guildmate's inbox:
+
+- `EMAIL_OVERRIDE_TO=you@example.com` sends **every** message to that address instead of
+the owner's. The message is the real one - what lands in your inbox is what the owner
+would have read - with three additions saying where it would have gone: a dashed notice
+above it, a `[Test: owner@example.com]` subject prefix, and a first line in the plain-text
+copy. A misspelled address sends nothing at all and says so in the log, rather than
+falling back to the real owners.
+- `EMAIL_TRANSPORT=none` turns mail off entirely. Requests still record, and the owner
+still sees them on their own list; the log says `Email: N request emails not sent - mail
+is turned off with EMAIL_TRANSPORT=none`. Use it once mail is verified, until the site is
+live for people outside the testing.
+
 `npm run email:test -- you@example.com` sends one of these messages through exactly the
 configuration the site uses, printing the transport, sender and subject first, then the
-result. It opens no database connection and changes nothing, so it separates "the mail
-server works" from "the site is configured" - if it says the message was handed over and
-nothing arrives, the problem is the MTA's queue or DNS, not ItemShare.
+result. Add `answer` as a second argument to look at the reply the asker gets instead. It
+opens no database connection and changes nothing, so it separates "the mail server works"
+from "the site is configured" - if it says the message was handed over and nothing
+arrives, the problem is the MTA's queue or DNS, not ItemShare.
 
 ## Item icons
 
@@ -502,7 +679,8 @@ handled by one process would otherwise never reach sockets held by another.
 | `itemshare_accounts` | ESO account → person link; several accounts may belong to one person |
 | `itemshare_account_guilds` | Which guilds each ESO account belongs to |
 | `itemshare_users` | One row per person: display name, email, verified flag, avatar, and the ESO account they browse as |
-| `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord and Google |
+| `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord, Google and email |
+| `itemshare_passwords` | one scrypt hash per person, for email and password sign-in |
 | `itemshare_sessions` | Sign-in sessions, so they survive a restart |
 | `itemshare_discord_users` | Legacy Discord profile table, superseded by `itemshare_users` |
 | `itemshare_guilds` | Guild ID → name, the stable identity for a guild |
@@ -517,7 +695,7 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every OFFERED/CLAIMED/AVAILABLE calculation is unaffected by
+what is actually on offer, so every OFFERED/RESERVED/AVAILABLE calculation is unaffected by
 a reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
@@ -541,9 +719,10 @@ flag, refreshed at every sign-in so it stays correct if somebody changes it.
 
 The address is personal data and is only ever read server-side. It is shown back to its
 own owner on the page and never included in item lists or any other member's view.
-`getOwnerNotificationEmail(connection, accountName)` in `lib/store.js` is the single
-helper for finding an owner's address when a request needs to notify them, and the
-request email is its only caller.
+`lib/store.js` is where an address is looked up, and nowhere else reads it:
+`getOwnerContacts` maps the ESO accounts named in a basket to the person who owns each of
+them, one entry per account, and `getRequesterNotifications` reads the asker's own address
+for an answer email.
 
 ## Commands
 
@@ -746,14 +925,16 @@ drops it to zero. The simulator does not repeat it: it prints the action and mov
 The simulator never sends mail - the email module is only reached from the site's own send
 route - so a simulated send changes the data and says who would have been emailed.
 Handing an item over in game is not recorded, so nothing here moves a request from
-*Waiting* to *Handed over*.
+*Requested* to *Fulfilled*.
 
 ### npm run email:test
 
 Sends one request email through exactly the configuration the site uses - `EMAIL_FROM`,
-`EMAIL_TRANSPORT`, `SENDMAIL_PATH` or `RESEND_API_KEY`. It prints the transport, sender
-and subject first, then the result, and it sends a two-item sample message so the quality
-colours and detail lines can be seen in a real inbox.
+`EMAIL_TRANSPORT`, `SENDMAIL_PATH`, `RESEND_API_KEY` and `EMAIL_OVERRIDE_TO`. It prints the
+transport, sender and subject first - and the redirect, when an override is set, because
+the address on the command line is then not where the message goes - then the result, and
+it sends a two-item sample message so the quality colours and detail lines can be seen in
+a real inbox.
 
 The address is a plain argument, not a flag, and it must contain an `@`:
 
@@ -762,11 +943,28 @@ npm run email:test -- you@example.com
 node testEmail.js you@example.com
 ```
 
+A second, optional argument picks which message is sent: `request` (the default, what an
+owner receives), `fulfilled`, `cancelled`, or `answer` for both outcomes in one message -
+the mixed case, with a partial handover beside a refusal:
+
+```bash
+npm run email:test -- you@example.com answer
+```
+
 It opens no database connection and changes nothing, so it separates "the mail server
 works" from "the site is configured": if it says the message was handed over and nothing
 arrives, the problem is the MTA's queue or DNS, not ItemShare. It exits `0` when the
 message was accepted, `1` when email is not configured or the transport refused it, and
 `2` on a missing or malformed address.
+
+`npm run email:preview` renders that same message to files instead of sending it:
+`email-preview.html` and `email-preview.txt` (the plain-text part), or whatever name you
+give it - `node previewEmail.js out.html`. Open the HTML in a browser to see the layout,
+the quality colours and the answer link an owner receives. The link is built from
+`BASE_URL`; with that unset the command says so and `itemshare.example` stands in, so the
+whole message can still be seen. Nothing is sent, no mail transport is needed and no
+database is opened, so a change to the message can be checked on a machine that cannot
+send mail at all.
 
 ## Deploying on a Linux host
 
@@ -919,29 +1117,36 @@ address, not just `localhost`.
 once so the account and its guilds are known; `npm run seed:demo` gives the Request tab
 something in it before a second person uploads.
 
-**`Email: N request emails not sent`** - no transport. `EMAIL_FROM` is blank, or there is
-neither a `sendmail` on the host nor a `RESEND_API_KEY`. `npm run email:test -- you@example.com`
-reports which.
+**`Email: N request emails not sent`** - no transport, or mail turned off. `EMAIL_FROM` is
+blank, `EMAIL_TRANSPORT=none` is set, or there is neither a `sendmail` on the host nor a
+`RESEND_API_KEY`. `npm run email:test -- you@example.com` reports which, including an
+`EMAIL_OVERRIDE_TO` that is not an address.
 
 ## Answering a request
 
-Every request email carries a form: one row per name, the number asked for already in its
-box, and a **Save** button on that row. The owner sets a row to what actually left their
-bag and saves it. `0` means nothing was sent from that row, and that request is cancelled.
+A request email is a note, not a form: the names asked for, how many of each, the ESO name
+to mail them to, and one link at the end. Gmail and several other webmail clients strip
+`<form>` elements out of HTML, so a Save button inside the message did nothing when it was
+pressed - the answer was lost with no error shown. Nothing in the message is submitted any
+more, and no number in it is editable.
+
+The link goes straight to `/requests/fulfill/:token`, the page that answers this message:
+no sign-in, no dashboard, nothing to search for. The owner sets a row to what actually
+left their bag, saves it, and `0` means nothing was sent from that row - which cancels it.
 
 A message is rarely answered in one go - half a stack today, the rest next week - so each
 row is submitted on its own. Saving one row records only that row: the others stay
 pending, and the same link answers them later.
 
-- The form posts to `/requests/fulfill/:token`, one row at a time. The token is
+- Each row saves on `/requests/fulfill/:token`, one row at a time. The token is
   unguessable, stored only as a SHA-256 hash, and expires after 30 days. It is cleared from
   the rows it answers, so the link keeps working for the rest of the message and stops
   working for a row already recorded - a double click or a link a mail client prefetched
   changes nothing.
-- A Save button posts that row's `row` and `quantity`. A page opened before per-row saving
-  still works: `quantity_<id>` fields are read the same way.
-- GET shows the form and POST records it. The link in the message exists because most mail
-  clients strip forms out of HTML, so the same form is also a page on the site.
+- A **Save** button on that page posts that row's `row` and `quantity`. A page opened
+  before per-row saving still works: `quantity_<id>` fields are read the same way.
+- GET shows the page and POST records a row. A mail client is never trusted with a form,
+  so this page is the only way a message gets answered.
 - The same answering is **Process Requests**, reachable from the account menu. It opens as
   a modal over the item list rather than replacing it, so answering costs one small
   request and the list underneath is still where it was; Escape, the large white close
@@ -961,9 +1166,9 @@ pending, and the same link answers them later.
   its own date order; a grouped row shows the oldest ask, and its tooltip names the newest.
 - **Fulfilled** (green) records the number in the box as mailed. **Not fulfilled** (red)
   is the same form saved as `0`: nothing was sent, so the request is cancelled with the
-  owner's reason on it. Both sit beside the number rather than under it. The email form
-  calls the green button **Save**, because in a message it is a save of that row rather
-  than a claim about the whole stack.
+  owner's reason on it. Both sit beside the number rather than under it. The page a
+  request email links to calls the green button **Save**, because there it is a save of
+  that row rather than a claim about the whole stack.
 - **Requested** is the total asked for; **Amount Sent** is the number the owner typed.
 - The number sent becomes the request's `quantity` and the row is marked `fulfilled`. What
   was asked for stays in `quantity_requested`, so a short handover reads "4 of 10" in the

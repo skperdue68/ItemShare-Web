@@ -316,9 +316,14 @@ if (listRegion) {
       // One copy is not a choice. A stack of one, or the last copy of a bigger stack,
       // leaves exactly one possible answer, so the click sends it instead of opening a
       // dialog whose only option is "one". A standing offer is the same case.
+      //
+      // Except for somebody the site has not met: the dialog is the only place the ESO
+      // account and the address are asked for, so it opens even for one copy. Skipping it
+      // sent a request with no person behind it, and the answer was a toast telling them
+      // to say things they had never been asked.
       const available = Math.max(1, Number(requestButton.dataset.max) || 1);
 
-      if (available <= 1) {
+      if (available <= 1 && !document.body.dataset.guestRequest) {
         sendRequest({
           kind: requestButton.dataset.kind === 'offer' ? 'offer' : 'inventory',
           id: requestButton.dataset.id,
@@ -773,16 +778,56 @@ if (listRegion) {
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
+    // The first request from somebody who has not signed in carries everything a request
+    // needs: the ESO account it is made from, an address to answer, and a password so the
+    // request can be found again later. Together they make a real account, so the second
+    // request asks nothing and the sign-in card lets them back in.
+    // Somebody signed in who has not attached an ESO account yet is asked for the one
+    // name the request needs, and nothing else: the address and the sign-in already
+    // exist, so asking for them again would be asking a question they answered.
+    const accountOnlyFields = `
+      <div class="guest-fields">
+        <label class="auth-field">
+          <span>ESO account name</span>
+          <input type="text" name="accountName" autocomplete="off" spellcheck="false"
+                 maxlength="96" placeholder="@YourAccountName" required>
+        </label>
+        <p class="auth-hint">The character the request is made from. It is attached to this sign-in, so you are only asked once.</p>
+      </div>`;
+    const guestFields = document.body.dataset.guestRequest
+      ? `
+        <div class="guest-fields">
+          <label class="auth-field">
+            <span>ESO account name</span>
+            <input type="text" name="accountName" autocomplete="off" spellcheck="false"
+                   maxlength="96" placeholder="@YourAccountName" required>
+          </label>
+          <label class="auth-field">
+            <span>Email address</span>
+            <input type="email" name="email" autocomplete="email" spellcheck="false"
+                   maxlength="254" placeholder="you@example.com" required>
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="new-password"
+                   minlength="8" maxlength="200" required>
+          </label>
+          <p class="auth-hint">Asked once. These make an account: the request is made from that character, the answer goes to that address, and the password is how you sign back in to see it.</p>
+        </div>`
+      : document.querySelector('[data-needs-account]')
+        ? accountOnlyFields
+        : '';
     backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
-        <h2 id="requestTitle">Ask for ${escapeText(name)}</h2>
+        <h2 id="requestTitle">Reserve ${escapeText(name)}</h2>
         <p class="muted" data-dialog-summary>${escapeText(dialogSummary(state))}</p>
+        ${guestFields}
         <div class="modal-actions">
           <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
-          <button class="request-button" type="button" data-ask-one>Request 1</button>
+          <button class="request-button" type="button" data-ask-one>Reserve 1</button>
           ${
             choices
-              ? `<button class="request-button is-stack" type="button" data-ask-stack>Request stack (<span data-dialog-max>${state.max}</span>)</button>`
+              ? `<button class="request-button is-stack" type="button" data-ask-stack>Reserve stack (<span data-dialog-max>${state.max}</span>)</button>`
               : ''
           }
         </div>
@@ -804,11 +849,38 @@ if (listRegion) {
     // a kind of answer before they could give one.
     const ask = (which) => {
       const limit = Math.max(1, dialogState ? dialogState.max : 1);
+      const accountName = backdrop.querySelector('input[name="accountName"]');
+      const email = backdrop.querySelector('input[name="email"]');
+      const password = backdrop.querySelector('input[name="password"]');
+
+      // Nothing is sent until all of it is there: the request would have no character to
+      // come from, no address to be answered at, and no way back in. A 400 after closing
+      // the dialog is a worse way to learn that than the caret in the empty box.
+      if (accountName && !accountName.value.trim()) {
+        accountName.focus();
+        return;
+      }
+
+      if (email && !email.value.trim()) {
+        email.focus();
+        return;
+      }
+
+      // The browser's minlength only guards a form submit, and this is a button click, so
+      // the length the server will insist on is checked here too.
+      if (password && password.value.length < 8) {
+        password.focus();
+        return;
+      }
+
       const picked = {
         kind,
         id: button.dataset.id,
         quantity: which === 'stack' ? limit : 1,
         name,
+        accountName: accountName ? accountName.value.trim() : '',
+        email: email ? email.value.trim() : '',
+        password: password ? password.value : '',
       };
 
       closeRequestDialog();
@@ -875,13 +947,111 @@ if (listRegion) {
     }
   }
 
-  async function sendRequest({ kind, id, quantity, name }) {
+  // A reservation is not a request. The copy leaves everyone else's list the moment it is
+  // picked, but no owner is asked until the basket is sent - so the difference is said
+  // once per session, at the moment the first copy is picked. Somebody who reads the
+  // click as the request itself walks away, and the hold simply lapses.
+  const HOLD_NOTICE_KEY = 'itemshare:hold-notice';
+
+  function holdMinutes() {
+    return Math.max(1, Number(document.body.dataset.holdMinutes) || 5);
+  }
+
+  function explainFirstHold(name, copies) {
     try {
+      if (window.sessionStorage.getItem(HOLD_NOTICE_KEY)) {
+        return;
+      }
+      window.sessionStorage.setItem(HOLD_NOTICE_KEY, '1');
+    } catch (error) {
+      // Storage off or full: saying it again on the next hold beats never saying it.
+    }
+
+    const minutes = holdMinutes();
+    const what = copies > 1 ? `${copies} copies of ${name}` : name;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="holdTitle">
+        <h2 id="holdTitle">Reserved - not sent yet</h2>
+        <p>${escapeText(what)} ${copies > 1 ? 'are' : 'is'} held for you and off everyone else's list.</p>
+        <p class="muted">Nothing has been asked for until you press <strong>Send requests</strong>. The hold ends in ${minutes} minute${minutes === 1 ? '' : 's'}, then the ${copies > 1 ? 'copies go' : 'copy goes'} back.</p>
+        <div class="modal-actions">
+          <button class="filter-clear" type="button" data-close-hold>Keep looking</button>
+          <button class="primary-button" type="button" data-send-hold>Send requests</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(backdrop);
+
+    function onKey(event) {
+      if (event.key === 'Escape') {
+        close();
+      }
+    }
+
+    const close = () => {
+      backdrop.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop || event.target.closest('[data-close-hold]')) {
+        close();
+        return;
+      }
+
+      if (event.target.closest('[data-send-hold]')) {
+        close();
+        const button = document.querySelector('[data-submit-requests]');
+
+        if (button) {
+          button.click();
+        } else {
+          refreshAfterChange();
+          showToast('Press Send requests above the list to ask for it.', 'ok');
+        }
+      }
+    });
+
+    document.addEventListener('keydown', onKey);
+
+    const send = backdrop.querySelector('[data-send-hold]');
+
+    if (send) {
+      send.focus();
+    }
+  }
+
+  async function sendRequest({
+    kind,
+    id,
+    quantity,
+    name,
+    accountName = '',
+    email = '',
+    password = '',
+  }) {
+    try {
+      const payload = new URLSearchParams({ kind, id, quantity });
+
+      if (accountName) {
+        payload.set('accountName', accountName);
+      }
+
+      if (email) {
+        payload.set('email', email);
+      }
+
+      if (password) {
+        payload.set('password', password);
+      }
+
       const response = await fetch('/requests', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ kind, id, quantity }),
+        body: payload,
       });
       const result = await response.json().catch(() => ({}));
 
@@ -889,16 +1059,30 @@ if (listRegion) {
         throw new Error(result.error || `That request failed with status ${response.status}`);
       }
 
+      // The first request made them a person, so the page stops asking: the fields were
+      // only ever for somebody the site had never met.
+      if (document.body.dataset.guestRequest) {
+        delete document.body.dataset.guestRequest;
+      }
+
+      // The request attached the account to this sign-in, so the question is answered:
+      // the marker goes, and the next refresh draws the region without it.
+      document
+        .querySelectorAll('[data-needs-account]')
+        .forEach((marker) => marker.remove());
+
       // Asking again for something already in the basket tops that row up, so the
       // number that stuck is the one to report, not the one that was picked.
       const asked = Number(result.quantity) || quantity;
+
+      explainFirstHold(name, asked);
 
       showToast(
         result.combined
           ? `Your basket now holds ${asked} of ${name}.`
           : asked > 1
-            ? `Asked for ${asked} of ${name}.`
-            : `Asked for ${name}.`,
+            ? `Reserved ${asked} of ${name}.`
+            : `Reserved ${name}.`,
         'ok'
       );
       refreshAfterChange();
@@ -1884,11 +2068,23 @@ function openAccountsModal() {
 
   accountsModal.hidden = false;
 
+  // The account name box is the reason the dialog opened, so it takes the caret. On a
+  // visit that only looks at what is attached, the close button does.
+  const field = accountsModal.querySelector('input[name="accountName"]');
   const close = accountsModal.querySelector('[data-close-accounts]');
 
-  if (close) {
+  if (field) {
+    field.focus();
+  } else if (close) {
     close.focus();
   }
+}
+
+// Somebody who has signed in and attached no ESO account lands with the dialog already
+// open: attaching one is what turns the shared list into a list they can ask from. It is
+// drawn open without a script, so this only puts the caret where the work is.
+if (accountsModal && accountsModal.hasAttribute('data-accounts-auto') && !accountsModal.hidden) {
+  openAccountsModal();
 }
 
 document.addEventListener('click', (event) => {

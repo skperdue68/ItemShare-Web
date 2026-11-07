@@ -29,8 +29,8 @@ UPDATE itemshare_requests
  WHERE quantity_requested = 0;
 
 ALTER TABLE itemshare_requests
-  ADD KEY idx_itemshare_requests_token (email_token_hash);
+  ADD INDEX IF NOT EXISTS idx_itemshare_requests_token (email_token_hash);
 
 -- The delivered/count query filters on these two.
 ALTER TABLE itemshare_requests
-  ADD KEY idx_itemshare_requests_delivered (status, fulfilled_at);
+  ADD INDEX IF NOT EXISTS idx_itemshare_requests_delivered (status, fulfilled_at);

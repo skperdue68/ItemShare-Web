@@ -22,5 +22,6 @@ UPDATE itemshare_requests
  WHERE submitted_at IS NULL
    AND status IN ('pending', 'fulfilled', 'declined', 'expired');
 
+-- IF NOT EXISTS keeps a retried migration from stopping on the index it already built.
 ALTER TABLE itemshare_requests
-  ADD KEY idx_itemshare_requests_submitted (requester_user_id, submitted_at);
+  ADD INDEX IF NOT EXISTS idx_itemshare_requests_submitted (requester_user_id, submitted_at);
