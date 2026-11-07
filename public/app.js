@@ -771,6 +771,18 @@ if (listRegion) {
     return { max, stack, held };
   }
 
+  /**
+   * A copy count the controls can actually show: a whole number from 1 to the number
+   * left. Typed text that is not a number, a fraction, or more than there is, all come
+   * back as something the slider has a position for.
+   */
+  function clampCopies(value, max) {
+    const cap = Math.max(1, Math.trunc(Number(max) || 1));
+    const wanted = Math.trunc(Number(value) || 1);
+
+    return Math.min(cap, Math.max(1, wanted));
+  }
+
   function dialogSummary(state) {
     if (state.kind === 'offer') {
       return 'This is a standing offer, so it means one copy.';
@@ -842,14 +854,21 @@ if (listRegion) {
         <h2 id="requestTitle">Reserve ${escapeText(name)}</h2>
         <p class="muted" data-dialog-summary>${escapeText(dialogSummary(state))}</p>
         ${guestFields}
-        <div class="modal-actions">
-          <button class="filter-clear" type="button" data-close-dialog>Cancel</button>
-          <button class="request-button" type="button" data-ask-one>Reserve 1</button>
-          ${
-            choices
-              ? `<button class="request-button is-stack" type="button" data-ask-stack>Reserve stack (<span data-dialog-max>${state.max}</span>)</button>`
-              : ''
-          }
+        ${
+          choices
+            ? `<div class="reserve-picker">
+          <input class="reserve-slider" type="range" min="1" max="${state.max}" step="1" value="1"
+                 data-reserve-slider aria-label="Copies to reserve, 1 to ${state.max}">
+          <input class="reserve-amount" type="number" min="1" max="${state.max}" step="1" value="1"
+                 inputmode="numeric" data-reserve-amount aria-label="Copies to reserve">
+        </div>`
+            : ''
+        }
+        <div class="modal-actions reserve-actions">
+          <button class="round-button is-cancel" type="button" data-close-dialog
+                  title="Cancel" aria-label="Cancel">&#10005;</button>
+          <button class="round-button is-confirm" type="button" data-reserve-confirm
+                  title="Reserve" aria-label="Reserve">&#10003;</button>
         </div>
       </div>`;
 
@@ -864,11 +883,11 @@ if (listRegion) {
       }
     });
 
-    // Two answers and no typing: one copy, or everything still unclaimed. A number box
-    // asked people to work out a cap they could not see, and a radio pair made them pick
-    // a kind of answer before they could give one.
-    const ask = (which) => {
-      const limit = Math.max(1, dialogState ? dialogState.max : 1);
+    // One answer, and the number in it belongs to the person: a slider from one copy to
+    // everything still available, with a box showing the same number that can be typed
+    // into. Whole copies only, and never more than are left.
+    const ask = () => {
+      const amount = backdrop.querySelector('[data-reserve-amount]');
       const accountName = backdrop.querySelector('input[name="accountName"]');
       const email = backdrop.querySelector('input[name="email"]');
       const password = backdrop.querySelector('input[name="password"]');
@@ -893,10 +912,21 @@ if (listRegion) {
         return;
       }
 
+      // The row moves while the dialog is open - somebody else claims a copy, the owner
+      // uploads a smaller count - so what is left is read again at the moment of asking.
+      // A number that no longer fits is clamped to the new top, and once every copy has
+      // gone nothing is sent at all: the dialog stays open and says so.
+      refreshDialogNumbers();
+
+      if (dialogState.max < 1) {
+        syncRequestDialog();
+        return;
+      }
+
       const picked = {
         kind,
         id: button.dataset.id,
-        quantity: which === 'stack' ? limit : 1,
+        quantity: choices ? clampCopies(amount ? amount.value : 1, dialogState.max) : 1,
         name,
         accountName: accountName ? accountName.value.trim() : '',
         email: email ? email.value.trim() : '',
@@ -907,27 +937,68 @@ if (listRegion) {
       sendRequest(picked);
     };
 
-    const oneButton = backdrop.querySelector('[data-ask-one]');
-    const stackButton = backdrop.querySelector('[data-ask-stack]');
+    const confirmButton = backdrop.querySelector('[data-reserve-confirm]');
 
-    if (oneButton) {
-      oneButton.addEventListener('click', () => ask('one'));
-      oneButton.focus();
+    if (confirmButton) {
+      confirmButton.addEventListener('click', () => ask());
+      confirmButton.focus();
     }
 
-    if (stackButton) {
-      stackButton.addEventListener('click', () => ask('stack'));
+    const slider = backdrop.querySelector('[data-reserve-slider]');
+    const amountBox = backdrop.querySelector('[data-reserve-amount]');
+
+    if (slider && amountBox) {
+      // The two controls are one answer: moving either moves the other, and the box is
+      // held to whole copies the slider has a position for rather than being allowed to
+      // drift to a number that cannot be chosen.
+      const limit = Math.max(1, dialogState ? dialogState.max : 1);
+      const setCopies = (value) => {
+        const copies = clampCopies(value, limit);
+        slider.value = String(copies);
+
+        return copies;
+      };
+
+      slider.addEventListener('input', () => {
+        amountBox.value = String(setCopies(slider.value));
+      });
+
+      amountBox.addEventListener('input', () => {
+        const digits = amountBox.value.replace(/[^\d]/g, '');
+
+        if (digits !== amountBox.value) {
+          amountBox.value = digits;
+        }
+
+        if (digits) {
+          slider.value = String(clampCopies(digits, limit));
+        }
+      });
+
+      // A number the slider cannot hold snaps to the nearest it can on the way out of the
+      // box, so what is sent is always one of the slider's own values.
+      amountBox.addEventListener('change', () => {
+        amountBox.value = String(setCopies(amountBox.value));
+      });
+
+      amountBox.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          ask();
+        }
+      });
     }
   }
 
   /**
-   * Keeps an open dialog honest while the list under it moves: when somebody else
-   * claims a copy, the number left, the cap on the field and the Entire stack option
-   * all follow it down, without making the person close and reopen the dialog.
+   * Re-reads the row the dialog was opened from. The list under the dialog keeps moving,
+   * so the number left comes from the row again rather than from when the dialog opened.
+   * A row with nothing left is not in the list at all - "All held" stands where its
+   * button was - and that reads here as nothing left.
    */
-  function syncRequestDialog() {
-    if (!dialog || !dialogState) {
-      return;
+  function refreshDialogNumbers() {
+    if (!dialogState) {
+      return null;
     }
 
     const fresh = document.querySelector(
@@ -939,31 +1010,53 @@ if (listRegion) {
     dialogState.stack = numbers.stack;
     dialogState.held = numbers.held;
 
+    return dialogState;
+  }
+
+  /**
+   * Keeps an open dialog honest while the list under it moves: when somebody else
+   * claims a copy, the number left, the top of the slider and the cap on the box all
+   * follow it down, without making the person close and reopen the dialog.
+   */
+  function syncRequestDialog() {
+    if (!dialog || !dialogState) {
+      return;
+    }
+
+    refreshDialogNumbers();
+
     const summary = dialog.querySelector('[data-dialog-summary]');
 
     if (summary) {
       summary.textContent = dialogSummary(dialogState);
     }
 
-    const maxLabel = dialog.querySelector('[data-dialog-max]');
-
-    if (maxLabel) {
-      maxLabel.textContent = String(dialogState.max);
-    }
-
     const nothingLeft = dialogState.max < 1;
-    const stackButton = dialog.querySelector('[data-ask-stack]');
+    const cap = String(Math.max(1, dialogState.max));
+    const slider = dialog.querySelector('[data-reserve-slider]');
+    const amountBox = dialog.querySelector('[data-reserve-amount]');
 
-    if (stackButton) {
-      stackButton.disabled = nothingLeft;
-      // One copy left makes the two answers the same answer, so only one is offered.
-      stackButton.hidden = dialogState.max < 2;
+    // The ceiling can fall while the dialog is open, so both controls follow it and a
+    // number that no longer fits snaps to the new top.
+    if (slider) {
+      slider.max = cap;
+      slider.disabled = nothingLeft;
+      slider.value = String(clampCopies(slider.value, dialogState.max));
     }
 
-    const oneButton = dialog.querySelector('[data-ask-one]');
+    if (amountBox) {
+      amountBox.max = cap;
+      amountBox.disabled = nothingLeft;
 
-    if (oneButton) {
-      oneButton.disabled = nothingLeft;
+      if (Number(amountBox.value) > dialogState.max) {
+        amountBox.value = cap;
+      }
+    }
+
+    const confirmButton = dialog.querySelector('[data-reserve-confirm]');
+
+    if (confirmButton) {
+      confirmButton.disabled = nothingLeft;
     }
   }
 
