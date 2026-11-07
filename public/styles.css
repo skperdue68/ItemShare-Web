@@ -2239,3 +2239,50 @@ th.action-cell {
 .email-line .meta-label {
   order: 2;
 }
+
+/* ------------------------------------------------------------ grouping the list */
+/* Above the table: one small switch for how the whole list is read - under type
+   headings, or flat in whatever order the columns were asked for. */
+.list-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 10px;
+}
+
+.group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.group-toggle:hover,
+.group-toggle:focus-visible {
+  color: #f8fafc;
+  border-color: rgba(148, 197, 255, 0.55);
+  background: rgba(148, 197, 255, 0.08);
+}
+
+.group-toggle:focus-visible {
+  outline: 2px solid rgba(148, 197, 255, 0.85);
+  outline-offset: 2px;
+}
+
+.group-toggle[aria-pressed='true'] {
+  color: #dce6f7;
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.group-icon {
+  flex: none;
+  display: block;
+}

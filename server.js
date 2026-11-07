@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readCookie, readGrouping } from './lib/preferences.js';
 // ItemShare upload site: signs in with Discord or Google (both optional),
 // accepts ItemShareSavedVars.lua and replaces every shared item for every ESO
 // account in the file. Styling follows the GuildSync palette.
@@ -447,19 +448,12 @@ const ADDED_WINDOWS = new Set(['1', '7', '30']);
 // ?sort= still wins when it is present, so an older bookmark keeps behaving.
 const SORT_COOKIE = 'itemshare_sort';
 
-function readSortCookie(header) {
-  for (const part of String(header || '').split(';')) {
-    const [name, ...rest] = part.split('=');
+// Grouping is its own preference, for the same reason: turning the type headings off
+// should not disturb the order somebody chose from the column headings.
+const GROUP_COOKIE = 'itemshare_group';
 
-    if (name && name.trim() === SORT_COOKIE) {
-      return decodeURIComponent(rest.join('=').trim());
-    }
-  }
 
-  return '';
-}
-
-function readFilters(query, sortCookie = '') {
+function readFilters(query, sortCookie = '', groupCookie = '') {
   const sort = readParam(query.sort);
   const dir = readParam(query.dir);
   const added = readParam(query.added);
@@ -479,6 +473,8 @@ function readFilters(query, sortCookie = '') {
     added: ADDED_WINDOWS.has(added) ? added : '',
     sort: SORT_FIELDS.has(chosenSort) && chosenSort !== 'type' ? chosenSort : 'type',
     dir: chosenDir === 'desc' ? 'desc' : 'asc',
+    // Headings are drawn while this is true, whatever the order is.
+    group: readGrouping(groupCookie),
   };
 }
 
@@ -601,7 +597,11 @@ async function viewerAccountNames(req, connection, user) {
 }  app.get('/', async (req, res) => {
     res
       .type('html')
-      .send(renderPage(await collectViewerData(req, readFilters(req.query, readSortCookie(req.headers.cookie)))));
+      .send(renderPage(await collectViewerData(req, readFilters(
+      req.query,
+      readCookie(req.headers.cookie, SORT_COOKIE),
+      readCookie(req.headers.cookie, GROUP_COOKIE)
+    ))));
   });
 
   // Choosing the account to browse as. A plain form POST, so it still works with the
@@ -653,7 +653,11 @@ async function viewerAccountNames(req, connection, user) {
 // The live update: the same list the page was built from, as a fragment, using the
 // filters this browser already has. A non-200 means "leave the screen alone" - a
 // database hiccup must not replace a good list with an error card.
-app.get('/items', async (req, res) => {    const data = await collectViewerData(req, readFilters(req.query, readSortCookie(req.headers.cookie)));
+app.get('/items', async (req, res) => {    const data = await collectViewerData(req, readFilters(
+      req.query,
+      readCookie(req.headers.cookie, SORT_COOKIE),
+      readCookie(req.headers.cookie, GROUP_COOKIE)
+    ));
 
   if (data.dbError) {
     res.status(503).json({ error: data.dbError });

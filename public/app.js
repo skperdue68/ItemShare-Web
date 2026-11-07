@@ -308,6 +308,18 @@ if (listRegion) {
       return;
     }
 
+    // Grouping is the other half of how the list reads: whether the type headings are
+    // drawn at all. It is kept apart from the sort so turning it off leaves the order
+    // alone, and turning it on does not throw away the column somebody picked.
+    const groupButton = closest('[data-group-toggle]');
+
+    if (groupButton) {
+      event.preventDefault();
+      writeGroupCookie(groupButton.getAttribute('aria-pressed') === 'true' ? '0' : '1');
+      scheduleRefresh(0);
+      return;
+    }
+
     const requestButton = closest('[data-request]');
 
     if (requestButton) {
@@ -372,6 +384,14 @@ if (listRegion) {
   // The sort order is a reading preference, so it is remembered in a cookie and never
   // written into the address bar. `type:asc` means "no choice": the plain type grouping
   // the server sends anyway, which also clears a choice made on an earlier visit.
+  // Its own cookie, for the same reason: a display choice should not be in the URL, and
+  // the two choices are independent, so one must not overwrite the other.
+  function writeGroupCookie(value) {
+    document.cookie = `itemshare_group=${encodeURIComponent(
+      value
+    )}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  }
+
   function writeSortCookie(value) {
     document.cookie = `itemshare_sort=${encodeURIComponent(
       value

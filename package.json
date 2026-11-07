@@ -10,6 +10,7 @@
     "email:test": "node testEmail.js",
     "email:preview": "node previewEmail.js",
     "test:fulfillment": "node testFulfillment.js",
+    "test:grouping": "node testGrouping.js",
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js"
   },
