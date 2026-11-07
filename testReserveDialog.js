@@ -220,7 +220,7 @@ function pressTick({ opened, shown, now, withSlider = true, kind = 'inventory' }
   return { sent, closes, closesAfterOpen, dialog, page };
 }
 
-const CLAIMED = 'Every copy has just been claimed, so there is nothing left to ask for.';
+const CLAIMED = 'Every copy has just been reserved, so there is nothing left to ask for.';
 
 let total = 0;
 let failures = 0;
@@ -269,7 +269,7 @@ t('a copy taken elsewhere does not take the last one with it', () => {
 
   ui.sync();
 
-  assert.equal(ui.summary.textContent, '1 of the 5 still unclaimed.');
+  assert.equal(ui.summary.textContent, '1 of the 5 still available.');
   assert.equal(ui.confirm.disabled, false, 'one copy left is still one copy to ask for');
   assert.equal(ui.slider.max, '1');
   assert.equal(ui.slider.value, '1');
@@ -282,7 +282,7 @@ t('a copy going elsewhere lowers the top and pulls the chosen count down with it
 
   ui.sync();
 
-  assert.equal(ui.summary.textContent, '2 of the 5 still unclaimed.');
+  assert.equal(ui.summary.textContent, '2 of the 5 still available.');
   assert.equal(ui.slider.max, '2');
   assert.equal(ui.slider.value, '2', 'a count that is no longer available becomes the new top');
   assert.equal(ui.amount.max, '2');
@@ -299,7 +299,7 @@ t('a copy in your own basket is still named in the sentence', () => {
 
   assert.equal(
     ui.summary.textContent,
-    '2 of the 5 still unclaimed, and 1 already in your basket - asking for more adds to that row rather than starting another.'
+    '2 of the 5 still available, and 1 already in your basket - asking for more adds to that row rather than starting another.'
   );
 });
 
@@ -310,7 +310,7 @@ t('the owner uploading fewer copies moves the ceiling and the sentence', () => {
 
   ui.sync();
 
-  assert.equal(ui.summary.textContent, '3 still unclaimed.', 'no "of the 5" once the stack itself is three');
+  assert.equal(ui.summary.textContent, '3 still available.', 'no "of the 5" once the stack itself is three');
   assert.equal(ui.slider.max, '3');
   assert.equal(ui.slider.value, '3');
   assert.equal(ui.amount.value, '3');
@@ -322,7 +322,7 @@ t('a re-upload leaving one copy keeps the dialog usable for that one', () => {
 
   ui.sync();
 
-  assert.equal(ui.summary.textContent, '1 still unclaimed.');
+  assert.equal(ui.summary.textContent, '1 still available.');
   assert.equal(ui.slider.max, '1');
   assert.equal(ui.slider.value, '1');
   assert.equal(ui.amount.value, '1');

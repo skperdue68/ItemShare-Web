@@ -769,10 +769,10 @@ if (listRegion) {
     }
 
     if (state.max < 1) {
-      return 'Every copy has just been claimed, so there is nothing left to ask for.';
+      return 'Every copy has just been reserved, so there is nothing left to ask for.';
     }
 
-    return `${state.max}${state.stack > state.max ? ` of the ${state.stack}` : ''} still unclaimed${
+    return `${state.max}${state.stack > state.max ? ` of the ${state.stack}` : ''} still available${
       state.held > 0
         ? `, and ${state.held} already in your basket - asking for more adds to that row rather than starting another`
         : ''

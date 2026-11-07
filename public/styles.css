@@ -978,6 +978,7 @@ th.num {
   font-weight: 600;
   font-family: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -2167,6 +2168,67 @@ th .sort-link {
 
 .guest-fields .auth-field input {
   width: 100%;
+}
+
+/* ---------------------------------------------------------------- one voice for headings */
+/* Every heading reads the same. Two kinds of heading were not: a sortable one is a button
+   and a countdown one carries .seen-cell, which is muted and lighter, so the same colour,
+   weight, size and case are restated for both rather than left to inherit whatever their
+   element happens to carry. */
+th .sort-link,
+th.seen-cell,
+th.action-cell {
+  color: #dce6f7;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+/* A sentence where a paragraph used to be: centred and bold, because it is a statement
+   about what the bag means rather than instructions to read. */
+.bag-note {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted-strong);
+}
+
+/* Cancel is destructive and it is its own control, not a link: a red button says so and is
+   big enough to aim at. Same red pair as the "Nothing to hand over" button. */
+.cancel-button {
+  border: 1px solid #b91c1c;
+  border-radius: 7px;
+  padding: 4px 12px;
+  background: #b91c1c;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancel-button:hover,
+.cancel-button:focus-visible {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+/* The sign-in address, on one line under the account list: the address itself, then the
+   muted label, with room above it so it does not read as another account fact. */
+.email-line {
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.email-line .meta-value {
+  order: 1;
+}
+
+.email-line .meta-label {
+  order: 2;
 }
 
 /* ------------------------------------------------------------ the reserve dialog */
