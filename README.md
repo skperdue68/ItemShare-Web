@@ -825,10 +825,12 @@ already exist rather than inventing any.
 
 Puts requests whose hold ran out back into the requester's basket. A request starts as a
 `draft` that holds part of a stack, and the site's sweeper marks it `expired` when its
-deadline passes; that row was never sent, so no owner was ever told about it. Reopening it
-holds the copies again and puts it back under *In your basket*, where **Send requests** is.
-It is deliberately not turned into a `pending` request: the owner's email goes out when a
-basket is submitted, so a row made pending here would be a promise nobody was told about.
+deadline passes; that row was never sent, so no owner was ever told about it. By default
+reopening it holds the copies again and puts it back under *In your basket*, where **Send
+requests** is, and nothing is asked of the owner until they press it. `--pending` files it
+as a sent request instead: it counts against the owner's stack and waits in their list
+exactly as a submitted basket would, but no email goes out, which is the point when the
+owner already knows and the site just needs to catch up.
 
 | Flag | Meaning |
 | --- | --- |
@@ -837,6 +839,8 @@ basket is submitted, so a row made pending here would be a promise nobody was to
 | `--email <address>` | Only that person's requests |
 | `--account <@Name>` | Only requests asked from that ESO account |
 | `--item <text>` | Only items whose name contains this text |
+| `--basket` | Back in the requester's basket, held for `--minutes`. The default |
+| `--pending` | Filed as a sent request: waits in the owner's list, no email sent |
 | `--minutes <n>` | How long the reopened hold lasts. Default `5`, at most `120` |
 | `--limit <n>` | Stop after `n` requests |
 | `--dry-run` | Say what would be reopened, write nothing |
@@ -847,7 +851,14 @@ npm run requests:reopen -- --dry-run --all                 # what expired, chang
 npm run requests:reopen -- --email someone@example.com     # just that person's
 npm run requests:reopen -- --account @Ghost --item dagger  # narrower still
 npm run requests:reopen -- --id 128,129 --minutes 30       # two rows, half an hour
+npm run requests:reopen -- --pending --email someone@example.com   # make it real, quietly
 ```
+
+`--pending` changes what the owner knows. Without it the row is a basket entry the person
+can still drop; with it the request is in the owner's list and counts against their stack
+the moment the command runs, and only they can answer it. Neither path emails anybody - the
+notification is the site's job when a basket is submitted - so a pending row is found the
+next time the owner opens their list.
 
 A run with no scope flag changes nothing and exits `2`, because "everything expired" is a
 dangerous thing to type by accident. Every row is measured against what is free *now* - a

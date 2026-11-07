@@ -74,7 +74,7 @@ function fakeConnection({ rows = [], reserved = {}, delivered = {} } = {}) {
     updates,
     queries,
     async execute(sql, params = []) {
-      if (sql.includes("SET status = 'draft'")) {
+      if (sql.trimStart().startsWith('UPDATE itemshare_requests')) {
         updates.push({ sql, params });
         return [{ affectedRows: 1 }, []];
       }
@@ -134,6 +134,12 @@ t('--id takes one, several, or a comma-separated list', () => {
 
 t('--all is a scope on its own', () => {
   assert.deepEqual(parseArguments(['--all']).problems, []);
+});
+
+t('the destination is the basket unless --pending is given', () => {
+  assert.equal(parseArguments(['--all']).options.target, 'basket');
+  assert.equal(parseArguments(['--all', '--pending']).options.target, 'pending');
+  assert.equal(parseArguments(['--all', '--pending', '--basket']).options.target, 'basket');
 });
 
 t('the hold can be set, and is bounded like the site bounds it', () => {
@@ -204,6 +210,47 @@ await tAsync('a row with room comes back as a draft holding what it held', async
   assert.match(update.sql, /status_reason = ''/);
   assert.match(update.sql, /WHERE id = \? AND status = 'expired'/, 'a row that moved on is not touched');
   assert.deepEqual(update.params, [2, 2, 128]);
+  assert.equal(report.target, 'basket', 'the basket is what happens unless asked otherwise');
+});
+
+await tAsync('--pending files it as a sent request, and emails nobody', async () => {
+  const connection = fakeConnection({ rows: [expiredRow()] });
+  const report = await reopenExpiredRequests(connection, { target: 'pending' });
+
+  assert.equal(report.target, 'pending');
+  assert.equal(report.reopened.length, 1);
+
+  const [update] = connection.updates;
+
+  assert.match(update.sql, /SET status = 'pending'/);
+  assert.doesNotMatch(update.sql, /status = 'draft'/, 'not a draft: it is a real request now');
+  assert.match(
+    update.sql,
+    /submitted_at = UTC_TIMESTAMP\(\)/,
+    'the same moment submitDrafts records'
+  );
+  assert.match(update.sql, /expires_at = NULL/, 'a request waiting on an owner does not lapse');
+  assert.doesNotMatch(update.sql, /INTERVAL/, 'there is no hold to time out');
+  assert.match(update.sql, /WHERE id = \? AND status = 'expired'/);
+  assert.deepEqual(update.params, [2, 2, 128]);
+});
+
+await tAsync('a pending dry run writes nothing either', async () => {
+  const connection = fakeConnection({ rows: [expiredRow()] });
+  const report = await reopenExpiredRequests(connection, { target: 'pending', dryRun: true });
+
+  assert.equal(report.target, 'pending');
+  assert.equal(report.reopened.length, 1);
+  assert.equal(connection.updates.length, 0);
+});
+
+await tAsync('a row made pending is still checked against what is free', async () => {
+  const connection = fakeConnection({ rows: [expiredRow()], reserved: { 7: 5 } });
+  const report = await reopenExpiredRequests(connection, { target: 'pending' });
+
+  assert.equal(report.reopened.length, 0);
+  assert.match(report.skipped[0].reason, /spoken for/);
+  assert.equal(connection.updates.length, 0);
 });
 
 await tAsync('a dry run reports the same rows and writes nothing', async () => {
@@ -361,6 +408,32 @@ t('a run that reopened says so, and that no owner was told', () => {
   assert.match(text, /^Reopened 1 request:/m);
   assert.match(text, /Nothing has been sent to an owner/);
   assert.match(text, /Send requests is what asks/);
+});
+
+t('a pending run says the owner was not emailed', () => {
+  const text = formatReport({
+    target: 'pending',
+    minutes: 5,
+    dryRun: false,
+    reopened: [
+      {
+        id: 128,
+        itemName: 'Briarheart Dagger',
+        quantity: 2,
+        asked: 2,
+        capped: false,
+        requesterAccount: '@Ghost',
+        ownerAccount: '@Trader',
+      },
+    ],
+    skipped: [],
+  }).join('\n');
+
+  assert.match(text, /Destination: pending/);
+  assert.match(text, /the owner is not emailed/);
+  assert.match(text, /No email was sent/);
+  assert.match(text, /waiting in its owner's list/);
+  assert.doesNotMatch(text, /back in the basket/);
 });
 
 t('a run that matched nothing says that rather than printing an empty list', () => {

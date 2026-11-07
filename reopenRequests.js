@@ -5,6 +5,7 @@
 //   npm run requests:reopen -- --email someone@example.com
 //   npm run requests:reopen -- --account @Ghost --item dagger
 //   npm run requests:reopen -- --id 128 --minutes 30
+//   npm run requests:reopen -- --pending --email someone@example.com
 //   npm run requests:reopen -- --all
 //
 // A request starts as a `draft` holding part of a stack, and stops holding it when its
@@ -38,6 +39,14 @@ export const USAGE = `Usage: node reopenRequests.js <scope> [options]
 Puts requests whose hold ran out back into the requester's basket. An expired
 request was never sent, so no owner is told anything: the copies are held again and
 the row is back under "In your basket", where Send requests is.
+
+Where it goes:
+
+  --basket (default)  Back in the requester's basket, held for --minutes, asking
+                      nobody for anything yet
+  --pending           Filed as a sent request: it waits in the owner's list and counts
+                      against their stack exactly as a submitted basket would, but no
+                      email goes out, so the owner sees it next time they look
 
 Say which requests - a run with no scope changes nothing:
 
@@ -80,6 +89,7 @@ export function parseArguments(argv) {
     limit: 0,
     minutes: DEFAULT_HOLD_MINUTES,
     dryRun: false,
+    target: 'basket',
     all: false,
     help: false,
   };
@@ -101,6 +111,16 @@ export function parseArguments(argv) {
 
     if (flag === '--all') {
       options.all = true;
+      continue;
+    }
+
+    if (flag === '--pending') {
+      options.target = 'pending';
+      continue;
+    }
+
+    if (flag === '--basket') {
+      options.target = 'basket';
       continue;
     }
 
@@ -183,8 +203,13 @@ export function parseArguments(argv) {
 export function formatReport(report) {
   const lines = [];
   const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  const target = report.target === 'pending' ? 'pending' : 'basket';
 
-  lines.push(`Hold: ${plural(report.minutes, 'minute')} from now.`);
+  lines.push(
+    target === 'pending'
+      ? 'Destination: pending - the owner is not emailed, the request waits in their list.'
+      : `Hold: ${plural(report.minutes, 'minute')} from now, back in the basket.`
+  );
   lines.push('');
 
   if (report.reopened.length === 0) {
@@ -222,8 +247,10 @@ export function formatReport(report) {
     lines.push('');
     lines.push(
       report.dryRun
-        ? 'Nothing was written. Run it again without --dry-run to hold them.'
-        : 'Nothing has been sent to an owner: each row is back in the basket, and Send requests is what asks.'
+        ? 'Nothing was written. Run it again without --dry-run to do it.'
+        : target === 'pending'
+          ? "No email was sent: each row is waiting in its owner's list, and answering it there is what moves it on."
+          : 'Nothing has been sent to an owner: each row is back in the basket, and Send requests is what asks.'
     );
   }
 
@@ -267,6 +294,7 @@ async function run(argv) {
       limit: options.limit,
       minutes: options.minutes,
       dryRun: options.dryRun,
+      target: options.target,
     });
 
     for (const line of formatReport(report)) {
