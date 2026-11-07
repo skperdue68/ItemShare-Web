@@ -1061,25 +1061,20 @@ if (listRegion) {
   }
 
   // A reservation is not a request. The copy leaves everyone else's list the moment it is
-  // picked, but no owner is asked until the basket is sent - so the difference is said
-  // once per session, at the moment the first copy is picked. Somebody who reads the
-  // click as the request itself walks away, and the hold simply lapses.
-  const HOLD_NOTICE_KEY = 'itemshare:hold-notice';
+  // picked, but no owner is asked until the basket is sent - so the difference is said at
+  // the moment the first copy goes into an empty basket. Somebody who reads the click as
+  // the request itself walks away, and the hold simply lapses.
+  //
+  // This used to be once per browser session, tracked in sessionStorage, which is why it
+  // could not be seen: any earlier hold in that tab set the flag for good, however long
+  // ago it was and whatever had happened to that basket since. Tying it to the empty
+  // basket says it at the moment the confusion is actually possible, and only then.
 
   function holdMinutes() {
     return Math.max(1, Number(document.body.dataset.holdMinutes) || 5);
   }
 
   function explainFirstHold(name, copies) {
-    try {
-      if (window.sessionStorage.getItem(HOLD_NOTICE_KEY)) {
-        return;
-      }
-      window.sessionStorage.setItem(HOLD_NOTICE_KEY, '1');
-    } catch (error) {
-      // Storage off or full: saying it again on the next hold beats never saying it.
-    }
-
     const minutes = holdMinutes();
     const what = copies > 1 ? `${copies} copies of ${name}` : name;
     const backdrop = document.createElement('div');
@@ -1145,6 +1140,11 @@ if (listRegion) {
     email = '',
     password = '',
   }) {
+    // Read before the request goes: with no basket on the page yet, this copy is the first
+    // one, and the notice is for exactly that moment.
+    const basketWasEmpty =
+      !document.querySelector('[data-basket]') && !document.querySelector('[data-basket-row]');
+
     try {
       const payload = new URLSearchParams({ kind, id, quantity });
 
@@ -1188,7 +1188,9 @@ if (listRegion) {
       // number that stuck is the one to report, not the one that was picked.
       const asked = Number(result.quantity) || quantity;
 
-      explainFirstHold(name, asked);
+      if (basketWasEmpty) {
+        explainFirstHold(name, asked);
+      }
 
       showToast(
         result.combined

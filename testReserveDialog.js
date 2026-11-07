@@ -45,8 +45,13 @@ const parts = [
     '  /**\n   * Re-reads the row the dialog was opened from.'
   ),
   between('  function refreshDialogNumbers() {', '  // A reservation is not a request.'),
+  // The notice that a copy is held rather than asked for. It runs off the document and
+  // needs no fetch, so the words it shows can be checked for real.
+  between('  // A reservation is not a request.', '  async function sendRequest({'),
   'return {',
   '  dialogNumbers,',
+  '  holdMinutes,',
+  '  explainFirstHold,',
   '  dialogSummary,',
   '  clampCopies,',
   '  refreshDialogNumbers,',
@@ -425,6 +430,94 @@ t('a standing offer still posts its one copy', () => {
 
   assert.equal(run.sent.length, 1);
   assert.equal(run.sent[0].quantity, 1);
+});
+
+// ------------------------------------------------------ held, but not asked for
+
+/**
+ * The notice on its own. The stand-in document remembers what was appended to it, so the
+ * words somebody actually reads can be checked without a browser.
+ */
+function holdNotice({ copies = 1, minutes = 0 } = {}) {
+  const created = [];
+  const listeners = [];
+  const fakeDocument = {
+    body: {
+      dataset: minutes ? { holdMinutes: String(minutes) } : {},
+      appendChild: noop,
+    },
+    createElement() {
+      const notice = {
+        className: '',
+        innerHTML: '',
+        addEventListener: noop,
+        remove: noop,
+        querySelector: () => null,
+      };
+
+      created.push(notice);
+
+      return notice;
+    },
+    addEventListener: (type, fn) => listeners.push({ type, fn }),
+    removeEventListener: noop,
+    querySelector: () => null,
+  };
+  const page = makePage(fakeDocument, escape, noop, noop);
+
+  page.explainFirstHold('Briarheart Dagger', copies);
+
+  return { created, notice: created[0], listeners };
+}
+
+t('the first copy is put on the page and says it is held, not asked for', () => {
+  const run = holdNotice();
+
+  assert.equal(run.created.length, 1, 'a dialog is put on the page');
+  assert.match(run.notice.innerHTML, /Reserved - not sent yet/);
+  assert.match(run.notice.innerHTML, /Briarheart Dagger is held for you/);
+  assert.match(
+    run.notice.innerHTML,
+    /Nothing has been asked for until you press <strong>Send requests<\/strong>/,
+    'the difference between reserved and requested is the whole point of it'
+  );
+  assert.match(run.notice.innerHTML, /data-send-hold/, 'with the button that does send it');
+  assert.match(run.notice.innerHTML, /data-close-hold/, 'and a way to keep looking');
+});
+
+t('it names the number of copies when there is more than one', () => {
+  const run = holdNotice({ copies: 3 });
+
+  assert.match(run.notice.innerHTML, /3 copies of Briarheart Dagger are held/);
+  assert.match(run.notice.innerHTML, /then the copies go back/);
+});
+
+t('it names the hold the page was built with', () => {
+  assert.match(holdNotice().notice.innerHTML, /ends in 5 minutes/, 'the default');
+  assert.match(holdNotice({ minutes: 12 }).notice.innerHTML, /ends in 12 minutes/);
+});
+
+t('escape closes it rather than trapping anybody', () => {
+  const run = holdNotice();
+
+  assert.equal(run.listeners.length, 1, 'one listener, for the keyboard');
+  assert.equal(run.listeners[0].type, 'keydown');
+});
+
+t('it is said for the first copy in an empty basket, and only then', () => {
+  assert.match(
+    source,
+    /const basketWasEmpty =\s*!document\.querySelector\('\[data-basket\]'\) && !document\.querySelector\('\[data-basket-row\]'\)/,
+    'both marks of a basket already on the page are read before the request goes'
+  );
+  assert.match(source, /if \(basketWasEmpty\) \{\s*explainFirstHold\(name, asked\);/, 'and it gates the notice');
+  assert.equal(source.includes('HOLD_NOTICE_KEY'), false, 'nothing remembers that it was shown');
+
+  // The one thing that hid it: a flag in sessionStorage, which an earlier hold in the
+  // same tab set for good. Nothing in the notice reaches for storage now.
+  const noticeSource = between('  // A reservation is not a request.', '  async function sendRequest({');
+
+  assert.equal(/sessionStorage\s*\./.test(noticeSource), false, 'nothing is read or written there');
 });
 
 console.log(`\n${total - failures}/${total} passed`);
