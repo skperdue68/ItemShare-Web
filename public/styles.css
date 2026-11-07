@@ -1421,6 +1421,14 @@ th .sort-link.active {
   font-variant-numeric: tabular-nums;
 }
 
+/* The Added column reads as a countdown, and units appear to its left as an item ages, so it
+   is right-aligned: the seconds keep one edge and ages line up down the column instead of
+   each row starting somewhere new. Tabular figures keep the digits from shifting. */
+.seen-cell.relative {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .action-cell {
   text-align: right;
   white-space: nowrap;

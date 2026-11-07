@@ -649,6 +649,7 @@ if (listRegion) {
     animatePanelHeights(listRegion, panelHeights);
     animateRowsInto(listRegion, rowTops);
     localiseTimeLabels(listRegion);
+    relativeTick(listRegion);
     setLiveState(liveState);
     setTab(activeTab);
     noteClosedRequests();
@@ -1554,6 +1555,125 @@ function animatePanelHeights(root, heights) {
   });
 }
 
+// ------------------------------------------------------- relative times
+// The Added column reads as a countdown - "6d 4h 18m 44s" - because a list of shared items
+// is read for what is new. The server puts each moment in a `time[data-since]` and prints
+// the same moment as UTC inside it; this rewrites that text in the reader's own clock.
+//
+// Units are counted the way a person counts: years and months first, anchored on the
+// original date so a month-end does not skip a month, then days, hours, minutes, seconds.
+// A unit that is zero is left out, because zero is not news: "12s", "8m 41s",
+// "1y 4mo 19d 7h 33m 5s". One timer drives every cell on the page, and a cell whose text
+// has not changed is not written to, so a long list costs only the arithmetic per tick.
+const RELATIVE_TICK_MS = 1000;
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+function relativeUnits(from, to) {
+  // A device clock a few seconds ahead of the server would otherwise count backwards into a
+  // negative month and read as "1mo 30d ...". Nothing is younger than now.
+  if (to <= from) {
+    return { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+
+  const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const anchorFor = (years, months) => {
+    const anchor = new Date(from.getTime());
+    anchor.setDate(1);
+    anchor.setFullYear(from.getFullYear() + years);
+    anchor.setMonth(from.getMonth() + months);
+    // A day-of-month that does not exist in the target month (31 February) clamps to its
+    // last day rather than spilling into the next month.
+    anchor.setDate(Math.min(from.getDate(), daysInMonth(anchor.getFullYear(), anchor.getMonth())));
+    return anchor;
+  };
+
+  let years = to.getFullYear() - from.getFullYear();
+  let months = to.getMonth() - from.getMonth();
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  let anchor = anchorFor(years, months);
+
+  // The birthday has not arrived yet this year, or the month is not over: step back until the
+  // anchor is in the past, which is what keeps "1 month" from appearing a day early.
+  while (anchor > to) {
+    months -= 1;
+
+    if (months < 0) {
+      months += 12;
+      years -= 1;
+    }
+
+    anchor = anchorFor(years, months);
+  }
+
+  let rest = Math.max(0, to - anchor);
+  const days = Math.floor(rest / DAY_MS);
+  rest -= days * DAY_MS;
+  const hours = Math.floor(rest / HOUR_MS);
+  rest -= hours * HOUR_MS;
+  const minutes = Math.floor(rest / MINUTE_MS);
+  rest -= minutes * MINUTE_MS;
+  const seconds = Math.floor(rest / 1000);
+
+  return { years, months, days, hours, minutes, seconds };
+}
+
+/** "1y 4mo 19d 7h 33m 5s", skipping the units that are zero, and "just now" at zero. */
+function relativeText(from, to) {
+  const units = relativeUnits(from, to);
+  const parts = [];
+
+  if (units.years) parts.push(`${units.years}y`);
+  if (units.months) parts.push(`${units.months}mo`);
+  if (units.days) parts.push(`${units.days}d`);
+  if (units.hours) parts.push(`${units.hours}h`);
+  if (units.minutes) parts.push(`${units.minutes}m`);
+  if (units.seconds) parts.push(`${units.seconds}s`);
+
+  return parts.length > 0 ? parts.join(' ') : 'just now';
+}
+
+/** Rewrites every countdown under `root`, and puts the exact local time in its tooltip. */
+function relativeTick(root, to = new Date()) {
+  if (!root || typeof root.querySelectorAll !== 'function') {
+    return;
+  }
+
+  root.querySelectorAll('time[data-since]').forEach((element) => {
+    const iso = element.getAttribute('datetime');
+    const from = iso ? new Date(iso) : null;
+
+    if (!from || Number.isNaN(from.getTime())) {
+      return;
+    }
+
+    const text = relativeText(from, to);
+
+    if (element.textContent !== text) {
+      element.textContent = text;
+    }
+
+    const title = `First shared ${from.toLocaleString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+
+    if (element.title !== title) {
+      element.title = title;
+    }
+  });
+}
+// ------------------------------------------------------- end relative times
+
 /** Request times arrive as UTC ISO stamps and are shown in the reader's clock. */
 function localiseTimeLabels(root) {
   if (!root || typeof root.querySelectorAll !== 'function') {
@@ -1580,6 +1700,9 @@ function localiseTimeLabels(root) {
 }
 
 localiseTimeLabels(document);
+relativeTick(document);
+// One timer for the whole page: every countdown on it is rewritten together.
+window.setInterval(() => relativeTick(document), RELATIVE_TICK_MS);
 
 // ------------------------------------------------------- removed basket rows
 // Taking something out of the basket leaves the row where it was, marked cancelled,
