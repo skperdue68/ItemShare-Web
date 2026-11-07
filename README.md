@@ -326,15 +326,23 @@ account.
 Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (other
 people's items), **Offering** (your own), and **Your requests**.
 
-Rows are grouped by type and alphabetical inside each group. The **Item** and **Added**
-headings sort, cycling through three states on repeated clicks: ascending, descending,
-then back to the type groups. Sorting by either drops the type headings, so the order
-you asked for is the order you get. The chosen order is remembered in the
-`itemshare_sort` cookie, so it survives a reload without ever appearing in the URL.
+Rows sit under their item type, alphabetical inside each group, until you turn that off.
+The switch above the table reads **Grouped by type** or **One list** and flips between
+the two on a click, without touching the order you chose: grouping decides whether the
+headings are drawn, the headings decide the order. With grouping on, the order applies
+inside each type and to the order of the types themselves; with it off, it applies to the
+whole list.
+
+The **Item** and **Added** headings sort, cycling through three states on repeated
+clicks: ascending, descending, then back to the default. The chosen order is remembered
+in the `itemshare_sort` cookie and the grouping in `itemshare_group`, so both survive a
+reload without ever appearing in the URL.
 
 `Added` is the day an item first entered its owner's shared list - the day they offered
 it - not the day of their latest upload, so re-uploading a long-held item does not make
-it look new.
+it look new. An item that leaves the file altogether - unshared, or every copy handed
+over - is dropped when that upload arrives, so if the owner offers it again later it
+comes back with the day they offered it again rather than the day it first appeared.
 
 `Location` is where the owner's copy was the last time they saved: `Bank`,
 `Inventory (Character Name)`, `Furnishing Vault (...)`. An upload rewrites it, so moving
