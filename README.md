@@ -464,12 +464,12 @@ A request is **a reservation, not a delivery**, and it reserves from the moment 
 picked rather than from the moment it is sent:
 
 - The list has three quantity columns, so the arithmetic is visible instead of inferred:
-  **OFFERED** is the total the owner presented for claiming, **CLAIMED** is how much of it
+  **OFFERED** is the total the owner presented for claiming, **RESERVED** is how much of it
   a request is standing on, and **AVAILABLE** is what is left to claim - the cap on what
   anyone can ask for. Claimed and available add up to offered, so a row of 8 offered with
-  5 claimed and 3 available explains itself. A row with nothing claimed leaves that column
+  5 reserved and 3 available explains itself. A row with nothing reserved leaves that column
   blank rather than filling it with a dash. When nothing is available the button becomes
-  *All held*.
+  *All Currently Reserved*.
 - On your own rows, **N pending requests** says how many asks are waiting on you, one
   per request rather than one per copy, so two people asking for one copy each reads
   "2 pending requests". The number falls as requests are answered, cancelled or time
@@ -695,7 +695,7 @@ handled by one process would otherwise never reach sockets held by another.
 
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
-what is actually on offer, so every OFFERED/CLAIMED/AVAILABLE calculation is unaffected by
+what is actually on offer, so every OFFERED/RESERVED/AVAILABLE calculation is unaffected by
 a reserve.
 
 Guild IDs are the stable identity; names are display only, because names are neither
@@ -1147,7 +1147,7 @@ pending, and the same link answers them later.
   before per-row saving still works: `quantity_<id>` fields are read the same way.
 - GET shows the page and POST records a row. A mail client is never trusted with a form,
   so this page is the only way a message gets answered.
-- The same answering is **Requests for me**, reachable from the account menu. It opens as
+- The same answering is **Process Requests**, reachable from the account menu. It opens as
   a modal over the item list rather than replacing it, so answering costs one small
   request and the list underneath is still where it was; Escape, the large white close
   in the corner or a click outside it puts it away. `/owner/requests` is still a whole
