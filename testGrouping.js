@@ -6,7 +6,9 @@
 //   npm run test:grouping
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
+import { filterList } from './lib/filters.js';
 import { readCookie, readGrouping } from './lib/preferences.js';
 import { groupToggle, inventoryTable } from './lib/views.js';
 
@@ -149,6 +151,127 @@ t('one cookie can be read out of a header without the others', () => {
   assert.equal(readCookie(header, 'itemshare_sort'), 'name:desc');
   assert.equal(readCookie(header, 'missing'), '');
   assert.equal(readCookie('', 'itemshare_group'), '');
+});
+
+// ------------------------------------------------- sorting with the groups kept on
+
+// The rows arrive already in the order the query asked for; the table buckets them by type
+// and must leave that order alone inside each bucket. These feed an order that looks like
+// the result of a name sort and check it survives the bucketing.
+const sorted = [
+  item(11, 'Amber Ring', 'Weapons', 1),
+  item(12, 'Birch Cup', 'Apparel', 1),
+  item(13, 'Zephyr Bow', 'Weapons', 1),
+  item(14, 'Yew Log', 'Apparel', 1),
+];
+
+t('a chosen order is kept inside each group, and the groups stay', () => {
+  const html = inventoryTable(sorted, { mine: false, filters: { sort: 'name', group: true } });
+
+  assert.equal(headingCount(html), 2, 'the headings are still drawn');
+  assert.ok(
+    html.indexOf('Amber Ring') < html.indexOf('Zephyr Bow'),
+    'the weapons keep the order they arrived in'
+  );
+  assert.ok(
+    html.indexOf('Birch Cup') < html.indexOf('Yew Log'),
+    'so do the apparel rows'
+  );
+});
+
+t('the same order runs straight through when the groups are off', () => {
+  const html = inventoryTable(sorted, { mine: false, filters: { sort: 'name', group: false } });
+  const positions = ['Amber Ring', 'Birch Cup', 'Zephyr Bow', 'Yew Log'].map((name) =>
+    html.indexOf(name)
+  );
+
+  assert.equal(headingCount(html), 0);
+  assert.deepEqual(positions.slice().sort((a, b) => a - b), positions, 'one run, no regrouping');
+});
+
+t('a date order is kept inside each group too', () => {
+  const html = inventoryTable(sorted, { mine: false, filters: { sort: 'added', group: true } });
+
+  assert.equal(headingCount(html), 2);
+  assert.ok(html.indexOf('Amber Ring') < html.indexOf('Zephyr Bow'));
+  assert.ok(html.indexOf('Birch Cup') < html.indexOf('Yew Log'));
+});
+
+t('the sort heading still reports which way it is', () => {
+  const html = render({ sort: 'name', dir: 'desc', group: true });
+
+  assert.match(html, /data-sort="name" data-dir="desc"/, 'the arrow and the aria-sort follow');
+  assert.equal(headingCount(html), 2, 'and sorting does not take the groups away');
+});
+
+// --------------------------------------- the server keeps the two choices apart
+
+// The page only draws what the server asked for, so "does sorting take the groups away?"
+// is really a question about readFilters, the one place that turns the two cookies into
+// the two answers. These run that function out of server.js with nothing else attached.
+const serverSource = fs.readFileSync(new URL('./server.js', import.meta.url), 'utf8');
+
+/** One function's source, found by name and closed by counting braces. */
+function sourceOf(name) {
+  const at = serverSource.indexOf('function ' + name + '(');
+
+  if (at < 0) {
+    throw new Error('MISSING ANCHOR: function ' + name + ' in server.js');
+  }
+
+  let depth = 0;
+
+  for (let i = serverSource.indexOf('{', at); i < serverSource.length; i += 1) {
+    if (serverSource[i] === '{') depth += 1;
+    if (serverSource[i] === '}') depth -= 1;
+    if (depth === 0) return serverSource.slice(at, i + 1);
+  }
+
+  throw new Error('unbalanced function ' + name);
+}
+
+const consts = serverSource.match(/const (SORT_FIELDS|ADDED_WINDOWS) = new Set\(\[[^\]]*\]\);/g) || [];
+
+if (consts.length !== 2) {
+  throw new Error('MISSING ANCHOR: SORT_FIELDS / ADDED_WINDOWS in server.js');
+}
+
+const readFilters = new Function(
+  'readGrouping',
+  'filterList',
+  [consts.join('\n'), sourceOf('readParam'), sourceOf('readFilters'), 'return readFilters;'].join('\n')
+)(readGrouping, filterList);
+
+t('choosing a sort leaves grouping alone', () => {
+  const filters = readFilters({}, 'name:asc', '');
+
+  assert.equal(filters.sort, 'name', 'the order is the one asked for');
+  assert.equal(filters.group, true, 'and the headings stay on');
+});
+
+t('grouping off survives a sort being chosen', () => {
+  const filters = readFilters({}, 'added:desc', '0');
+
+  assert.equal(filters.sort, 'added');
+  assert.equal(filters.dir, 'desc');
+  assert.equal(filters.group, false, 'off stays off');
+});
+
+t('with neither chosen the list is grouped and ordered by type', () => {
+  const filters = readFilters({}, '', '');
+
+  assert.equal(filters.sort, 'type');
+  assert.equal(filters.group, true);
+});
+
+t('a nonsense grouping cookie does not ungroup the list', () => {
+  assert.equal(readFilters({}, 'type:asc', 'nonsense').group, true);
+});
+
+t('both list routes read the grouping cookie', () => {
+  const reads = (serverSource.match(/readCookie\(req\.headers\.cookie, GROUP_COOKIE\)/g) || []).length;
+
+  assert.equal(reads, 2, 'the page load and the live refresh both pass it through');
 });
 
 console.log(`\n${total - failures}/${total} passed`);
