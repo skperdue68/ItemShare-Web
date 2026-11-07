@@ -334,9 +334,10 @@ people's items), **Offering** (your own), and **Your requests**.
 Rows sit under their item type, alphabetical inside each group, until you turn that off.
 The switch above the table reads **Grouped by type** or **One list** and flips between
 the two on a click, without touching the order you chose: grouping decides whether the
-headings are drawn, the headings decide the order. With grouping on, the order applies
-inside each type and to the order of the types themselves; with it off, it applies to the
-whole list.
+headings are drawn, the headings decide the order. With grouping on, the types themselves
+always run A-Z and the chosen order applies only inside each type; with it off, it applies
+to the whole list. A sort never moves a heading: **Added** newest-first puts the newest
+weapon first under Weapons, and Weapons is still where W falls in the alphabet.
 
 The **Item** and **Added** headings sort, cycling through three states on repeated
 clicks: ascending, descending, then back to the default. The chosen order is remembered

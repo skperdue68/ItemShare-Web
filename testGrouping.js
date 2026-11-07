@@ -274,6 +274,59 @@ t('both list routes read the grouping cookie', () => {
   assert.equal(reads, 2, 'the page load and the live refresh both pass it through');
 });
 
+// ------------------------------------------------ the headings keep their own order
+
+t('the types always run A-Z, whatever the sort did to the rows', () => {
+  const html = render({ sort: 'added', dir: 'desc' });
+  const order = ['Apparel', 'Weapons'].map((name) =>
+    html.indexOf(name + ' <span class="type-count">')
+  );
+
+  assert.ok(order[0] > 0 && order[1] > 0, 'both headings are drawn');
+  assert.ok(
+    order[0] < order[1],
+    'Apparel still comes first when the newest row belongs to Weapons'
+  );
+});
+
+t('three types arrive alphabetically however the rows arrive', () => {
+  const rows = [
+    item(21, 'Zeta Blade', 'Weapons', 1),
+    item(22, 'Apple Pie', 'Consumables', 1),
+    item(23, 'Yew Staff', 'Weapons', 1),
+    item(24, 'Amber Ring', 'Apparel', 1),
+  ];
+  const html = inventoryTable(rows, { mine: false, filters: { group: true } });
+  const positions = ['Apparel', 'Consumables', 'Weapons'].map((name) =>
+    html.indexOf(name + ' <span class="type-count">')
+  );
+
+  assert.ok(positions.every((at) => at > 0), 'all three headings are drawn');
+  assert.deepEqual(
+    positions.slice().sort((a, b) => a - b),
+    positions,
+    'Apparel, Consumables, Weapons'
+  );
+});
+
+t('the order inside a type is still the one that was chosen', () => {
+  const rows = [
+    item(31, 'Zeta Blade', 'Weapons', 1),
+    item(32, 'Amber Ring', 'Apparel', 1),
+    item(33, 'Yew Staff', 'Weapons', 1),
+  ];
+  const html = inventoryTable(rows, { mine: false, filters: { group: true, sort: 'name' } });
+
+  assert.ok(
+    html.indexOf('Zeta Blade') < html.indexOf('Yew Staff'),
+    'the weapons keep the order they arrived in'
+  );
+  assert.ok(
+    html.indexOf('Apparel <span') < html.indexOf('Weapons <span'),
+    'while the types stay A-Z'
+  );
+});
+
 console.log(`\n${total - failures}/${total} passed`);
 
 process.exit(failures ? 1 : 0);
