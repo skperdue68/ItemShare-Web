@@ -383,6 +383,7 @@ async function realAccounts(connection) {
        LEFT JOIN itemshare_user_identities i
               ON i.user_id = a.user_id AND i.provider = 'simulator'
       WHERE i.user_id IS NULL
+        AND a.user_id IS NOT NULL
       ORDER BY a.eso_account_name ASC`
   );
 
@@ -395,12 +396,14 @@ async function sharedGuilds(connection, accounts) {
     return new Map();
   }
 
-  const [rows] = await connection.execute(
-    `SELECT ag.guild_id, COALESCE(g.guild_name, '') AS guild_name
+  const [rows] = await connection.execute(      `SELECT ag.guild_id, COALESCE(g.guild_name, '') AS guild_name
        FROM itemshare_account_guilds ag
-       LEFT JOIN itemshare_guilds g ON g.guild_id = ag.guild_id
+       LEFT JOIN itemshare_guilds g
+              ON g.guild_id = ag.guild_id
+             AND g.platform = ag.platform
+             AND g.world_name = ag.world_name
       WHERE ag.account_name IN (${accounts.map(() => '?').join(', ')})
-      GROUP BY ag.guild_id, g.guild_name
+      GROUP BY ag.guild_id, g.guild_name, ag.platform, ag.world_name
       ORDER BY guild_name ASC, ag.guild_id ASC`,
     accounts
   );

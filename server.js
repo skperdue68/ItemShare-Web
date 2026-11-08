@@ -2136,13 +2136,21 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
 
     const summary = await replaceAccounts(
       connection,
-      parsed.accounts.map((accountName) => ({
-        accountName,
-        items: parsed.items.filter((item) => item.accountName === accountName),
-        alwaysShare: parsed.alwaysShare.filter((entry) => entry.accountName === accountName),
-        addonVersion: parsed.addonVersions.get(accountName) || '',
-        guilds: parsed.accountGuilds.get(accountName) || new Map(),
-      })),
+      parsed.accounts.map((accountName) => {
+        // The server the file was written on travels with the account, and with every
+        // guild row it touches: a guild id means nothing without it.
+        const world = parsed.accountWorlds.get(accountName) || {};
+
+        return {
+          accountName,
+          items: parsed.items.filter((item) => item.accountName === accountName),
+          alwaysShare: parsed.alwaysShare.filter((entry) => entry.accountName === accountName),
+          addonVersion: parsed.addonVersions.get(accountName) || '',
+          guilds: parsed.accountGuilds.get(accountName) || new Map(),
+          platform: world.platform || 0,
+          worldName: world.worldName || '',
+        };
+      }),
       { sourceFile, userId: user ? user.id : null }
     );
 

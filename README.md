@@ -178,9 +178,9 @@ upload is accepted anonymously.
 What the file supplies, per shared item: name, item id, icon path, type, quality, trait,
 apparel slot, equip type, armour and weapon type, handedness, furniture data id,
 location, set name, enchantment, crafting style, required level, champion points and
-flavour text. Plus every ESO account in the file, each with its own guild membership,
-and the standing offers. Fields the game does not expose are simply absent rather than
-being invented.
+flavour text. Plus every ESO account in the file, each with its own guild membership and
+the server it was written on (`worldName` and `platformRaw`), and the standing offers.
+Fields the game does not expose are simply absent rather than being invented.
 
 **Fill in, then prune.** An upload writes every item the file mentions where it already
 stands - same row, same id, same first-seen date - and only afterwards deletes the rows
@@ -225,6 +225,31 @@ membership, so its items are attributed to the whole account rather than to nobo
 Two fields the addon is about to drop are already tolerated: a row with no `itemKey` is
 keyed by its `itemLink` plus the `locationKey` it was found in, and a row with no `count`
 takes `heldCount` minus `reserve`.
+
+### Which server a guild is on
+
+The addon writes the server it ran on into each account's scope: `worldName` (`NA
+Megaserver`, `EU Megaserver`, `PTS`) and `platformRaw`. They are read per account and
+stored on the account, on every guild and on every guild link, because a guild id and an
+`@handle` are only unique within one megaserver - the same numeric `guild_id` on NA and EU
+is two different guilds, and so is the same id on PC and Xbox.
+
+A guild is therefore identified by its id **and** its world, `itemshare_guilds` is keyed
+by both, and a share is only visible to an account on the same world as the owner. The
+account list shows the server beside each name.
+
+`0` / `''` mean **not known**, never a world of their own. An unknown world matches
+whatever it is compared with, the same way the guild rule itself is only applied when
+both sides know the answer, so everything recorded before this was captured stays
+visible and nothing has to be re-uploaded twice. Two cases have no file behind them:
+
+- a name attached by hand in the **ESO accounts** dialog, or typed by a guest asking for
+  the first time, has no world until that account uploads once;
+- a file from an addon older than the one that writes the world.
+
+The first upload from that account fills it in, and an ingest from a watcher does the
+same. An account scope is recorded even when it holds no items, so somebody who uploads a
+file where they share nothing still tells the site which server they play on.
 
 Only this layout is read. An older file - `knownGuilds`, guild fields copied onto every
 item, an `ItemShareExport.lua` compatibility copy - still parses, but its guilds are not
@@ -690,14 +715,14 @@ handled by one process would otherwise never reach sockets held by another.
 | --- | --- |
 | `itemshare_schema_migrations` | Which migration files have been applied |
 | `itemshare_uploads` | One row per import: account, file, item count, total quantity, person |
-| `itemshare_accounts` | ESO account → person link; several accounts may belong to one person |
-| `itemshare_account_guilds` | Which guilds each ESO account belongs to |
+| `itemshare_accounts` | ESO account → person link, with the platform and megaserver the file reported |
+| `itemshare_account_guilds` | Which guilds each ESO account belongs to, and on which world |
 | `itemshare_users` | One row per person: display name, email, verified flag, avatar, and the ESO account they browse as |
 | `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord, Google and email |
 | `itemshare_passwords` | one scrypt hash per person, for email and password sign-in |
 | `itemshare_sessions` | Sign-in sessions, so they survive a restart |
 | `itemshare_discord_users` | Legacy Discord profile table, superseded by `itemshare_users` |
-| `itemshare_guilds` | Guild ID → name, the stable identity for a guild |
+| `itemshare_guilds` | Guild ID + world → name; a guild id is only unique within one megaserver |
 | `itemshare_shared_items` | One row per shared item per character, with its captured details |
 | `itemshare_shared_item_guilds` | Which guilds each shared item is offered to |
 | `itemshare_always_share` | Standing offers: items the owner hands out whenever they have one |
@@ -712,8 +737,8 @@ handled by one process would otherwise never reach sockets held by another.
 what is actually on offer, so every OFFERED/RESERVED/AVAILABLE calculation is unaffected by
 a reserve.
 
-Guild IDs are the stable identity; names are display only, because names are neither
-unique nor stable.
+A guild id and its world are the stable identity; names are display only, because names
+are neither unique nor stable.
 
 Each captured item also keeps the raw scalar results of every getter that answered, in
 the `eso_data` JSON column, keyed by getter name:
@@ -1220,10 +1245,3 @@ depends on it.
 yet (required level, champion points, style among them). They are captured and stored,
 and nothing shows them.
 
-- server-aware identity: guild ids and account names are only unique within a
-  megaserver, so NA, EU and PTS data can collide. The same numeric `guild_id` on two
-  worlds becomes one guild, and the same `@handle` on two worlds becomes one account
-  whose uploads overwrite each other. Fixing it needs a server column on
-  `itemshare_accounts` and `itemshare_guilds`, composite keys, and the addon writing
-  the world into the file, because the parser cannot infer it from guild ids or names.
-  Harmless while everyone plays on one megaserver.

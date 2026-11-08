@@ -13,6 +13,7 @@
     "test:reserve-dialog": "node testReserveDialog.js",
     "test:grouping": "node testGrouping.js",
     "test:password-forms": "node testPasswordForms.js",
+    "test:server-identity": "node testServerIdentity.js",
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js"
   },
