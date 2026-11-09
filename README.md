@@ -335,7 +335,7 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/auth/:provider/callback` | Finish it |
 | `POST` | `/auth/email` | Sign in with an email address and password |
 | `POST` | `/auth/email/signup` | Make an account from an address and a password |
-| `POST` | `/accounts/add` | Attach an ESO account name to the signed-in person |
+| `POST` | `/accounts/add` | Attach an ESO account to the signed-in person: name, platform and server |
 | `POST` | `/accounts/remove` | Unlink one of their ESO accounts, leaving what it shared |
 | `POST` | `/logout` | Delete the session row and clear the cookie |
 | `POST` | `/simulate/nudge` | Token-authenticated "something changed" push, used by `npm run simulate` |
