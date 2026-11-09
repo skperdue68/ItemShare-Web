@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" role="img" aria-label="ItemShare">
+  <g transform="translate(0,82)">
+  <g fill="#0f9f90">
+    <circle cx="104" cy="92" r="56"/>
+    <path d="M22 280v-64c0-44 34-74 82-74s82 30 82 74v64z"/>
+    <path d="M150 196c30 0 54 8 74 20 10 6 8 20-4 23-24 6-48 5-70-2z"/>
+  </g>
+  <g fill="#f2543b">
+    <circle cx="376" cy="92" r="56"/>
+    <path d="M294 280v-64c0-44 34-74 82-74s82 30 82 74v64z"/>
+    <path d="M330 208c-30 0-54 6-74 16-10 5-9 19 3 23 24 7 48 8 71 4z"/>
+  </g>
+  <g fill="none" stroke="#0a4f49" stroke-width="7" stroke-linecap="round">
+    <path d="M82 84q12-14 24 0"/>
+    <path d="M110 84q12-14 24 0"/>
+    <path d="M354 84q12-14 24 0"/>
+    <path d="M382 84q12-14 24 0"/>
+  </g>
+  <path d="M78 100q26 40 52 0-26 16-52 0z" fill="#ffffff"/>
+  <path d="M350 100q26 40 52 0-26 16-52 0z" fill="#ffffff"/>
+  <g stroke="#f2543b" stroke-width="9" stroke-linecap="round">
+    <path d="M240 36v24"/>
+    <path d="M206 46l10 20"/>
+    <path d="M274 46l-10 20"/>
+    <path d="M186 74l14 14"/>
+    <path d="M294 74l-14 14"/>
+  </g>
+  <g>
+    <rect x="196" y="150" width="88" height="80" rx="10" fill="#2fa99b"/>
+    <rect x="232" y="150" width="16" height="80" fill="#f2543b"/>
+    <rect x="196" y="178" width="88" height="15" fill="#f2543b"/>
+    <path d="M240 150c-8-26-32-36-42-21-10 15 12 27 42 21z" fill="#f2543b"/>
+    <path d="M240 150c8-26 32-36 42-21 10 15-12 27-42 21z" fill="#f2543b"/>
+    <circle cx="240" cy="150" r="9" fill="#d9462f"/>
+  </g>
+  </g>
+</svg>
