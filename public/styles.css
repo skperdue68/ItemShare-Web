@@ -2161,6 +2161,15 @@ th .sort-link {
   color: var(--danger);
 }
 
+/* The sentence a two-box form shows before anything is posted: the pair disagreed, or the
+   password is the wrong length. Hidden until there is something to say, so the button does
+   not move on a form that is fine. */
+.form-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
 /* The demo pair is the one thing somebody may want before they have an account, so it is
    a box and a size up rather than another grey hint. */
 .demo-callout {
