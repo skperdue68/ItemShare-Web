@@ -363,7 +363,9 @@ one shares. **Your requests** covers everything you have asked for, from any acc
 The line under every item name carries the pieces that tell one copy from another, in
 the order a reader checks them: level, trait, crafting style, enchantment. They are bare
 values - `50 · Precise · Breton · Absorb Stamina` - with no labels, and a piece the item
-does not have is skipped rather than shown blank. Two Briarheart daggers share a name, a
+does not have is skipped rather than shown blank. A champion-point item shows its CP as
+that level - `CP160`, not the 50 that every character has long passed - so the piece is
+the one that actually decides whether the reader can use it. Two Briarheart daggers share a name, a
 set and a colour, so seeing that one is level 50 and *Precise* and the other level 10 and
 *Sharpened* should not mean scanning across to a column: the pieces sit where the name
 is, on **Request**, on **Offering** and on the owner's *Requests for your items* page.
