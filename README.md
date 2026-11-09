@@ -360,9 +360,11 @@ account* belongs to. **Offering** deliberately spans every linked account and na
 account and character holding each item, so a second account never hides what the first
 one shares. **Your requests** covers everything you have asked for, from any account.
 
-Every row shows the owning account, quantity, item type and trait. The character is named
-by the `Location` column (`Inventory (Character Name)`), so it is not repeated beside the
-account.
+Every row shows the owning account, quantity, item type and trait. `Location` is a column
+on **Offering** only, where it reads `Inventory (Character Name)` and the character is not
+repeated beside the account: which bag a copy is in is the question the person handing it
+over has to answer, and nothing the person asking is helped by. **Request** leaves the
+column out altogether, so the copy's whereabouts stay on the owner's side of the site.
 
 Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (other
 people's items), **Offering** (your own), and **Your requests**.
@@ -386,7 +388,7 @@ it look new. An item that leaves the file altogether - unshared, or every copy h
 over - is dropped when that upload arrives, so if the owner offers it again later it
 comes back with the day they offered it again rather than the day it first appeared.
 
-`Location` is where the owner's copy was the last time they saved: `Bank`,
+On **Offering**, `Location` is where the owner's copy was the last time they saved: `Bank`,
 `Inventory (Character Name)`, `Furnishing Vault (...)`. An upload rewrites it, so moving
 something in game and saving again updates it without anyone touching the site.
 
@@ -501,7 +503,7 @@ When only one copy can be given, the button sends that request straight away rat
 opening a dialog whose only answer is "one".
 
 The email that reaches the owner says which item, how many, and **where that copy was
-believed to be** - the same `Location` the list shows, taken from the owner's own saved
+believed to be** - the same `Location` the Offering list shows, taken from the owner's own saved
 file at the moment the request was made. It is a place to look rather than a promise: an
 owner who moves the stack and saves again does not rewrite requests that are already
 waiting, and a standing offer carries no location to name.
