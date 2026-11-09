@@ -57,6 +57,7 @@ body {
 .brand-mark {
   width: 46px;
   height: 46px;
+  flex: none;
   border-radius: 12px;
   display: grid;
   place-items: center;
@@ -91,7 +92,7 @@ body {
 /* The name is one word made of two: "Share" carries the accent so the picture and the
    name can be used apart - the mark alone, or the wordmark on its own. */
 .brand-share {
-  color: #93c5fd;
+  color: #5aa9f0;
 }
 
 .brand-subtitle {

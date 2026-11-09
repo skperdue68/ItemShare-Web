@@ -377,7 +377,7 @@ check('the brand shows the people-and-present mark with its name beside it', () 
   const header = page.slice(page.indexOf('<header class="top-bar">'), page.indexOf('</header>'));
 
   assert(header.includes('brand-mark'), 'the header must draw the mark');
-  assert(header.includes('#2dd4bf') && header.includes('#fb7185'), 'both people must be in the mark');
+  assert(header.includes('#0f9f90') && header.includes('#f2543b'), 'both people must be in the mark');
   assert(header.includes('brand-share'), 'the name must be its own text, not baked into the picture');
   assert(header.includes('>Item<span class="brand-share">Share</span>'), 'the name must read ItemShare');
 });
