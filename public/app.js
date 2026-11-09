@@ -264,6 +264,8 @@ if (listRegion) {
   let queued = false;
   let timer = null;
   let everConnected = false;
+  // Discard list responses that started before a successful bag mutation.
+  let basketRevision = 0;
   let activeTab = 'request';
 
   try {
@@ -689,8 +691,26 @@ if (listRegion) {
   // away outright: a clock and a warning about unsent items mean nothing once nothing is
   // waiting, and the next item added brings it back.
   let headerBarFetching = false;
+  let headerBasket = null;
+  let basketChangeQueue = Promise.resolve();
 
-  async function syncHeaderBar(heldNow, summary = { unique: 0, copies: 0 }) {
+  // Keep mutation responses in the same order as the clicks that produced them.
+  // Otherwise a slower cancellation can restore a snapshot taken before the last one.
+  function lockBasketChanges() {
+    const ready = basketChangeQueue;
+    let release;
+    basketChangeQueue = new Promise((resolve) => { release = resolve; });
+    return ready.then(() => release);
+  }
+
+  async function syncHeaderBar(heldNow, summary = { unique: 0, copies: 0 }, basket = null) {
+    if (basket) {
+      basket = { ...basket, deadline: Date.now() + Math.max(0, basket.secondsLeft) * 1000 };
+    }
+    headerBasket = { heldNow, summary, basket };
+    if (basket?.holdMinutes) {
+      document.body.dataset.holdMinutes = String(basket.holdMinutes);
+    }
     const current = document.querySelector('[data-basket]');
 
     if (!heldNow) {
@@ -700,10 +720,11 @@ if (listRegion) {
       return;
     }
 
-    // Already there: only the numbers move, so the running clock is left alone instead of
-    // being restarted from a render that is already a moment old.
+    // Adds and removals reset the server's clock. Use its new remaining time too.
     if (current) {
       updateHeaderBar(current, summary);
+      updateBasketClock(current, basket);
+      tickCountdown();
       return;
     }
 
@@ -731,7 +752,9 @@ if (listRegion) {
 
       // Only if it is still missing: a slower answer must not add a second clock over a
       // bar an earlier one already put back.
-      if (bar && after && !document.querySelector('[data-basket]')) {
+      if (bar && after && headerBasket.heldNow && !document.querySelector('[data-basket]')) {
+        updateHeaderBar(bar, headerBasket.summary);
+        updateBasketClock(bar, headerBasket.basket);
         after.insertAdjacentElement('afterend', bar);
         tickCountdown();
       }
@@ -763,7 +786,7 @@ if (listRegion) {
     // Every refresh reconciles the bar, not only one where its presence differs: the two
     // numbers on it move as items are added, topped up or removed, and an empty bag takes
     // the whole bar away.
-    const heldRows = Array.from(next.querySelectorAll('[data-basket-row]'));
+    const heldRows = Array.from(next.querySelectorAll('[data-basket-row][data-status="draft"]'));
 
     syncHeaderBar(heldRows.length > 0, {
       unique: heldRows.length,
@@ -771,6 +794,9 @@ if (listRegion) {
         (sum, row) => sum + (Number(row.dataset.requestQuantity) || 1),
         0
       ),
+    }, {
+      secondsLeft: Number(next.dataset.basketSeconds) || 0,
+      holdMinutes: Number(next.dataset.holdMinutes) || 5,
     });
 
     if (next.getAttribute('data-signature') !== listRegion.getAttribute('data-signature')) {
@@ -805,6 +831,7 @@ if (listRegion) {
     }
 
     refreshing = true;
+    const revision = basketRevision;
 
     try {
       const response = await fetch(`/items${window.location.search}`, {
@@ -814,7 +841,12 @@ if (listRegion) {
       });
 
       if (response.ok) {
-        applyRegion(await response.text());
+        const html = await response.text();
+        if (revision === basketRevision) {
+          applyRegion(html);
+        } else {
+          queued = true;
+        }
       }
     } catch (error) {
       // Offline, or the server is restarting: the next reconnect refreshes.
@@ -1252,6 +1284,7 @@ if (listRegion) {
 
   /** What the bag holds right now: different items, and copies in all. */
   function basketSummary() {
+    if (headerBasket) return headerBasket.summary;
     const bar = document.querySelector('[data-basket]');
 
     if (bar) {
@@ -1261,7 +1294,7 @@ if (listRegion) {
       };
     }
 
-    const rows = Array.from(document.querySelectorAll('[data-basket-row]'));
+    const rows = Array.from(document.querySelectorAll('[data-basket-row][data-status="draft"]'));
 
     return {
       unique: rows.length,
@@ -1279,6 +1312,16 @@ if (listRegion) {
 
     bar.dataset.items = String(unique);
     bar.dataset.copies = String(copies);
+  }
+
+  function updateBasketClock(bar, basket) {
+    if (!basket) return;
+    bar.dataset.holdMinutes = String(basket.holdMinutes);
+    bar.dataset.seconds = String(basket.secondsLeft);
+    bar.dataset.deadline = String(basket.deadline || Date.now() + Math.max(0, basket.secondsLeft) * 1000);
+    delete bar.dataset.lapsed;
+    const label = bar.querySelector('[data-countdown]');
+    if (label) label.classList.remove('countdown-fading');
   }
 
   function explainFirstHold(name, copies) {
@@ -1350,6 +1393,7 @@ if (listRegion) {
     password = '',
     confirm = '',
   }) {
+    const release = await lockBasketChanges();
     // Read before the request goes, and read as a count: a bag with nothing in it is the
     // moment the notice is about, whether it has never held anything or was emptied a
     // moment ago. The quantity is settled by the dialog before this runs, so the copy that
@@ -1410,6 +1454,14 @@ if (listRegion) {
       // number that stuck is the one to report, not the one that was picked.
       const asked = Number(result.quantity) || quantity;
 
+      basketRevision++;
+      if (result.basket) {
+        syncHeaderBar(result.basket.count > 0, {
+          unique: result.basket.count,
+          copies: result.basket.quantity,
+        }, result.basket);
+      }
+
       if (basketWasEmpty) {
         explainFirstHold(name, asked);
       }
@@ -1425,10 +1477,13 @@ if (listRegion) {
       refreshAfterChange();
     } catch (error) {
       showToast(error.message, 'err');
+    } finally {
+      release();
     }
   }
 
   async function cancelOwnRequest(button) {
+    const release = await lockBasketChanges();
     try {
       const response = await fetch(`/requests/${encodeURIComponent(button.dataset.id)}/cancel`, {
         method: 'POST',
@@ -1440,10 +1495,21 @@ if (listRegion) {
         throw new Error(result.error || 'That request could not be cancelled.');
       }
 
+      basketRevision++;
+      const row = button.closest('[data-basket-row]');
+      if (row) row.dataset.status = 'cancelled';
+      if (result.basket) {
+        syncHeaderBar(result.basket.count > 0, {
+          unique: result.basket.count,
+          copies: result.basket.quantity,
+        }, result.basket);
+      }
       showToast('Request cancelled.', 'ok');
       refreshAfterChange();
     } catch (error) {
       showToast(error.message, 'err');
+    } finally {
+      release();
     }
   }
 
@@ -1826,6 +1892,22 @@ let leavePrompt = null;
 // Set once the styled prompt has been answered with "Leave anyway", so the browser's own
 // unstyled dialog does not ask the same question a second time during that navigation.
 let leaveConfirmed = false;
+let internalNavigation = false;
+
+// The inline onchange submits directly, which does not fire a submit event.
+// Capture the change before it runs: this switch keeps the same server-side bag.
+document.addEventListener('change', (event) => {
+  if (event.target.matches?.('#browsingAccount') &&
+      event.target.form?.getAttribute('action') === '/browsing-account') {
+    internalNavigation = true;
+  }
+}, true);
+
+document.addEventListener('submit', (event) => {
+  if (event.target.getAttribute('action') === '/browsing-account') {
+    internalNavigation = true;
+  }
+}, true);
 
 function closeLeavePrompt() {
   if (leavePrompt) {
@@ -1927,6 +2009,7 @@ document.addEventListener('click', (event) => {
   // one page of this site to another keeps it, and warning about it there was a question
   // with nothing behind it - the same basket was waiting on the way back.
   if (!leavesThisSite(link)) {
+    internalNavigation = true;
     return;
   }
 
@@ -1943,6 +2026,10 @@ function leavesThisSite(link) {
 }
 
 window.addEventListener('beforeunload', (event) => {
+  if (internalNavigation) {
+    internalNavigation = false;
+    return undefined;
+  }
   // Already answered above: the browser's own dialog would be the same warning twice,
   // unstyled and out of place.
   if (leaveConfirmed || basketHeldItems() === 0) {
