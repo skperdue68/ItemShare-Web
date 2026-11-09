@@ -67,6 +67,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   DEMO_DATABASE,
   DEMO_DISPLAY_NAME,
+  DEMO_GUILD,
   DEMO_LOGIN,
   copyDemoData,
   databaseForUser,
@@ -92,6 +93,8 @@ import {
   verifyPassword,
 } from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
+import { runDemoActivity } from './lib/demoActivity.js';
+import { activeDemoViewers, noteViewer } from './lib/demoPresence.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
   renderListRegion,
@@ -276,12 +279,33 @@ const realtime = attachRealtime({ httpServer, sessionMiddleware });
 const pushChange = realtime.notifyChange;
 
 function notifyItemsChanged(kind, message) {
+  // A demo change is real, but only inside the copy. It goes to the demo pages rather
+  // than nowhere: they are showing those rows, so they need to refresh too - while an
+  // ordinary page must never be told to.
   if (requestDatabase.getStore() === DEMO_DATABASE) {
+    realtime.notifyDemoChange(kind, message);
     return;
   }
 
   pushChange(kind, message);
 }
+
+// A demo page says it is still open, which is the only thing that keeps the sandbox's
+// other people moving. When the last page stops saying so the activity pauses, and it
+// picks up again the next time somebody opens the demo.
+const demoViewers = new Map();
+
+app.post('/demo/heartbeat', (req, res) => {
+  const user = req.session ? req.session.user : null;
+
+  if (!user || !user.isDemo) {
+    res.status(404).json({ error: 'Only a demo session has a sandbox to keep alive.' });
+    return;
+  }
+
+  noteViewer(demoViewers, req.sessionID, Date.now());
+  res.json({ ok: true, demo: true, viewers: demoViewers.size });
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -535,6 +559,11 @@ function sendPage(req, res, status, options) {
     );
 }
 
+// Whether the demo copy exists. The activity loop is not started against a database that
+// was never built, so a site without the demo runs quietly instead of logging a failure
+// every tick.
+let demoDatabaseReady = false;
+
 // Migrations run once at startup, in both databases; request connections just use the
 // database that belongs to whoever is asking.
 async function prepareDatabase() {
@@ -565,6 +594,7 @@ async function prepareDatabase() {
     // than a handful of rows - with every person anonymised on the way in.
     const copied = await copyDemoData(demoConnection, { sourceDatabase: config.database });
     const demo = await ensureDemoData(demoConnection);
+    demoDatabaseReady = true;
 
     console.log(
       `Demo database: ${demoConfig.database} on ${demoConfig.host}:${demoConfig.port} ` +
@@ -579,6 +609,12 @@ async function prepareDatabase() {
     console.log(
       `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
         `${demo.seeded ? 'items written' : 'items already there'} (demo@example.com / demo)`
+    );
+    console.log(
+      `Demo cast: ${demo.cast.seeded.length + demo.cast.kept.length} guildmate${
+        demo.cast.seeded.length + demo.cast.kept.length === 1 ? '' : 's'
+      } sharing into ${DEMO_GUILD.name}` +
+        (demo.cast.seeded.length ? ` (added ${demo.cast.seeded.join(', ')})` : ' (already there)')
     );
   } catch (error) {
     console.warn(`Demo database: not ready - ${error.message}`);
@@ -2883,9 +2919,79 @@ if (SWEEP_INTERVAL_MS > 0) {
   sweepExpiredRequests();
 }
 
+// The sandbox's other people. One small action per tick, while a demo page is open, taken
+// against the demo database and announced to the demo room only. A quiet copy with no
+// page open costs one comparison per tick.
+const DEMO_ACTIVITY_MS = (() => {
+  const configured = Number(process.env.DEMO_ACTIVITY_MS ?? 15000);
+
+  if (!Number.isFinite(configured)) {
+    return 15000;
+  }
+
+  return configured <= 0 ? 0 : Math.max(3000, Math.trunc(configured));
+})();
+
+let demoActivityBusy = false;
+let demoActivityQuiet = true;
+
+async function tickDemoActivity() {
+  if (!demoDatabaseReady) {
+    return;
+  }
+
+  const watching = activeDemoViewers(demoViewers, Date.now());
+
+  if (watching === 0) {
+    if (!demoActivityQuiet) {
+      demoActivityQuiet = true;
+      console.log('Demo activity: paused - no demo page is open');
+    }
+
+    return;
+  }
+
+  if (demoActivityQuiet) {
+    demoActivityQuiet = false;
+    console.log(
+      `Demo activity: running - ${watching} demo page${watching === 1 ? '' : 's'} open`
+    );
+  }
+
+  if (demoActivityBusy) {
+    return;
+  }
+
+  demoActivityBusy = true;
+
+  try {
+    const outcome = await withDatabaseOn(DEMO_DATABASE, (connection) =>
+      runDemoActivity(connection)
+    );
+
+    if (outcome) {
+      realtime.notifyDemoChange('simulation', outcome.summary);
+      console.log(`[DEMO] ${outcome.summary}`);
+    }
+  } catch (error) {
+    console.warn(`Demo activity: nothing happened - ${error.message}`);
+  } finally {
+    demoActivityBusy = false;
+  }
+}
+
+if (DEMO_ACTIVITY_MS > 0) {
+  setInterval(tickDemoActivity, DEMO_ACTIVITY_MS).unref();
+}
+
 httpServer.listen(PORT, () => {
   console.log(`ItemShare upload site listening on http://localhost:${PORT}`);
   console.log('Live updates: socket.io on /socket.io');
+  console.log(
+    DEMO_ACTIVITY_MS > 0
+      ? `Demo activity: one action every ${Math.round(DEMO_ACTIVITY_MS / 1000)}s while a demo page is open (DEMO_ACTIVITY_MS)`
+      : 'Demo activity: off (DEMO_ACTIVITY_MS=0)'
+  );
   console.log(
     enabledProviders.length
       ? `Sign-in providers: ${enabledProviders.map((provider) => provider.label).join(', ')}`
