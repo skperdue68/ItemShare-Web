@@ -274,6 +274,51 @@ await tAsync('a stack that is gone is skipped, never half-reopened', async () =>
   assert.equal(connection.updates.length, 0);
 });
 
+// An item that moved to another character, or was shared again, gets a new row id while
+// the old one is pruned away. The owner is still offering it, so refusing here was wrong:
+// the request follows the item by its key hash, the same way an open one does.
+await tAsync('an item that moved to a new row is followed rather than refused', async () => {
+  const connection = fakeConnection({
+    rows: [
+      expiredRow({ inventory_id: null, inventory_count: 0, replacement_id: 42, replacement_count: 3 }),
+    ],
+  });
+  const report = await reopenExpiredRequests(connection, {});
+
+  assert.equal(report.skipped.length, 0, 'the owner is still sharing it');
+  assert.equal(report.reopened.length, 1);
+  assert.equal(report.reopened[0].quantity, 2, 'the new row has the copies the request asked for');
+  assert.equal(report.reopened[0].capped, false);
+  assert.equal(connection.queries.filter((q) => q.kind === 'reserved').at(-1).params.at(-1), 42,
+    'the copies held are counted against the row the item lives under now');
+
+  const repointed = connection.updates.find((row) => /SET shared_item_id/.test(row.sql));
+  assert.ok(repointed, 'the request is re-pointed at its item');
+  assert.deepEqual(repointed.params, [42, 128]);
+  assert.deepEqual(connection.updates[0].params, [2, 2, 128], 'the row itself is the one reopened');
+});
+
+await tAsync('a moved item with fewer copies is capped at what is there now', async () => {
+  const connection = fakeConnection({
+    rows: [expiredRow({ inventory_id: null, inventory_count: 0, replacement_id: 42, replacement_count: 1 })],
+  });
+  const report = await reopenExpiredRequests(connection, {});
+
+  assert.equal(report.reopened[0].quantity, 1, 'one copy is what the new row holds');
+  assert.equal(report.reopened[0].asked, 2);
+  assert.equal(report.reopened[0].capped, true);
+});
+
+await tAsync('a moved item is not re-pointed by a dry run', async () => {
+  const connection = fakeConnection({
+    rows: [expiredRow({ inventory_id: null, inventory_count: 0, replacement_id: 42, replacement_count: 3 })],
+  });
+  const report = await reopenExpiredRequests(connection, { dryRun: true });
+
+  assert.equal(report.reopened.length, 1);
+  assert.equal(connection.updates.length, 0, 'nothing written, including the re-point');
+});
+
 await tAsync('every copy spoken for is skipped too', async () => {
   const connection = fakeConnection({ rows: [expiredRow()], reserved: { 7: 5 } });
   const report = await reopenExpiredRequests(connection, {});
