@@ -68,9 +68,11 @@ import {
   DEMO_DATABASE,
   DEMO_DISPLAY_NAME,
   DEMO_LOGIN,
+  copyDemoData,
   databaseForUser,
   demoDatabaseConfig,
   demoRefusal,
+  demoRefusalMessage,
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
@@ -237,9 +239,9 @@ app.use((req, res, next) => {
   res.type('html').send(renderSignInPage({ providers: enabledProviders }));
 });
 
-// A demo session reads everything and writes nothing. Refusing here, before any route
-// runs, is what keeps a demo reservation out of the database: the page may draw the
-// button, but the POST never reaches the handler that would write.
+// A demo session does everything a member does, inside the demo copy - so the refusals
+// here are the few things that would leave it, not the writes themselves. Anything
+// blocked is blocked before the route runs.
 app.use((req, res, next) => {
   const user = req.session ? req.session.user : null;
 
@@ -248,14 +250,9 @@ app.use((req, res, next) => {
     return;
   }
 
-  const message =
-    'This is the demo: nothing was saved. No reservation was made, no count changed and no email was sent.';
+  const message = demoRefusalMessage(req.path);
 
-  if (
-    req.path.startsWith('/requests') ||
-    req.path === '/upload' ||
-    req.path.startsWith('/simulate')
-  ) {
+  if (req.path === '/upload' || req.path.startsWith('/simulate')) {
     res.status(403).json({ demo: true, error: message });
     return;
   }
@@ -263,7 +260,7 @@ app.use((req, res, next) => {
   sendPage(req, res, 403, {
     heading: 'Demo mode',
     message,
-    details: 'Sign up and upload your ItemShareSavedVars.lua to take part for real.',
+    details: 'Sign in as a non-demo user to do that on the real site.',
     tone: 'notice',
   });
 });
@@ -272,7 +269,19 @@ app.use((req, res, next) => {
 // updates need no second port, no extra proxy rule and no separate auth.
 const httpServer = createServer(app);
 const realtime = attachRealtime({ httpServer, sessionMiddleware });
-const notifyItemsChanged = realtime.notifyChange;
+
+// A demo reservation is real only inside the demo copy, so it is never announced to
+// everybody else's open page. The scope is already known: it is the database this
+// request is reading.
+const pushChange = realtime.notifyChange;
+
+function notifyItemsChanged(kind, message) {
+  if (requestDatabase.getStore() === DEMO_DATABASE) {
+    return;
+  }
+
+  pushChange(kind, message);
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -309,6 +318,13 @@ function personLabel(user, accountNames) {
  * connection, and it must not be able to make a real request look failed.
  */
 async function emailOwners({ user, submitted, contacts }) {
+  // A demo basket is recorded inside the demo copy and nobody is told: the addresses
+  // there are invented placeholders, and mail from a rehearsal must never leave.
+  if (user && user.isDemo) {
+    console.log('Email: demo session - requests recorded, no email sent');
+    return { sent: 0, skipped: 0 };
+  }
+
   if (!submitted || submitted.length === 0 || !contacts || contacts.size === 0) {
     return { sent: 0, skipped: 0 };
   }
@@ -425,12 +441,19 @@ async function emailOwners({ user, submitted, contacts }) {
  * Runs after the answer is committed and never throws: a bad mail day must not turn a
  * handover that was recorded into an error page for the owner.
  */
-async function emailAnswered(rows) {
+async function emailAnswered(rows, { demo = false } = {}) {
   const ids = (rows || [])
     .map((row) => Number(row.id))
     .filter((id) => Number.isInteger(id) && id > 0);
 
   if (ids.length === 0) {
+    return { sent: 0, skipped: 0 };
+  }
+
+  // Answering in the demo changes the demo copy only, so the requester - a member whose
+  // address was replaced on the way in - hears nothing.
+  if (demo) {
+    console.log('Email: demo session - answers recorded, no email sent');
     return { sent: 0, skipped: 0 };
   }
 
@@ -537,12 +560,22 @@ async function prepareDatabase() {
     const opened = await openDatabase(demoConfig, { recreate: true });
     demoConnection = opened.connection;
 
+    // Filled from the site's own rows before the demo's curated guild goes on top, so a
+    // visitor can walk through several guilds, real-looking items and requests rather
+    // than a handful of rows - with every person anonymised on the way in.
+    const copied = await copyDemoData(demoConnection, { sourceDatabase: config.database });
     const demo = await ensureDemoData(demoConnection);
 
     console.log(
       `Demo database: ${demoConfig.database} on ${demoConfig.host}:${demoConfig.port} ` +
-        `(recreated; migrations: ${opened.migrations.length ? opened.migrations.length : 'none pending'})`
+        `(recreated, ${copied.copied} table${copied.copied === 1 ? '' : 's'} copied from ${config.database}` +
+        `${copied.failed.length ? `, ${copied.failed.length} failed` : ''}; ` +
+        `migrations: ${opened.migrations.length ? opened.migrations.length : 'none pending'})`
     );
+
+    for (const failure of copied.failed) {
+      console.warn(`Demo database: could not copy ${failure.table} - ${failure.error}`);
+    }
     console.log(
       `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
         `${demo.seeded ? 'items written' : 'items already there'} (Demo / Demo)`
@@ -1341,7 +1374,9 @@ app.post('/owner/requests', upload.none(), async (req, res) => {
 
     // The person who asked hears about it too: the copies are waiting in their in-game
     // mailbox and nothing in the game says so.
-    await emailAnswered(outcome.rows);
+    await emailAnswered(outcome.rows, {
+      demo: Boolean(req.session && req.session.user && req.session.user.isDemo),
+    });
 
     if (wantsFragment(req)) {
       // The whole outcome, not just the counts: the card's confirmation names the item,
@@ -1543,7 +1578,9 @@ app.post('/requests/fulfill/:token', async (req, res) => {
       );
     }
 
-    await emailAnswered(outcome.rows);
+    await emailAnswered(outcome.rows, {
+      demo: Boolean(req.session && req.session.user && req.session.user.isDemo),
+    });
 
     res.type('html').send(
       renderMessagePage({

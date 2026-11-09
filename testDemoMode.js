@@ -13,9 +13,11 @@ import {
   DEMO_LOGIN,
   DEMO_PASSWORD,
   DEMO_WORLD,
+  copyDemoData,
   databaseForUser,
   demoDatabaseConfig,
   demoRefusal,
+  demoRefusalMessage,
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
@@ -108,36 +110,44 @@ check('the demo account is not the one seedDemo.js writes into real guilds', () 
   assert(DEMO_ACCOUNT !== '@DemoTrader', 'the demo must use its own account');
 });
 
-// ------------------------------------------------------------------- read-only rule
-check('every writing route is refused for a demo session', () => {
-  const closed = [
+// ------------------------------------------------------------------ what is refused
+check('a demo session may rehearse everything except uploads and password resets', () => {
+  const refused = [
+    ['POST', '/upload'],
+    ['POST', '/auth/email/forgot'],
+    ['POST', '/auth/email/reset/abc123'],
+    ['POST', '/simulate/nudge'],
+  ];
+
+  for (const [method, path] of refused) {
+    assert(demoRefusal(method, path), `${method} ${path} must be refused`);
+  }
+
+  const allowed = [
     ['POST', '/requests'],
     ['POST', '/requests/submit'],
     ['POST', '/requests/41/cancel'],
     ['POST', '/accounts/add'],
     ['POST', '/accounts/remove'],
     ['POST', '/browsing-account'],
-    ['POST', '/upload'],
     ['POST', '/owner/requests'],
+    ['POST', '/logout'],
+    ['POST', '/auth/email'],
+    ['GET', '/upload'],
   ];
 
-  for (const [method, path] of closed) {
-    assert(demoRefusal(method, path), `${method} ${path} should be refused`);
+  for (const [method, path] of allowed) {
+    assert(!demoRefusal(method, path), `${method} ${path} must be allowed inside the demo copy`);
   }
 });
 
-check('reading and logging out are still allowed', () => {
-  const open = [
-    ['GET', '/'],
-    ['GET', '/items'],
-    ['GET', '/owner/requests'],
-    ['POST', '/logout'],
-    ['POST', '/auth/email'],
-  ];
-
-  for (const [method, path] of open) {
-    assert(!demoRefusal(method, path), `${method} ${path} should be allowed`);
-  }
+check('each refusal says what it is about', () => {
+  assertMatch(demoRefusalMessage('/upload'), /switched off/i, 'the upload refusal must say so');
+  assertMatch(
+    demoRefusalMessage('/auth/email/forgot'),
+    /reset link/i,
+    'the reset refusal must say no link is sent'
+  );
 });
 
 // ----------------------------------------------------------------------- seeding
@@ -182,6 +192,82 @@ await checkAsync('an existing demo person is not rewritten on every visit', asyn
   assert(!result.seeded, 'existing items must be left alone');
   assert(connection.calls(/INSERT INTO itemshare_users/).length === 0, 'no second person');
   assert(connection.calls(/INSERT INTO itemshare_shared_items/).length === 0, 'no rewrite');
+});
+
+// --------------------------------------------------------------------- the copy
+await checkAsync('the demo copy is filled from the site, with people anonymised', async () => {
+  const statements = [];
+
+  const connection = {
+    async query(sql) {
+      statements.push(sql);
+
+      if (/^SHOW TABLES FROM/.test(sql)) {
+        return [
+          [
+            { 'Tables_in_itemshare': 'itemshare_users' },
+            { 'Tables_in_itemshare': 'itemshare_shared_items' },
+            { 'Tables_in_itemshare': 'itemshare_sessions' },
+            { 'Tables_in_itemshare': 'itemshare_schema_migrations' },
+          ],
+          {},
+        ];
+      }
+
+      return [[], {}];
+    },
+  };
+
+  const result = await copyDemoData(connection, { sourceDatabase: 'itemshare' });
+  const sql = statements.join('\n');
+
+  assert(result.copied === 2, `expected 2 tables copied, got ${result.copied}`);
+  assert(result.failed.length === 0, 'nothing should have failed');
+  assertMatch(
+    sql,
+    /INSERT INTO `itemshare-demo`\.`itemshare_users` SELECT \* FROM `itemshare`\.`itemshare_users`/,
+    'the people must be copied across'
+  );
+  assert(!sql.includes('itemshare_sessions'), 'sessions must never be copied');
+  assert(!sql.includes('itemshare_schema_migrations'), 'the demo keeps its own migration ledger');
+  assert(sql.includes('SET SESSION FOREIGN_KEY_CHECKS = 0'), 'foreign keys must be off while copying');
+  assertMatch(sql, /UPDATE `itemshare-demo`\.itemshare_users[\s\S]*Member /, 'people must be renamed');
+  assert(sql.includes('DELETE FROM `itemshare-demo`.itemshare_passwords'), 'copied passwords must go');
+  assert(
+    sql.includes('DELETE FROM `itemshare-demo`.itemshare_user_identities'),
+    'copied sign-ins must go'
+  );
+});
+
+await checkAsync('one damaged table does not cost the rest of the copy', async () => {
+  const connection = {
+    async query(sql) {
+      if (/^SHOW TABLES FROM/.test(sql)) {
+        return [
+          [
+            { 'Tables_in_itemshare': 'itemshare_users' },
+            { 'Tables_in_itemshare': 'itemshare_requests' },
+          ],
+          {},
+        ];
+      }
+
+      if (sql.includes('`itemshare_requests`')) {
+        throw new Error('Table is damaged');
+      }
+
+      return [[], {}];
+    },
+  };
+
+  const result = await copyDemoData(connection, { sourceDatabase: 'itemshare' });
+
+  assert(result.copied === 1, `expected 1 table copied, got ${result.copied}`);
+  assert(
+    result.failed.length === 1 && result.failed[0].table === 'itemshare_requests',
+    'the failing table must be reported'
+  );
+  assert(result.failed[0].error === 'Table is damaged', 'the reason must travel with it');
 });
 
 // ------------------------------------------------------------------- the sign-in
@@ -261,7 +347,7 @@ check('the upload page itself carries the drop zone and no list', () => {
   assert(!page.includes('data-item-key'), 'a list would be a way round the gate');
 });
 
-check('a demo session says so, and offers no way to attach an account', () => {
+check('a demo session says so, and keeps every tool it can rehearse with', () => {
   const page = renderPage({
     ...emptyData,
     user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
@@ -269,8 +355,9 @@ check('a demo session says so, and offers no way to attach an account', () => {
   });
 
   assertMatch(page, /Demo mode/, 'the banner is missing');
-  assertMatch(page, /nothing/i, 'the banner must say nothing is saved');
-  assert(!page.includes('Add or remove ESO accounts'), 'a demo must not offer account changes');
+  assertMatch(page, /no email/i, 'the banner must say no email is sent');
+  assertMatch(page, /Add or remove ESO accounts/, 'the demo must be able to try the account dialog');
+  assertMatch(page, /Process Requests/, 'the demo must be able to try the owner pages');
 });
 
 check('an ordinary session shows no demo banner', () => {

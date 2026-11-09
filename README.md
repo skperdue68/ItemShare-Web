@@ -1306,8 +1306,12 @@ if it is missing, so a fresh database already has it. The address on it is
 signing up.
 
 The demo has its own MariaDB database, `itemshare-demo`, dropped and rebuilt at every
-startup from the same migrations as the real one, then seeded with the demo person, its
-account, its guild and its items. Its schema cannot drift from the site's, and the next
+startup from the same migrations as the real one. It is then filled with a copy of the
+site's own rows - guilds, accounts, shared items, offers, requests - with every person
+anonymised on the way in (`Member 7`, `member7@itemshare.invalid`) and every copied
+password and sign-in identity deleted, so nobody can sign in as a real person and no
+address can be read. The curated `Alphabet Mafia` guild is seeded on top, so the demo
+always has something familiar in it. Its schema cannot drift from the site's, and the next
 visitor always gets the curated demo rather than the leftovers of somebody's session - a
 restart is also how you reset it. A demo session reads that copy instead of the live
 rows, and nothing it does can reach them; signing in as anybody else switches back to
@@ -1316,13 +1320,15 @@ session has to be read before the site knows who is asking. The database account
 CREATE and DROP on `itemshare-demo`, the privilege it already uses to make the real
 database.
 
-A demo session is read-only, enforced in `server.js` before any route runs: every POST
-except logging out is refused, so nothing is reserved, no request is sent, no email goes
-out, no count changes for anybody else, and no ESO account can be added or removed. The
-upload card is still there - the drop zone, the file picker - but it says uploading is
-switched off on a demo account and to sign in as a non-demo user to upload, and the page
-script shows that sentence instead of sending the file. A banner says the same on every
-page, and the basket shows a refusal as a toast rather than as a failure.
+The demo is a sandbox rather than a preview: reserving, cancelling, sending a basket,
+answering a request and adding or removing accounts all really happen, inside the copy,
+which is why the counts move for the demo visitor and never for anybody else. Nothing is
+announced to other people's open pages. No email is sent from the demo at all - a sent
+basket is recorded and the owners are told nothing - and the password cannot be reset:
+the reset request is refused before any link is made, and `demo@itemshare.invalid` can
+never receive mail. Uploading stays switched off: the drop zone is still on the page, but
+the card says so and the page script shows that sentence instead of sending the file. A
+banner says the same on every page.
 
 ## Not done yet
 
