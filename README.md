@@ -235,8 +235,19 @@ stored on the account, on every guild and on every guild link, because a guild i
 is two different guilds, and so is the same id on PC and Xbox.
 
 A guild is therefore identified by its id **and** its world, `itemshare_guilds` is keyed
-by both, and a share is only visible to an account on the same world as the owner. The
-account list shows the server beside each name.
+by both, and a share is only visible to an account on the same world as the owner.Both halves are shown beside each name, in the **Add or remove ESO accounts** dialog and
+in the account list, as `PC &middot; NA Megaserver`; the browsing picker shows them too, so
+two accounts can be told apart while choosing. Only the value the site knows is spelled
+out (2 is PC); any other platform number is printed as the number the addon wrote rather
+than guessed at.
+
+An ESO account is still one row, keyed by its `@handle`. The same handle on NA and EU, or
+on PC and console, is therefore one account carrying whichever world its most recent
+upload reported: the guild links keep both worlds' memberships, but the account's own
+platform and world - and so the browsing picker - cannot yet say which one is meant.
+Telling them apart needs the account key to be `(handle, platform, world)` through
+uploads, linking and the browsing choice, which is a migration and a change to how a
+session names its account; it is not something display can fix.
 
 `0` / `''` mean **not known**, never a world of their own. An unknown world matches
 whatever it is compared with, the same way the guild rule itself is only applied when
@@ -1328,7 +1339,18 @@ basket is recorded and the owners are told nothing - and the password cannot be 
 the reset request is refused before any link is made, and `demo@example.com` can never
 receive mail. Uploading stays switched off: the drop zone is still on the page, but
 the card says so and the page script shows that sentence instead of sending the file. A
-banner says the same on every page.
+banner says the same on every page. Removing its own `@ItemShareDemo` is rehearsed too:
+it is attached again in the same request, because the demo has nothing to browse or ask as
+without it - every other account really is removed.
+
+The shelves do not run down. A row whose last copy is reserved leaves the page after a
+few seconds, exactly as a real owner's does, so a copy browsed all afternoon would slowly
+empty and the next visitor would find nothing worth asking for. While a demo page is open,
+the demo re-saves its own and the guildmates' catalogues at most once a minute - the same
+write an owner's next upload makes - and lets go of asks the guildmates sent and never
+followed through on after two minutes (`lib/demoShelf.js`). A visitor's own requests are
+never released; the guildmates answer those. Item rows, request history and the date each
+offer was first made all survive a top-up.
 
 **Other people.** A visitor who owned every row in the copy would have nothing to ask
 for: the Request tab would mirror their own bag. `lib/demoCast.js` writes three
@@ -1346,6 +1368,22 @@ addresses, so nothing is emailed, and with the resulting push sent to the demo r
 rather than to every open page. `POST /demo/heartbeat` is what says a demo page is still
 there: no heartbeat for 45 seconds and the activity pauses, and it starts again when a
 demo page reopens. `DEMO_ACTIVITY_MS` is the average gap between actions (default 15s, `0` turns it off), and each pause is drawn fresh between 60% and 140% of it, so the sandbox does not beat like a metronome.
+
+## Log lines and offer dates
+
+Every line the running site prints begins with the local time it happened,
+`[2026-11-09 05:12:03]`, and every line `npm run simulate` prints carries the same stamp
+after its `[SIMULATE]` label. A transcript with both in it therefore reads in order, and a
+line about a refusal can be told apart from one about the same thing this morning.
+
+An offer keeps the date it was first made. A file that still contains an item refreshes
+the row where it stands, so `first_seen_at` survives every later upload and the Added
+column does not reset; only an item that is new in the file starts at today. The demo and
+the simulator write all their rows at once, so their *new* rows are spread across a ladder
+from about three months old down to a few hours old (`lib/itemAges.js`). The rule that
+protects a real upload protects them too: only a row nobody has touched since it was
+inserted (`first_seen_at = last_seen_at`) is dated, so the next save leaves it alone. A
+real item's first date is still the first time its owner shared it.
 
 ## Not done yet
 

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { readCookie, readGrouping } from './lib/preferences.js';
+import { keepDemoShelfFull } from './lib/demoShelf.js';
+import { errorLine, logLine, warnLine } from './lib/log.js';
 // ItemShare upload site: signs in with Discord or Google (both optional),
 // accepts ItemShareSavedVars.lua and replaces every shared item for every ESO
 // account in the file. Styling follows the GuildSync palette.
@@ -65,6 +67,7 @@ import {
 } from './lib/store.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
+  DEMO_ACCOUNT,
   DEMO_DATABASE,
   DEMO_DISPLAY_NAME,
   DEMO_GUILD,
@@ -74,6 +77,7 @@ import {
   demoDatabaseConfig,
   demoRefusal,
   demoRefusalMessage,
+  demoRemovalRestores,
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
@@ -138,7 +142,7 @@ const enabledProviders = Object.values(PROVIDERS)
   .map(({ key, label }) => ({ key, label }));
 
 if (!process.env.SESSION_SECRET) {
-  console.warn(
+  warnLine(
     `SESSION_SECRET is not set${hasEnvFile ? ` in ${envPath}` : `, and there is no .env at ${envPath}`}; ` +
       'using an ephemeral secret, so everyone is signed out on every restart. Make one with\n' +
       '  node -e "console.log(\'SESSION_SECRET=\' + require(\'crypto\').randomBytes(32).toString(\'hex\'))"\n' +
@@ -345,7 +349,7 @@ async function emailOwners({ user, submitted, contacts }) {
   // A demo basket is recorded inside the demo copy and nobody is told: the addresses
   // there are invented placeholders, and mail from a rehearsal must never leave.
   if (user && user.isDemo) {
-    console.log('Email: demo session - requests recorded, no email sent');
+    logLine('Email: demo session - requests recorded, no email sent');
     return { sent: 0, skipped: 0 };
   }
 
@@ -391,7 +395,7 @@ async function emailOwners({ user, submitted, contacts }) {
   const config = emailConfig();
 
   if (!config.configured) {
-    console.log(
+    logLine(
       `Email: ${groups.size} request email${groups.size === 1 ? '' : 's'} not sent - ${
         config.reason || 'no mail transport is configured'
       }`
@@ -422,7 +426,7 @@ async function emailOwners({ user, submitted, contacts }) {
           answerUrl = `${config.siteUrl}/requests/fulfill/${token}`;
         }
       } catch (error) {
-        console.warn(`Email: no answer link for ${group.email}: ${error.message}`);
+        warnLine(`Email: no answer link for ${group.email}: ${error.message}`);
       }
     }
 
@@ -441,11 +445,11 @@ async function emailOwners({ user, submitted, contacts }) {
       sent += 1;
     } else {
       skipped += 1;
-      console.warn(`Email: could not email ${group.email}: ${result.error}`);
+      warnLine(`Email: could not email ${group.email}: ${result.error}`);
     }
   }
 
-  console.log(
+  logLine(
     `Email: sent ${sent} request email${sent === 1 ? '' : 's'}${
       skipped ? `, ${skipped} failed` : ''
     }${config.overrideTo ? ` (all to ${config.overrideTo}, from EMAIL_OVERRIDE_TO)` : ''}`
@@ -477,7 +481,7 @@ async function emailAnswered(rows, { demo = false } = {}) {
   // Answering in the demo changes the demo copy only, so the requester - a member whose
   // address was replaced on the way in - hears nothing.
   if (demo) {
-    console.log('Email: demo session - answers recorded, no email sent');
+    logLine('Email: demo session - answers recorded, no email sent');
     return { sent: 0, skipped: 0 };
   }
 
@@ -486,7 +490,7 @@ async function emailAnswered(rows, { demo = false } = {}) {
   try {
     notices = await withDatabase((connection) => getRequesterNotifications(connection, ids));
   } catch (error) {
-    console.warn(
+    warnLine(
       `Email: could not work out who to tell about ${ids.length} answered request(s): ${error.message}`
     );
     return { sent: 0, skipped: 0 };
@@ -509,7 +513,7 @@ async function emailAnswered(rows, { demo = false } = {}) {
   const config = emailConfig();
 
   if (!config.configured) {
-    console.log(
+    logLine(
       `Email: ${groups.size} answer email${groups.size === 1 ? '' : 's'} not sent - ${
         config.reason || 'no mail transport is configured'
       }`
@@ -533,11 +537,11 @@ async function emailAnswered(rows, { demo = false } = {}) {
       sent += 1;
     } else {
       skipped += 1;
-      console.warn(`Email: could not tell ${group.email}: ${result.error}`);
+      warnLine(`Email: could not tell ${group.email}: ${result.error}`);
     }
   }
 
-  console.log(
+  logLine(
     `Email: sent ${sent} answer email${sent === 1 ? '' : 's'}${skipped ? `, ${skipped} failed` : ''}`
   );
 
@@ -571,8 +575,8 @@ async function prepareDatabase() {
   const { connection, migrations } = await openDatabase(config);
 
   await connection.end();
-  console.log(`Database ready: ${config.database} on ${config.host}:${config.port}`);
-  console.log(`Migrations: ${migrations.length ? migrations.join(', ') : 'already up to date'}`);
+  logLine(`Database ready: ${config.database} on ${config.host}:${config.port}`);
+  logLine(`Migrations: ${migrations.length ? migrations.join(', ') : 'already up to date'}`);
 
   // The demo sign-in lives in its own database - a real person, one ESO account, one
   // guild and a shelf of items, made here, once, rather than on the first page view -
@@ -596,7 +600,7 @@ async function prepareDatabase() {
     const demo = await ensureDemoData(demoConnection);
     demoDatabaseReady = true;
 
-    console.log(
+    logLine(
       `Demo database: ${demoConfig.database} on ${demoConfig.host}:${demoConfig.port} ` +
         `(recreated, ${copied.copied} table${copied.copied === 1 ? '' : 's'} copied from ${config.database}` +
         `${copied.failed.length ? `, ${copied.failed.length} failed` : ''}; ` +
@@ -604,20 +608,20 @@ async function prepareDatabase() {
     );
 
     for (const failure of copied.failed) {
-      console.warn(`Demo database: could not copy ${failure.table} - ${failure.error}`);
+      warnLine(`Demo database: could not copy ${failure.table} - ${failure.error}`);
     }
-    console.log(
+    logLine(
       `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
         `${demo.seeded ? 'items written' : 'items already there'} (demo@example.com / demo)`
     );
-    console.log(
+    logLine(
       `Demo cast: ${demo.cast.seeded.length + demo.cast.kept.length} guildmate${
         demo.cast.seeded.length + demo.cast.kept.length === 1 ? '' : 's'
       } sharing into ${DEMO_GUILD.name}` +
         (demo.cast.seeded.length ? ` (added ${demo.cast.seeded.join(', ')})` : ' (already there)')
     );
   } catch (error) {
-    console.warn(`Demo database: not ready - ${error.message}`);
+    warnLine(`Demo database: not ready - ${error.message}`);
   } finally {
     if (demoConnection) {
       await demoConnection.end();
@@ -790,7 +794,7 @@ async function viewerAccountNames(req, connection, user) {
         const claimed = await claimHoldsForOwnedAccounts(connection, { userId: user.id });
 
         if (claimed > 0) {
-          console.log(
+          logLine(
             `Basket: ${claimed} held item${claimed === 1 ? '' : 's'} returned to the account owner`
           );
         }
@@ -1661,7 +1665,7 @@ app.get('/icons/:file', async (req, res) => {
     res.set('Cache-Control', 'public, max-age=31536000, immutable');
     res.send(icon.image_data);
   } catch (error) {
-    console.warn(`Could not serve icon ${match[1]}: ${error.message}`);
+    warnLine(`Could not serve icon ${match[1]}: ${error.message}`);
     res.status(500).end();
   }
 });
@@ -1852,6 +1856,10 @@ app.post('/auth/email', async (req, res) => {
       // missing: a sign-in must never write rows into the real one.
       const login = await withDatabaseOn(DEMO_DATABASE, async (connection) => {
         await ensureDemoData(connection);
+        // Somebody arriving finds the shelves as full as the catalogues allow, whatever
+        // the last visitor's session or the activity loop left behind. Debounced, so
+        // signing in twice does not write them twice.
+        await keepDemoShelfFull(connection);
         return findDemoSignIn(connection);
       });
       // The same decoy hash the ordinary form uses, so a wrong demo password costs the
@@ -2100,7 +2108,7 @@ app.post('/auth/email/forgot', async (req, res) => {
         : `/auth/email/reset/${reset.token}`;
 
       if (!config.siteUrl) {
-        console.warn(
+        warnLine(
           'Email: BASE_URL is not set, so the reset link in the message is relative and will not work from a mail client'
         );
       }
@@ -2115,7 +2123,7 @@ app.post('/auth/email/forgot', async (req, res) => {
       const result = await sendEmail({ to: reset.email || email, ...message }, config);
 
       if (!result.ok) {
-        console.warn(`Email: could not send a reset link: ${result.error}`);
+        warnLine(`Email: could not send a reset link: ${result.error}`);
       }
     }
 
@@ -2300,11 +2308,25 @@ app.post('/accounts/remove', async (req, res) => {
   try {
     // Ownership is the condition of the update itself, so a name from the form can never
     // unlink somebody else's account.
-    const removed = await withDatabase((connection) =>
-      detachAccountFromUser(connection, { userId: user.id, accountName })
-    );
+    const outcome = await withDatabase(async (connection) => {
+      const removed = await detachAccountFromUser(connection, { userId: user.id, accountName });
 
-    if (!removed) {
+      if (!removed) {
+        return { removed: false, restored: false };
+      }
+
+      // The demo's own account goes straight back: it is what the demo browses and asks
+      // as, and a demo with no account is a demo that cannot do anything. Attached again
+      // in the same request, so a page never sees the gap.
+      if (demoRemovalRestores(user, accountName)) {
+        await linkAccountToUser(connection, { accountName: DEMO_ACCOUNT, userId: user.id });
+        return { removed: true, restored: true };
+      }
+
+      return { removed: true, restored: false };
+    });
+
+    if (!outcome.removed) {
       sendPage(req, res, 404, {
         heading: 'That account is not attached to you',
         message: 'Nothing was changed.',
@@ -2314,6 +2336,18 @@ app.post('/accounts/remove', async (req, res) => {
     }
 
     req.session.accountNames = null;
+
+    if (outcome.restored) {
+      sendPage(req, res, 200, {
+        heading: 'The demo account stays attached',
+        message: `${DEMO_ACCOUNT} is the account the demo browses and asks as, so it was attached again straight away.`,
+        details:
+          'Removing any other account really removes it. This one is put back so the demo always has something to request from.',
+        tone: 'notice',
+      });
+      return;
+    }
+
     res.redirect(303, '/');
   } catch (error) {
     sendPage(req, res, 500, {
@@ -2377,7 +2411,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
   try {
     await withDatabase((connection) => fillKnownIcons(connection, iconEntries));
   } catch (error) {
-    console.warn(`Could not reuse stored icon paths: ${error.message}`);
+    warnLine(`Could not reuse stored icon paths: ${error.message}`);
   }
 
   let iconLookup = { resolved: 0, attempted: 0, missing: 0 };
@@ -2386,12 +2420,12 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
     iconLookup = await resolveMissingIconPaths(iconEntries);
 
     if (iconLookup.attempted) {
-      console.log(
+      logLine(
         `Icons: resolved ${iconLookup.resolved} of ${iconLookup.missing} missing paths on UESP`
       );
     }
   } catch (error) {
-    console.warn(`Could not look up icon paths on UESP: ${error.message}`);
+    warnLine(`Could not look up icon paths on UESP: ${error.message}`);
   }
 
   const outcome = await withDatabase(async (connection) => {
@@ -2446,7 +2480,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
   );
 
   if (heldBack.length > 0) {
-    console.warn(
+    warnLine(
       `Upload: left ${heldBack.length} item${heldBack.length === 1 ? '' : 's'} as they were because requests are still open - ${heldBack
         .map((item) => `${item.itemName} (${item.requests})`)
         .join(', ')}`
@@ -2469,7 +2503,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
     );
 
     if (icons.fetched || icons.failed) {
-      console.log(`Icons: fetched ${icons.fetched}, already stored ${icons.skipped}, failed ${icons.failed}`);
+      logLine(`Icons: fetched ${icons.fetched}, already stored ${icons.skipped}, failed ${icons.failed}`);
     }
 
     if (icons.fetched) {
@@ -2481,7 +2515,7 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
       );
     }
   } catch (error) {
-    console.warn(`Could not cache item icons: ${error.message}`);
+    warnLine(`Could not cache item icons: ${error.message}`);
   }
 
   return {
@@ -2599,14 +2633,14 @@ app.post(
 
     try {
       const summary = await applySavedVariablesUpload({ fileText, sourceFile, user: null });
-      console.log(
+      logLine(
         `Ingest: ${sourceFile} - ${summary.accounts
           .map((entry) => `${entry.accountName} ${entry.itemCount} items`)
           .join(', ')}`
       );
       res.json({ ...summary, sourceFile });
     } catch (error) {
-      console.warn(`Ingest failed: ${error.message}`);
+      warnLine(`Ingest failed: ${error.message}`);
       res.status(error.statusCode || 500).json({ error: error.message });
     }
   }
@@ -2634,7 +2668,7 @@ async function backfillIcons(reason) {
     );
 
     if (result.itemIds) {
-      console.log(
+      logLine(
         `Icons: ${reason} backfill looked up ${result.itemIds}, resolved ${result.resolved}, ` +
           `filled ${result.rows} rows, fetched ${result.icons.fetched} images`
       );
@@ -2644,7 +2678,7 @@ async function backfillIcons(reason) {
       }
     }
   } catch (error) {
-    console.warn(`Could not backfill item icons: ${error.message}`);
+    warnLine(`Could not backfill item icons: ${error.message}`);
   } finally {
     iconBackfillRunning = false;
   }
@@ -2737,7 +2771,7 @@ function refuseSimulate(res, token) {
     // read the file: the value in .env looks right and this process cannot see it yet.
     const changed = simulateTokenDrift();
 
-    console.warn(
+    warnLine(
       SIMULATE_TOKEN
         ? `[SIMULATE] nudge refused: the run sent ${
             token ? `token ${tokenFingerprint(token)}` : 'no token at all'
@@ -2836,7 +2870,7 @@ app.use((error, req, res, next) => {
     req.xhr ||
     String(req.get('accept') || '').includes('application/json');
 
-  console.warn(`${req.method} ${req.path} failed (${status}): ${message}`);
+  warnLine(`${req.method} ${req.path} failed (${status}): ${message}`);
 
   if (wantsJson) {
     res.status(status).json({ error: message });
@@ -2859,7 +2893,7 @@ await prepareDatabase().catch((error) => {
   } catch {
     // A malformed ITEMSHARE_DATABASE is reported by prepareDatabase itself.
   }
-  console.warn(describeConnectionFailure(error, config));
+  warnLine(describeConnectionFailure(error, config));
 });
 
 // Expired rows are invisible to every query, so this is housekeeping rather than
@@ -2868,10 +2902,10 @@ sessionStore
   .prune()
   .then((removed) => {
     if (removed) {
-      console.log(`Sessions: removed ${removed} expired row${removed === 1 ? '' : 's'}`);
+      logLine(`Sessions: removed ${removed} expired row${removed === 1 ? '' : 's'}`);
     }
   })
-  .catch((error) => console.warn(`Could not prune expired sessions: ${error.message}`));
+  .catch((error) => warnLine(`Could not prune expired sessions: ${error.message}`));
 
 setInterval(() => {
   sessionStore.prune().catch(() => {});
@@ -2945,7 +2979,7 @@ async function tickDemoActivity() {
   if (watching === 0) {
     if (!demoActivityQuiet) {
       demoActivityQuiet = true;
-      console.log('Demo activity: paused - no demo page is open');
+      logLine('Demo activity: paused - no demo page is open');
     }
 
     return;
@@ -2953,7 +2987,7 @@ async function tickDemoActivity() {
 
   if (demoActivityQuiet) {
     demoActivityQuiet = false;
-    console.log(
+    logLine(
       `Demo activity: running - ${watching} demo page${watching === 1 ? '' : 's'} open`
     );
   }
@@ -2965,16 +2999,22 @@ async function tickDemoActivity() {
   demoActivityBusy = true;
 
   try {
-    const outcome = await withDatabaseOn(DEMO_DATABASE, (connection) =>
-      runDemoActivity(connection)
-    );
+    const outcome = await withDatabaseOn(DEMO_DATABASE, async (connection) => {
+      // A copy browsed all afternoon must not run down: the shelf is topped up from the
+      // demo's own catalogues at most once a minute, and asks the cast made and never
+      // followed through on are let go, so a visitor arriving later still finds
+      // everything there to request. Cheap, and only while a demo page is open.
+      await keepDemoShelfFull(connection);
+
+      return runDemoActivity(connection);
+    });
 
     if (outcome) {
       realtime.notifyDemoChange('simulation', outcome.summary);
-      console.log(`[DEMO] ${outcome.summary}`);
+      logLine(`[DEMO] ${outcome.summary}`);
     }
   } catch (error) {
-    console.warn(`Demo activity: nothing happened - ${error.message}`);
+    warnLine(`Demo activity: nothing happened - ${error.message}`);
   } finally {
     demoActivityBusy = false;
   }
@@ -3002,16 +3042,16 @@ if (DEMO_ACTIVITY_MS > 0) {
 }
 
 httpServer.listen(PORT, () => {
-  console.log(`ItemShare upload site listening on http://localhost:${PORT}`);
-  console.log('Live updates: socket.io on /socket.io');
-  console.log(
+  logLine(`ItemShare upload site listening on http://localhost:${PORT}`);
+  logLine('Live updates: socket.io on /socket.io');
+  logLine(
     DEMO_ACTIVITY_MS > 0
       ? `Demo activity: one action every ${Math.round(
           (DEMO_ACTIVITY_MS * 0.6) / 1000
         )}-${Math.round((DEMO_ACTIVITY_MS * 1.4) / 1000)}s at random while a demo page is open (DEMO_ACTIVITY_MS)`
       : 'Demo activity: off (DEMO_ACTIVITY_MS=0)'
   );
-  console.log(
+  logLine(
     enabledProviders.length
       ? `Sign-in providers: ${enabledProviders.map((provider) => provider.label).join(', ')}`
       : 'Sign-in providers: none (set DISCORD_* or GOOGLE_* env vars)'
@@ -3022,13 +3062,13 @@ httpServer.listen(PORT, () => {
   const tokenOnDisk = hasEnvFile ? simulateTokenInFile() : '';
 
   if (SIMULATE_TOKEN) {
-    console.log(
+    logLine(
       `Live pushes: on - this site holds ${describeToken(
         SIMULATE_TOKEN
       )}, loaded at ${STARTED_LABEL} from ${SIMULATE_TOKEN_SOURCE}`
     );
   } else {
-    console.log(
+    logLine(
       `Live pushes: off - no SIMULATE_TOKEN ${
         hasEnvFile ? `in ${envPath}` : `and no .env at ${envPath}`
       } when this site started at ${STARTED_LABEL}; set one and restart to let npm run simulate refresh open pages`
@@ -3038,20 +3078,20 @@ httpServer.listen(PORT, () => {
   const drift = simulateTokenDrift();
 
   if (drift) {
-    console.warn(`Live pushes:${drift}`);
+    warnLine(`Live pushes:${drift}`);
   }
 
-  console.log(`Env file: ${hasEnvFile ? envPath : `${envPath} not found - copy .env.example to .env`}`);
-  console.log(`Sign-in stays active for ${SESSION_TTL_DAYS} days (SESSION_TTL_DAYS), stored in MariaDB`);
-  console.log(
+  logLine(`Env file: ${hasEnvFile ? envPath : `${envPath} not found - copy .env.example to .env`}`);
+  logLine(`Sign-in stays active for ${SESSION_TTL_DAYS} days (SESSION_TTL_DAYS), stored in MariaDB`);
+  logLine(
     SWEEP_INTERVAL_MS > 0
       ? `Unsent requests: held for ${HOLD_MINUTES} minute${HOLD_MINUTES === 1 ? '' : 's'} (REQUEST_HOLD_MINUTES), swept every ${Math.round(SWEEP_INTERVAL_MS / 1000)}s`
       : 'Unsent requests: expiry sweep disabled (REQUEST_SWEEP_INTERVAL_MS=0)'
   );
-  console.log(`Database target: ${readConfig().database} (demo: ${DEMO_DATABASE})`);
+  logLine(`Database target: ${readConfig().database} (demo: ${DEMO_DATABASE})`);
 
   if (ICON_BACKFILL_INTERVAL_MS > 0) {
-    console.log(
+    logLine(
       `Icon backfill: up to ${ICON_BACKFILL_BATCH} missing items every ${Math.round(
         ICON_BACKFILL_INTERVAL_MS / 60000
       )} minutes (ICON_BACKFILL_INTERVAL_MS=0 disables)`
@@ -3062,6 +3102,6 @@ httpServer.listen(PORT, () => {
     setTimeout(() => backfillIcons('startup'), 60 * 1000);
     setInterval(() => backfillIcons('scheduled'), ICON_BACKFILL_INTERVAL_MS);
   } else {
-    console.log('Icon backfill: disabled (ICON_BACKFILL_INTERVAL_MS=0)');
+    logLine('Icon backfill: disabled (ICON_BACKFILL_INTERVAL_MS=0)');
   }
 });

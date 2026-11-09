@@ -32,6 +32,8 @@ import path from 'node:path';
 import dotenv from 'dotenv';
 
 import { describeConnectionFailure, openDatabase, readConfig } from './lib/database.js';
+import { staggerFirstSeen } from './lib/itemAges.js';
+import { stamp } from './lib/log.js';
 import { tokenFingerprint } from './lib/simulateToken.js';
 import {
   cancelOwnRequest,
@@ -50,12 +52,13 @@ dotenv.config({ path: ENV_PATH });
 
 // Every line this script prints goes through here. With the site and the simulator in
 // one terminal there is otherwise no way to tell a handover somebody made from one the
-// simulation made; the site labels its own side of it the same way.
+// simulation made; the site labels its own side of it the same way, and both put the
+// time first so a mixed transcript still reads in order.
 const LABEL = '[SIMULATE] ';
 
-const say = (text) => console.log(`${LABEL}${text}`);
-const warn = (text) => console.warn(`${LABEL}${text}`);
-const fail = (text) => console.error(`${LABEL}${text}`);
+const say = (text) => console.log(`${LABEL}${stamp()} ${text}`);
+const warn = (text) => console.warn(`${LABEL}${stamp()} ${text}`);
+const fail = (text) => console.error(`${LABEL}${stamp()} ${text}`);
 
 const HOLD_MINUTES = 5;
 const LOCATIONS = ['Inventory', 'Bank', 'Furnishing Vault', 'Craft Bag'];
@@ -336,6 +339,11 @@ async function savePerson(connection, person, guilds) {
     ],
     { sourceFile: 'simulate.js' }
   );
+
+  // Only the rows this save just created are dated; anything that was already shared
+  // keeps the date it got the first time, which is what makes the Added column read
+  // like a shelf filling up rather than one refreshed all at once.
+  await staggerFirstSeen(connection, { accountNames: [person.account] });
 
   return result;
 }
@@ -838,7 +846,8 @@ process.on('SIGINT', () => {
   if (wake) {
     wake();
   } else {
-    console.log('\nStopping after this action...');
+    console.log('');
+    say('Stopping after this action...');
   }
 });
 

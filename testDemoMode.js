@@ -19,6 +19,7 @@ import {
   demoDatabaseConfig,
   demoRefusal,
   demoRefusalMessage,
+  demoRemovalRestores,
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
@@ -34,6 +35,15 @@ import {
   pickScenario,
 } from './lib/demoActivity.js';
 import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
+import {
+  DEMO_ASK_TTL_MS,
+  DEMO_RESTOCK_MS,
+  abandonedAsksSql,
+  shouldRestock,
+} from './lib/demoShelf.js';
+import { AGE_HOURS, planAges, untouchedRowsSql } from './lib/itemAges.js';
+import { stamp } from './lib/log.js';
+import { platformName, serverLabel } from './lib/serverLabel.js';
 import { emailLine, renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
 let passed = 0;
@@ -353,6 +363,117 @@ check('a visitor is shown the three ways in and no items', () => {
   assert(!page.includes('data-item-key'), 'no item may be rendered to a visitor');
 });
 
+check('the demo pair is boxed rather than another grey hint', () => {
+  const page = renderSignInPage({ providers });
+
+  assertMatch(page, /class="demo-callout"/, 'the demo sign-in must be its own box');
+  assertMatch(page, /class="demo-callout-body"/, 'the box must carry the explanation');
+  assertMatch(page, /demo@example\.com/, 'the demo address must still be in it');
+  assertMatch(page, /<strong>demo<\/strong>/, 'the demo password must still be in it');
+});
+
+check('the addon is one click away, signed out and signed in', () => {
+  const signedIn = renderSignInPage({ providers });
+
+  assertMatch(signedIn, /https:\/\/www\.minion\.gg\//, 'Minion must be linked');
+  assertMatch(
+    signedIn,
+    /https:\/\/www\.esoui\.com\/downloads\/dl4533\//,
+    'the latest ESOUI file must be linked, by addon id rather than a versioned name'
+  );
+  assertMatch(
+    signedIn,
+    /downloads\/info4533-ItemShare\.html/,
+    'the ESOUI page with the documentation must be linked too'
+  );
+
+  const demoPage = renderPage({
+    ...emptyData,
+    user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
+    accounts: [{ accountName: DEMO_ACCOUNT, itemCount: 9, guildCount: 1, guilds: [] }],
+  });
+
+  assertMatch(demoPage, /downloads\/dl4533/, 'a signed-in demo must see where the addon comes from');
+  assertMatch(
+    demoPage,
+    /class="addon-downloads compact"/,
+    'the account card carries the compact form of the same links'
+  );
+
+  const uploadGate = renderPage({
+    ...emptyData,
+    user: { id: 5, username: 'someone', provider: 'password' },
+    accounts: [],
+  });
+
+  assertMatch(uploadGate, /downloads\/dl4533/, 'the upload gate must say where to get the file');
+});
+
+check('the demo lets go of asks nobody was going to answer', () => {
+  const sql = abandonedAsksSql(3);
+
+  assert(sql.includes("status = 'pending'"), 'only a request still standing can be released');
+  assert(
+    /requester_account_name IN \(\?, \?, \?\)/.test(sql),
+    "only the guildmates' asks are released, never the visitor's own"
+  );
+  assert(sql.includes('submitted_at < ?'), 'an ask still being filled is left alone');
+  assert(/status_reason = \?/.test(sql), 'the release says why, so the history reads properly');
+  assert(DEMO_ASK_TTL_MS === 120000, `two minutes, not ${DEMO_ASK_TTL_MS}`);
+});
+
+check('a demo restock runs at most once a minute', () => {
+  assert(shouldRestock(0, 5000), 'the first call always runs');
+  assert(!shouldRestock(1000, 1000 + DEMO_RESTOCK_MS - 1), 'never twice inside the minute');
+  assert(shouldRestock(1000, 1000 + DEMO_RESTOCK_MS), 'the next minute it runs again');
+  assert(DEMO_RESTOCK_MS === 60000, `a minute, not ${DEMO_RESTOCK_MS}`);
+});
+
+check('every line the site prints carries the time it happened', () => {
+  const fixed = stamp(new Date(2026, 10, 9, 5, 2, 3));
+
+  assert(fixed === '2026-11-09 05:02:03', `expected 2026-11-09 05:02:03, got "${fixed}"`);
+  assert(
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(stamp()),
+    'a stamp is a date and a time, to the second'
+  );
+});
+
+check('a fresh shelf is dated across a spread rather than all today', () => {
+  const three = planAges(3);
+
+  assert(three.length === 3, 'one age per row');
+  assert(three[0] === AGE_HOURS[0], 'the first row gets the oldest age');
+  assert(three[2] === AGE_HOURS[AGE_HOURS.length - 1], 'the last row gets the newest age');
+  assert(three[0] > three[1] && three[1] > three[2], 'the ages descend');
+  assert(planAges(0).length === 0, 'nothing to date is no plan');
+
+  const many = planAges(20);
+
+  assert(many.length === 20, 'every row gets an age');
+  assert(
+    many.every((hours) => AGE_HOURS.includes(hours)),
+    'every age is one the ladder knows, so a fresh database always looks the same'
+  );
+});
+
+check('only rows nobody has touched since they were inserted are dated', () => {
+  const sql = untouchedRowsSql('itemshare_shared_items');
+
+  assert(sql.includes('first_seen_at = last_seen_at'), 'a re-saved row must keep its first date');
+  assert(/ORDER BY item_name/.test(sql), 'the same item lands on the same rung every time');
+
+  let refused = false;
+
+  try {
+    untouchedRowsSql('itemshare_users');
+  } catch {
+    refused = true;
+  }
+
+  assert(refused, 'a table with no living dates must be refused rather than guessed at');
+});
+
 check('a signed-in person with no ESO account is asked to upload', () => {
   const page = renderPage({
     ...emptyData,
@@ -567,6 +688,58 @@ check('the heartbeat a demo page sends is not one of the refusals', () => {
     !demoRefusal('POST', '/demo/heartbeat'),
     'the page must be able to say it is still open'
   );
+});
+
+check('an ESO account says which platform and server it lives on', () => {
+  assert(platformName(2) === 'PC', `expected PC for platform 2, got "${platformName(2)}"`);
+  assert(platformName(0) === '', 'an account with no file behind it has no platform');
+  assert(
+    platformName(7) === 'platform 7',
+    'a platform number this site cannot name is shown as itself, never guessed at'
+  );
+  assert(
+    serverLabel({ platform: 2, worldName: 'NA Megaserver' }) === 'PC \u00b7 NA Megaserver',
+    'both halves belong on one line'
+  );
+  assert(serverLabel({ worldName: 'PTS' }) === 'PTS', 'a world without a platform is still shown');
+  assert(serverLabel({ platform: 2 }) === 'PC', 'a platform without a world is still shown');
+  assert(serverLabel({}) === '', 'nothing known says nothing');
+});
+
+check('the accounts dialog shows the platform and the server beside the name', () => {
+  const page = renderPage({
+    ...emptyData,
+    user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
+    accounts: [
+      {
+        accountName: DEMO_ACCOUNT,
+        itemCount: 9,
+        guildCount: 1,
+        platform: 2,
+        worldName: 'NA Megaserver',
+        guilds: [],
+      },
+    ],
+  });
+
+  assertMatch(page, /PC \u00b7 NA Megaserver/, 'the account must name its platform and megaserver');
+  assert(page.includes(DEMO_ACCOUNT), 'the account must still be named beside them');
+});
+
+check('removing the demo account puts it straight back', () => {
+  assert(
+    demoRemovalRestores({ isDemo: true }, DEMO_ACCOUNT),
+    'the demo account is the one the demo browses as, so it must be restored'
+  );
+  assert(
+    !demoRemovalRestores({ isDemo: true }, '@SomeoneElse'),
+    'another account really can be removed in the demo'
+  );
+  assert(
+    !demoRemovalRestores({ isDemo: false }, DEMO_ACCOUNT),
+    'an ordinary person keeps the removal they asked for'
+  );
+  assert(!demoRemovalRestores(null, DEMO_ACCOUNT), 'a visitor has nothing to restore');
 });
 
 check('the demo shows its own address as a verified sign-in, like anybody else', () => {
