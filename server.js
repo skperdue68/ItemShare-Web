@@ -351,8 +351,23 @@ async function emailOwners({ user, submitted, contacts }) {
   // A demo basket is recorded inside the demo copy and nobody is told: the addresses
   // there are invented placeholders, and mail from a rehearsal must never leave.
   if (user && user.isDemo) {
-    logLine('Email: demo session - requests recorded, no email sent');
-    return { sent: 0, skipped: 0 };
+    // The requests themselves really are recorded, inside the demo copy. The mail is the
+    // one part that cannot be rehearsed, so nothing is sent - but the owners a real send
+    // would have written to are counted, so the confirmation reads the way it does for
+    // everybody else instead of quietly claiming no owner was told.
+    const wouldMail = new Set(
+      (submitted || [])
+        .map((row) => contacts && contacts.get(String(row.owner_account_name)))
+        .filter((contact) => contact && contact.email)
+        .map((contact) => contact.email)
+    ).size;
+
+    logLine(
+      `Email: demo session - requests recorded, ${wouldMail} owner${
+        wouldMail === 1 ? '' : 's'
+      } would have been emailed, nothing sent`
+    );
+    return { sent: wouldMail, skipped: 0 };
   }
 
   if (!submitted || submitted.length === 0 || !contacts || contacts.size === 0) {
