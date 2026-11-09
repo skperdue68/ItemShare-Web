@@ -1305,11 +1305,21 @@ if it is missing, so a fresh database already has it. The address on it is
 `demo@itemshare.invalid` and the sign-in identity is `demo`, so nobody can create it by
 signing up.
 
+The demo has its own MariaDB database, `ItemShare-Demo`, created at startup with the same
+migrations as the real one and holding only the demo person, its account, its guild and
+its items. A demo session therefore reads a copy of the schema instead of the live rows,
+and nothing it does can reach them; signing in as anybody else switches back to
+`ITEMSHARE_DATABASE` on the next request. Sessions stay in the real database, because a
+session has to be read before the site knows who is asking. The database account needs
+the same CREATE privilege it already has for the real one.
+
 A demo session is read-only, enforced in `server.js` before any route runs: every POST
 except logging out is refused, so nothing is reserved, no request is sent, no email goes
-out, no count changes for anybody else, and no ESO account can be added or removed. A
-banner says so on every page, and the refusal is shown in the basket as a toast rather
-than a failure.
+out, no count changes for anybody else, and no ESO account can be added or removed. The
+upload card is still there - the drop zone, the file picker - but it says uploading is
+switched off on a demo account and to sign in as a non-demo user to upload, and the page
+script shows that sentence instead of sending the file. A banner says the same on every
+page, and the basket shows a refusal as a toast rather than as a failure.
 
 ## Not done yet
 

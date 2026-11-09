@@ -63,9 +63,12 @@ import {
   notePasswordUsed,
   RESET_TOKEN_MINUTES,
 } from './lib/store.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
+  DEMO_DATABASE,
   DEMO_DISPLAY_NAME,
   DEMO_LOGIN,
+  databaseForUser,
   demoRefusal,
   ensureDemoData,
   findDemoSignIn,
@@ -159,7 +162,7 @@ const HOLD_MINUTES = Math.min(
   ),
   120
 );
-const sessionStore = new MariaDbSessionStore({ withConnection: withDatabase, ttlMs: SESSION_TTL_MS });
+const sessionStore = new MariaDbSessionStore({ withConnection: withSiteDatabase, ttlMs: SESSION_TTL_MS });
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -175,6 +178,14 @@ const sessionMiddleware = session({
   cookie: { httpOnly: true, sameSite: 'lax', secure: false, maxAge: SESSION_TTL_MS },
 });
 app.use(sessionMiddleware);
+
+// Every request after this runs in the database its person belongs to, so a demo
+// session cannot reach the real guilds even through a route that forgot the rule.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+
+  requestDatabase.run(databaseForUser(user), next);
+});
 // A stylesheet taken from a browser cache written before the deploy is the difference
 // between green and red answer buttons and two grey boxes with no layout, so it is sent
 // with no-cache and revalidated on every page: unchanged costs a 304, changed is seen.
@@ -500,39 +511,72 @@ function sendPage(req, res, status, options) {
     );
 }
 
-// Migrations run once at startup; request connections just use the database.
+// Migrations run once at startup, in both databases; request connections just use the
+// database that belongs to whoever is asking.
 async function prepareDatabase() {
   const config = readConfig();
   const { connection, migrations } = await openDatabase(config);
 
-  // The demo sign-in is a real person with a guild and a shelf of items, so it is made
-  // here - after the migrations, once - rather than on the first page view. A failure
-  // must not stop the site: everything else works without it.
+  await connection.end();
+  console.log(`Database ready: ${config.database} on ${config.host}:${config.port}`);
+  console.log(`Migrations: ${migrations.length ? migrations.join(', ') : 'already up to date'}`);
+
+  // The demo sign-in lives in its own database - a real person, one ESO account, one
+  // guild and a shelf of items, made here, once, rather than on the first page view -
+  // so nothing a demo session does can reach the real rows. A failure must not stop the
+  // site: everything else works without it.
+  const demoConfig = { ...config, database: DEMO_DATABASE };
+  let demoConnection = null;
+
   try {
-    const demo = await ensureDemoData(connection);
+    const opened = await openDatabase(demoConfig);
+    demoConnection = opened.connection;
+
+    const demo = await ensureDemoData(demoConnection);
+
+    console.log(
+      `Demo database: ${demoConfig.database} on ${demoConfig.host}:${demoConfig.port} ` +
+        `(migrations: ${opened.migrations.length ? opened.migrations.join(', ') : 'already up to date'})`
+    );
     console.log(
       `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
         `${demo.seeded ? 'items written' : 'items already there'} (Demo / Demo)`
     );
   } catch (error) {
-    console.warn(`Demo sign-in: not ready - ${error.message}`);
+    console.warn(`Demo database: not ready - ${error.message}`);
+  } finally {
+    if (demoConnection) {
+      await demoConnection.end();
+    }
   }
-
-  await connection.end();
-  console.log(`Database ready: ${config.database} on ${config.host}:${config.port}`);
-  console.log(`Migrations: ${migrations.length ? migrations.join(', ') : 'already up to date'}`);
 }
 
-// A single short lived connection per request keeps the app simple: the traffic
-// here is one person uploading one file at a time.
-async function withDatabase(handler) {
-  const config = readConfig();
+// Which database a request opens depends on who is asking: a demo session reads the
+// demo copy, everybody else the real one. The choice is carried in async context, so
+// the routes and the store helpers that take a connection stay unchanged.
+const requestDatabase = new AsyncLocalStorage();
+
+async function withDatabaseOn(database, handler) {
+  const config = { ...readConfig(), database };
   const { connection } = await openDatabase(config, { migrate: false });
+
   try {
     return await handler(connection, config);
   } finally {
     await connection.end();
   }
+}
+
+// Sessions always live in the real database: one has to be read before the site knows
+// who is asking, and a demo session has to survive a restart like any other.
+async function withSiteDatabase(handler) {
+  return withDatabaseOn(readConfig().database, handler);
+}
+
+// A single short lived connection per request keeps the app simple: the traffic
+// here is one person uploading one file at a time.
+async function withDatabase(handler) {
+  return withDatabaseOn(requestDatabase.getStore() || readConfig().database, handler);
 }
 
 const SORT_FIELDS = new Set(['type', 'name', 'added']);
@@ -1726,7 +1770,9 @@ app.post('/auth/email', async (req, res) => {
   // that exists without one, so it is answered before the address checks below.
   if (email === DEMO_LOGIN) {
     try {
-      const login = await withDatabase(async (connection) => {
+      // The demo person is looked up in the demo database, where it is created if it is
+      // missing: a sign-in must never write rows into the real one.
+      const login = await withDatabaseOn(DEMO_DATABASE, async (connection) => {
         await ensureDemoData(connection);
         return findDemoSignIn(connection);
       });
@@ -2823,7 +2869,7 @@ httpServer.listen(PORT, () => {
       ? `Unsent requests: held for ${HOLD_MINUTES} minute${HOLD_MINUTES === 1 ? '' : 's'} (REQUEST_HOLD_MINUTES), swept every ${Math.round(SWEEP_INTERVAL_MS / 1000)}s`
       : 'Unsent requests: expiry sweep disabled (REQUEST_SWEEP_INTERVAL_MS=0)'
   );
-  console.log(`Database target: ${readConfig().database}`);
+  console.log(`Database target: ${readConfig().database} (demo: ${DEMO_DATABASE})`);
 
   if (ICON_BACKFILL_INTERVAL_MS > 0) {
     console.log(

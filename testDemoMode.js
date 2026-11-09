@@ -8,10 +8,12 @@
 
 import {
   DEMO_ACCOUNT,
+  DEMO_DATABASE,
   DEMO_GUILD,
   DEMO_LOGIN,
   DEMO_PASSWORD,
   DEMO_WORLD,
+  databaseForUser,
   demoRefusal,
   ensureDemoData,
   findDemoSignIn,
@@ -278,6 +280,41 @@ check('an ordinary session shows no demo banner', () => {
   });
 
   assert(!page.includes('Demo mode'), 'the banner must only appear for the demo');
+});
+
+check('the demo has a database of its own, apart from the real one', () => {
+  assert(DEMO_DATABASE === 'ItemShare-Demo', `expected ItemShare-Demo, got ${DEMO_DATABASE}`);
+  assert(DEMO_DATABASE !== 'itemshare', 'the demo must not share the real database');
+});
+
+check('only a demo session is pointed at the demo database', () => {
+  assert(databaseForUser({ id: 42, isDemo: true }) === DEMO_DATABASE, 'the demo must read the demo copy');
+  assert(databaseForUser({ id: 5, isDemo: false }) === null, 'an ordinary person stays in the real one');
+  assert(databaseForUser({ id: 5 }) === null, 'a session without the flag stays in the real one');
+  assert(databaseForUser(null) === null, 'a visitor has no demo database to read');
+});
+
+check('a demo upload card keeps the drop zone but says uploading is switched off', () => {
+  const page = renderPage({
+    ...emptyData,
+    user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
+    accounts: [{ accountName: DEMO_ACCOUNT, itemCount: 9, guildCount: 1, guilds: [] }],
+  });
+
+  assertMatch(page, /id="savedvars"/, 'the demo should still see the drop zone');
+  assertMatch(page, /id="demoUploadNotice"/, 'the upload restriction is not explained');
+  assertMatch(page, /switched off/i, 'the notice must say uploading is switched off');
+  assertMatch(page, /sign in as yourself/i, 'the notice must say how to upload for real');
+});
+
+check('an ordinary upload card carries no demo restriction', () => {
+  const page = renderPage({
+    ...emptyData,
+    user: { id: 5, username: 'someone', provider: 'password' },
+    accounts: [{ accountName: '@someone', itemCount: 3, guildCount: 1, guilds: [] }],
+  });
+
+  assert(!page.includes('demoUploadNotice'), 'only a demo may be told uploading is off');
 });
 
 console.log('');

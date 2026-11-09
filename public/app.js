@@ -58,6 +58,23 @@ async function uploadFile(file) {
     return;
   }
 
+  // The card on a demo account says uploading is switched off. Saying so here costs
+  // nothing and spares a file being sent to an answer that is already known.
+  const restriction = document.getElementById('demoUploadNotice');
+
+  if (restriction) {
+    showToast(restriction.textContent.replace(/\s+/g, ' ').trim(), 'err');
+
+    if (fileInput) {
+      fileInput.value = '';
+    }
+    if (fileName) {
+      fileName.textContent = 'No file selected';
+    }
+
+    return;
+  }
+
   if (fileName) {
     fileName.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
   }
