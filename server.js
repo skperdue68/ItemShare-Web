@@ -43,6 +43,7 @@ import {
   getSubmittedRequests,
   getSharedItemsForViewer,
   getViewerAccounts,
+  listAccountServers,
   getViewerFacets,
   getViewerGuilds,
   getBrowsingAccount,
@@ -56,6 +57,7 @@ import {
   signInWithProvider,
   submitDrafts,
 } from './lib/store.js';
+import { readAccountServer } from './lib/serverLabel.js';
 import {
   claimHoldsForOwnedAccounts,
   createGuestPerson,
@@ -742,11 +744,16 @@ async function viewerAccountNames(req, connection, user) {
     facets: { types: [], owners: [] },
     filters,
     dbError: null,
+    accountServers: [],
   };
 
   try {
     await withDatabase(async (connection) => {
       const accountNames = await viewerAccountNames(req, connection, user);
+
+      // The servers the form offers: what is already recorded, read for every page so a
+      // newly added server appears in the list the next time the dialog opens.
+      data.accountServers = await listAccountServers(connection);
 
       // Everybody gets the lists, signed in or not. A person the site has no ESO account
       // for has no guilds to compare against, so the guild rule is skipped and they see
@@ -2257,6 +2264,7 @@ app.post('/accounts/add', async (req, res) => {
   // Typed by hand, so it is made the shape the addon writes: lower case, one @ in front,
   // no spaces. The addon and the box have to agree or the same account is two accounts.
   const accountName = normalizeEsoAccountName(req.body && req.body.accountName);
+  const where = readAccountServer(req.body);
 
   if (!accountName) {
     sendPage(req, res, 400, {
@@ -2268,9 +2276,21 @@ app.post('/accounts/add', async (req, res) => {
     return;
   }
 
+  // Both are required, not optional extras: the same @handle and guild id exist on every
+  // platform and megaserver, so a name without them names nothing a request can be sent to.
+  if (!where) {
+    sendPage(req, res, 400, {
+      heading: 'Say which platform and server',
+      message: 'An ESO account only means something on the platform and megaserver it plays on.',
+      details: 'Choose both from the list - a request cannot tell NA from EU without them.',
+      tone: 'error',
+    });
+    return;
+  }
+
   try {
     const outcome = await withDatabase((connection) =>
-      linkAccountToUser(connection, { accountName, userId: user.id })
+      linkAccountToUser(connection, { accountName, userId: user.id, ...where })
     );
 
     if (outcome === 'conflict') {
