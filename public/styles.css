@@ -2556,21 +2556,29 @@ th.action-cell {
   box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
 }
 
+/* Paging through Already sent sits under the table, centred and with a little air above
+   it. The items are separated by commas in the markup rather than by flex gaps, so the
+   numbers read as a list instead of a run of boxes. */
 .request-history-pages {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
+  margin-top: 20px;
+  text-align: center;
+  line-height: 2;
 }
 
 .history-page {
+  display: inline-block;
   padding: 6px 10px;
   border: 1px solid var(--panel-border);
   border-radius: 7px;
   color: var(--text);
   background: #0e1a33;
   text-decoration: none;
+}
+
+/* A page already looked at is still just a page number: it keeps the colour of an
+   unvisited one, so the row does not turn into a map of where you have been. */
+a.history-page:visited {
+  color: var(--text);
 }
 
 a.history-page:hover, .history-page.is-current {

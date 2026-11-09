@@ -353,6 +353,11 @@ if (listRegion) {
   let basketRevision = 0;
   let activeTab = 'request';
 
+  // Which page of Already sent is on screen. It is kept here rather than in the address
+  // bar: paging is a view of the same page, so it must not rewrite the URL, count as a
+  // navigation, or move the reader to a different tab.
+  let liveHistoryPage = Number(new URLSearchParams(window.location.search).get('historyPage')) || null;
+
   try {
     const stored = window.sessionStorage.getItem(TAB_KEY);
     if (stored === 'request' || stored === 'offer' || stored === 'mine') {
@@ -429,8 +434,9 @@ if (listRegion) {
       const url = new URL(historyPage.href, window.location.href);
       if (url.origin !== window.location.origin) return;
       event.preventDefault();
-      window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`);
-      setTab('mine');
+      // Only the list is replaced. The address bar keeps what it had and the tab being
+      // read stays selected, so turning a page does not look like a move to another page.
+      liveHistoryPage = Number(url.searchParams.get('historyPage')) || 1;
       scheduleRefresh(0);
       return;
     }
@@ -521,6 +527,7 @@ if (listRegion) {
   if (new URLSearchParams(window.location.search).has('historyPage')) activeTab = 'mine';
   setTab(activeTab);
   window.addEventListener('popstate', () => {
+    liveHistoryPage = Number(new URLSearchParams(window.location.search).get('historyPage')) || null;
     setTab('mine');
     scheduleRefresh(0);
   });
@@ -640,6 +647,10 @@ if (listRegion) {
     renderFilterMenus();
 
     const query = params.toString();
+
+    // A new filter is a new list, so it starts at the first page rather than at whichever
+    // page of the previous list happened to be open.
+    liveHistoryPage = null;
 
     if (window.history && window.history.replaceState) {
       window.history.replaceState(null, '', query ? `/?${query}` : '/');
@@ -945,6 +956,33 @@ if (listRegion) {
     syncRequestDialog();
   }
 
+  /**
+   * Which page of Already sent the list should ask for: the one being read, or the one
+   * the address bar arrived with. In one place, so the request and the "are these new
+   * cancellations?" check cannot disagree about which page is on screen.
+   */
+  function listHistoryPage() {
+    return (
+      liveHistoryPage || Number(new URLSearchParams(window.location.search).get('historyPage')) || 1
+    );
+  }
+
+  /** The address bar's filters, with the page being read added in. */
+  function listQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const page = listHistoryPage();
+
+    if (page > 1) {
+      params.set('historyPage', String(page));
+    } else {
+      params.delete('historyPage');
+    }
+
+    const query = params.toString();
+
+    return query ? `?${query}` : '';
+  }
+
   async function refresh() {
     if (refreshing) {
       queued = true;
@@ -953,7 +991,7 @@ if (listRegion) {
 
     refreshing = true;
     const revision = basketRevision;
-    const query = window.location.search;
+    const query = listQuery();
 
     try {
       const response = await fetch(`/items${query}`, {
@@ -964,7 +1002,7 @@ if (listRegion) {
 
       if (response.ok) {
         const html = await response.text();
-        if (revision === basketRevision && query === window.location.search) {
+        if (revision === basketRevision && query === listQuery()) {
           applyRegion(html);
         } else {
           queued = true;
@@ -1641,7 +1679,7 @@ if (listRegion) {
   // list refresh. The first pass only records what is already closed, so opening the
   // page does not announce history; after that, anything newly cancelled is news.
   function noteClosedRequests() {
-    const page = new URLSearchParams(window.location.search).get('historyPage') || '1';
+    const page = String(listHistoryPage());
     const historyChanged = page !== closedHistoryPage;
     closedHistoryPage = page;
     const closed = Array.from(
