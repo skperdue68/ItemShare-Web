@@ -578,7 +578,7 @@ async function prepareDatabase() {
     }
     console.log(
       `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
-        `${demo.seeded ? 'items written' : 'items already there'} (Demo / Demo)`
+        `${demo.seeded ? 'items written' : 'items already there'} (demo@example.com / demo)`
     );
   } catch (error) {
     console.warn(`Demo database: not ready - ${error.message}`);
@@ -1808,8 +1808,8 @@ app.post('/auth/email', async (req, res) => {
   const email = normalizeEmail(req.body && req.body.email);
   const password = String((req.body && req.body.password) || '');
 
-  // "Demo" in the email box is the demo sign-in, not an address: it is the one account
-  // that exists without one, so it is answered before the address checks below.
+  // The demo address is answered here, before the ordinary lookup: the demo person lives
+  // in the demo database, so the real one is never opened on its behalf.
   if (email === DEMO_LOGIN) {
     try {
       // The demo person is looked up in the demo database, where it is created if it is
@@ -1828,7 +1828,7 @@ app.post('/auth/email', async (req, res) => {
       if (!login || !matches) {
         sendPage(req, res, 401, {
           heading: 'That demo password does not match',
-          message: 'The demo signs in with Demo as both the email and the password.',
+          message: 'The demo signs in with demo@example.com and the password demo.',
           tone: 'error',
         });
         return;
@@ -1905,6 +1905,18 @@ app.post('/auth/email/signup', async (req, res) => {
   // The second box the form asks for. It is read here as well as in the browser, because
   // a form posts whether or not a script ever ran.
   const confirm = String((req.body && req.body.confirm) || '');
+
+  // The demo address is reserved. An ordinary account created with it would be answered
+  // by the demo branch on every sign-in, so the form refuses it instead of making one.
+  if (email === DEMO_LOGIN) {
+    sendPage(req, res, 400, {
+      heading: 'That address is the demo',
+      message:
+        'demo@example.com is the demo sign-in, with the password demo. Create an account with your own address instead.',
+      tone: 'notice',
+    });
+    return;
+  }
 
   if (!emailLooksValid(email)) {
     sendPage(req, res, 400, {

@@ -103,7 +103,10 @@ check('the demo guild is the one that was asked for, on PC and NA', () => {
   assert(DEMO_GUILD.name === 'Alphabet Mafia', `expected Alphabet Mafia, got ${DEMO_GUILD.name}`);
   assert(DEMO_WORLD.platform === 2, `expected platform 2 (PC), got ${DEMO_WORLD.platform}`);
   assert(DEMO_WORLD.worldName === 'NA Megaserver', `got ${DEMO_WORLD.worldName}`);
-  assert(DEMO_LOGIN === 'demo' && DEMO_PASSWORD === 'Demo', 'the pair is Demo / Demo');
+  assert(
+    DEMO_LOGIN === 'demo@example.com' && DEMO_PASSWORD === 'demo',
+    'the pair is demo@example.com / demo'
+  );
 });
 
 check('the demo account is not the one seedDemo.js writes into real guilds', () => {
@@ -169,7 +172,10 @@ await checkAsync('a fresh database gets the demo person, account, guild and item
 
   const identity = connection.calls(/INSERT INTO itemshare_user_identities/)[0];
   assert(identity, 'no sign-in identity was written');
-  assert(identity.params[0] === 'demo', `identity should be "demo", got ${identity.params[0]}`);
+  assert(
+    identity.params[0] === DEMO_LOGIN,
+    `identity should be ${DEMO_LOGIN}, got ${identity.params[0]}`
+  );
 
   const account = connection.calls(/INSERT INTO itemshare_accounts/)[0];
   assert(account, 'the ESO account was never linked to the demo person');
@@ -279,7 +285,7 @@ await checkAsync('the demo signs in as a person marked demo', async () => {
           {
             id: 42,
             display_name: 'Demo',
-            email: 'demo@itemshare.invalid',
+            email: 'demo@example.com',
             password_hash: 'scrypt$1$2$3$abc$def',
             is_demo: 1,
           },
@@ -324,7 +330,8 @@ check('a visitor is shown the three ways in and no items', () => {
   assertMatch(page, /Sign in with Discord/, 'Discord sign-in is missing');
   assertMatch(page, /Sign in with Google/, 'Google sign-in is missing');
   assertMatch(page, /action="\/auth\/email"/, 'the email and password form is missing');
-  assertMatch(page, /Demo/, 'the demo pair is not mentioned');
+  assertMatch(page, /demo@example\.com/, 'the demo sign-in is not mentioned');
+  assertMatch(page, /password\s*<strong>demo<\/strong>/, 'the demo password is not mentioned');
   assert(!page.includes('data-item-key'), 'no item may be rendered to a visitor');
 });
 
