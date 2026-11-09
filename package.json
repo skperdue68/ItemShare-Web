@@ -14,6 +14,7 @@
     "test:grouping": "node testGrouping.js",
     "test:password-forms": "node testPasswordForms.js",
     "test:reopen-requests": "node testReopenRequests.js",
+    "test:server-identity": "node testServerIdentity.js",
     "requests:reopen": "node reopenRequests.js",
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js"
