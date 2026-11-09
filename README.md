@@ -1360,6 +1360,22 @@ rather than to every open page. `POST /demo/heartbeat` is what says a demo page 
 there: no heartbeat for 45 seconds and the activity pauses, and it starts again when a
 demo page reopens. `DEMO_ACTIVITY_MS` is the average gap between actions (default 15s, `0` turns it off), and each pause is drawn fresh between 60% and 140% of it, so the sandbox does not beat like a metronome.
 
+## Log lines and offer dates
+
+Every line the running site prints begins with the local time it happened,
+`[2026-11-09 05:12:03]`, and every line `npm run simulate` prints carries the same stamp
+after its `[SIMULATE]` label. A transcript with both in it therefore reads in order, and a
+line about a refusal can be told apart from one about the same thing this morning.
+
+An offer keeps the date it was first made. A file that still contains an item refreshes
+the row where it stands, so `first_seen_at` survives every later upload and the Added
+column does not reset; only an item that is new in the file starts at today. The demo and
+the simulator write all their rows at once, so their *new* rows are spread across a ladder
+from about three months old down to a few hours old (`lib/itemAges.js`). The rule that
+protects a real upload protects them too: only a row nobody has touched since it was
+inserted (`first_seen_at = last_seen_at`) is dated, so the next save leaves it alone. A
+real item's first date is still the first time its owner shared it.
+
 ## Not done yet
 
 **`declined`.** A request the owner cannot fill is recorded as `cancelled` with the

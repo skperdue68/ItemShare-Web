@@ -35,6 +35,8 @@ import {
   pickScenario,
 } from './lib/demoActivity.js';
 import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
+import { AGE_HOURS, planAges, untouchedRowsSql } from './lib/itemAges.js';
+import { stamp } from './lib/log.js';
 import { platformName, serverLabel } from './lib/serverLabel.js';
 import { emailLine, renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
@@ -399,6 +401,51 @@ check('the addon is one click away, signed out and signed in', () => {
   });
 
   assertMatch(uploadGate, /downloads\/dl4533/, 'the upload gate must say where to get the file');
+});
+
+check('every line the site prints carries the time it happened', () => {
+  const fixed = stamp(new Date(2026, 10, 9, 5, 2, 3));
+
+  assert(fixed === '2026-11-09 05:02:03', `expected 2026-11-09 05:02:03, got "${fixed}"`);
+  assert(
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(stamp()),
+    'a stamp is a date and a time, to the second'
+  );
+});
+
+check('a fresh shelf is dated across a spread rather than all today', () => {
+  const three = planAges(3);
+
+  assert(three.length === 3, 'one age per row');
+  assert(three[0] === AGE_HOURS[0], 'the first row gets the oldest age');
+  assert(three[2] === AGE_HOURS[AGE_HOURS.length - 1], 'the last row gets the newest age');
+  assert(three[0] > three[1] && three[1] > three[2], 'the ages descend');
+  assert(planAges(0).length === 0, 'nothing to date is no plan');
+
+  const many = planAges(20);
+
+  assert(many.length === 20, 'every row gets an age');
+  assert(
+    many.every((hours) => AGE_HOURS.includes(hours)),
+    'every age is one the ladder knows, so a fresh database always looks the same'
+  );
+});
+
+check('only rows nobody has touched since they were inserted are dated', () => {
+  const sql = untouchedRowsSql('itemshare_shared_items');
+
+  assert(sql.includes('first_seen_at = last_seen_at'), 'a re-saved row must keep its first date');
+  assert(/ORDER BY item_name/.test(sql), 'the same item lands on the same rung every time');
+
+  let refused = false;
+
+  try {
+    untouchedRowsSql('itemshare_users');
+  } catch {
+    refused = true;
+  }
+
+  assert(refused, 'a table with no living dates must be refused rather than guessed at');
 });
 
 check('a signed-in person with no ESO account is asked to upload', () => {
