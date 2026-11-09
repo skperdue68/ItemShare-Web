@@ -684,6 +684,57 @@ if (listRegion) {
     }
   }
 
+  // The bar is the only part of the header that depends on the basket, so it is the only
+  // part that has to be rebuilt when the basket changes. The last item leaving takes it
+  // away outright: a clock and a warning about unsent items mean nothing once nothing is
+  // waiting, and the next item added brings it back.
+  let headerBarFetching = false;
+
+  async function syncHeaderBar(heldNow) {
+    const current = document.querySelector('[data-basket]');
+
+    if (!heldNow) {
+      if (current) {
+        current.remove();
+      }
+      return;
+    }
+
+    if (current || headerBarFetching) {
+      return;
+    }
+
+    headerBarFetching = true;
+
+    try {
+      const response = await fetch(window.location.pathname + window.location.search, {
+        credentials: 'same-origin',
+        headers: { Accept: 'text/html' },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const template = document.createElement('template');
+      template.innerHTML = await response.text();
+      const bar = template.content.querySelector('[data-basket]');
+      const after = document.querySelector('.top-bar-left');
+
+      // Only if it is still missing: a slower answer must not add a second clock over a
+      // bar an earlier one already put back.
+      if (bar && after && !document.querySelector('[data-basket]')) {
+        after.insertAdjacentElement('afterend', bar);
+        tickCountdown();
+      }
+    } catch (error) {
+      // Offline. The next refresh asks again.
+    } finally {
+      headerBarFetching = false;
+    }
+  }
+
   function applyRegion(html) {
     const template = document.createElement('template');
     template.innerHTML = html;
@@ -699,14 +750,14 @@ if (listRegion) {
     const anchor = captureAnchor();
 
     // The hold bar sits in the header, outside this region, so a change in what is being
-    // held cannot be shown by swapping the list alone: the header has to be built again.
+    // held cannot be shown by swapping the list alone. Only that bar is rebuilt: reloading
+    // the page instead threw away anything half-typed and asked the browser's own "leave
+    // this page?" question, which is how sending a basket used to end.
     const heldNow = Boolean(next.querySelector('[data-basket-row]'));
     const heldOnPage = Boolean(document.querySelector('[data-basket]'));
 
     if (heldNow !== heldOnPage) {
-      rememberAcrossReload(anchor);
-      window.location.reload();
-      return;
+      syncHeaderBar(heldNow);
     }
 
     if (next.getAttribute('data-signature') !== listRegion.getAttribute('data-signature')) {
@@ -1250,7 +1301,8 @@ if (listRegion) {
     confirm = '',
   }) {
     // Read before the request goes: with no basket on the page yet, this copy is the first
-    // one, and the notice is for exactly that moment.
+    // one, and the notice is for exactly that moment. Emptying the bag takes the header bar
+    // away, so adding again finds the same two marks missing and asks the same question.
     const basketWasEmpty =
       !document.querySelector('[data-basket]') && !document.querySelector('[data-basket-row]');
 
@@ -1504,11 +1556,6 @@ async function sendBasket(button) {
       credentials: 'same-origin',
     });
     const result = await response.json().catch(() => ({}));
-
-    if (result.demo) {
-      showToast(result.error, 'err');
-      return;
-    }
 
     if (!response.ok) {
       throw new Error(result.error || 'Those requests could not be sent.');
