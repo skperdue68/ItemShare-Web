@@ -39,7 +39,7 @@ import {
   getOwnerContacts,
   getOwnerRequests,
   getRequesterNotifications,
-  getRequesterRequests,
+  getRequesterHistory,
   getSubmittedRequests,
   getSharedItemsForViewer,
   getViewerAccounts,
@@ -52,6 +52,7 @@ import {
   recordFulfillment,
   recordOwnerGroupAnswer,
   recordOwnerAnswer,
+  reconcileDraftBasket,
   replaceAccounts,
   setBrowsingAccount,
   signInWithProvider,
@@ -770,11 +771,8 @@ async function viewerAccountNames(req, connection, user) {
       // newly added server appears in the list the next time the dialog opens.
       data.accountServers = await listAccountServers(connection);
 
-      // Everybody gets the lists, signed in or not. A person the site has no ESO account
-      // for has no guilds to compare against, so the guild rule is skipped and they see
-      // what is shared; a visitor who is not signed in at all is the same case with one
-      // step fewer. The page draws every request button disabled for both, and asking is
-      // refused further down, because a request needs an account to be credited to.
+      // Signed-in accounts only browse their matching guild/platform/server shares.
+      // An account with no recorded guilds is prompted to upload its addon file.
 
       for (const accountName of accountNames) {
         data.accounts.push({
@@ -822,7 +820,16 @@ async function viewerAccountNames(req, connection, user) {
         }
       }
 
-      data.requests = user ? await getRequesterRequests(connection, user.id) : [];
+      if (user && data.browsingAccount) {
+        const checked = await reconcileDraftBasket(connection, {
+          userId: user.id, accountName: data.browsingAccount,
+        });
+        if (checked.cancelled > 0) {
+          notifyItemsChanged('request', `${checked.cancelled} reservations no longer match the selected account`);
+        }
+      }
+      data.requestHistory = user ? await getRequesterHistory(connection, user.id, req.query?.historyPage) : null;
+      data.requests = data.requestHistory?.rows || [];
       data.basketRows = user ? await getBasketRows(connection, user.id) : [];
       data.basket = user
         ? await getDraftBasket(connection, user.id, HOLD_MINUTES)
@@ -867,6 +874,12 @@ async function viewerAccountNames(req, connection, user) {
         }
 
         await setBrowsingAccount(connection, user.id, requested);
+        const checked = await reconcileDraftBasket(connection, {
+          userId: user.id, accountName: requested,
+        });
+        if (checked.cancelled > 0) {
+          notifyItemsChanged('request', `${checked.cancelled} reservations released after changing browsing account`);
+        }
       });
     } catch (error) {
       res
@@ -1055,7 +1068,6 @@ app.post('/requests', async (req, res) => {
       // need it, and the name is attached to their sign-in as the request is made, so
       // this happens once. Refusing instead sent them off to upload a file first, which
       // is how you share - not how the site knows who is asking.
-      let attachedNow = false;
 
       if (accountNames.length === 0) {
         const typed = normalizeEsoAccountName(req.body && req.body.accountName);
@@ -1079,7 +1091,6 @@ app.post('/requests', async (req, res) => {
         }
 
         accountNames = [typed];
-        attachedNow = true;
         // The session copy was read before the link existed.
         req.session.accountNames = null;
       }        // The list already shows only the chosen account's guilds; the request itself
@@ -1098,14 +1109,8 @@ app.post('/requests', async (req, res) => {
           itemId,
           quantity,
           holdMinutes: HOLD_MINUTES,
-          // A guest was shown everything that is shared, and the account name they
-          // typed has no guilds on record to compare against, so the guild rule is not
-          // applied to them. Applying it refused every item on the page they were
-          // looking at. The owner still sees who asked and decides.
-          // A name attached a moment ago has no guilds on record, and a guest never has
-          // any: the guild rule cannot be applied to either without refusing every row
-          // on the page they are looking at. The owner still sees who asked.
-          restrictToGuilds: user.provider !== 'guest' && !attachedNow,
+          // An account without matching recorded guilds must upload before reserving.
+          restrictToGuilds: true,
         });
     });
 
@@ -1172,6 +1177,9 @@ app.post('/requests/submit', async (req, res) => {
 
   try {
     const outcome = await withDatabase(async (connection) => {
+      const names = await viewerAccountNames(req, connection, user);
+      const selected = browsingAccountFor(names, await getBrowsingAccount(connection, user.id));
+      await reconcileDraftBasket(connection, { userId: user.id, accountName: selected });
       const basketRows = await getBasketRows(connection, user.id);
       const live = basketRows.filter((row) => row.status === 'draft');
       const sent = await submitDrafts(connection, { userId: user.id });

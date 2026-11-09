@@ -249,6 +249,91 @@ document.querySelectorAll('.avatar-photo').forEach((photo) => {
 // moved up into its place is used, so the reader drops one item down the list
 // instead of losing their spot entirely.
 
+// Match siblings by their server identity, then reconcile only changed leaves.
+// Keys are scoped to a parent: the same request can appear in separate tables.
+function liveNodeKey(node) {
+  if (node.nodeType !== 1) return null;
+  for (const name of ['id', 'data-item-key', 'data-request-id', 'data-filter-option', 'data-panel', 'data-tab', 'data-sort', 'data-group-heading']) {
+    if (node.hasAttribute(name)) return `${node.tagName}:${name}:${node.getAttribute(name)}`;
+  }
+  if (node.matches('input[data-filter]')) return `INPUT:${node.name}:${node.type === 'checkbox' ? node.value : ''}`;
+  if (node.matches('option')) return `OPTION:${node.value}`;
+  return null;
+}
+
+function reconcileLiveNode(current, next) {
+  if (current.nodeType !== 1) {
+    if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+    return;
+  }
+  // These values belong to this browser, not to the server's initial rendering.
+  const localTime = current.matches('time[data-since], time[data-local-time]') &&
+    current.getAttribute('datetime') === next.getAttribute('datetime');
+  const keepAttribute = (name) =>
+    (localTime && name === 'title') ||
+    (current.hasAttribute('data-panel') && name === 'hidden') ||
+    (current.hasAttribute('data-tab') && ['aria-selected', 'tabindex'].includes(name)) ||
+    (current.matches('details') && name === 'open') ||
+    (current.matches('.live-pill') && ['hidden', 'data-live'].includes(name));
+  for (const attribute of Array.from(current.attributes)) {
+    if (!next.hasAttribute(attribute.name) && !keepAttribute(attribute.name)) {
+      if (attribute.name === 'class' && current.classList.contains('row-fading')) continue;
+      current.removeAttribute(attribute.name);
+    }
+  }
+  for (const attribute of Array.from(next.attributes)) {
+    if (keepAttribute(attribute.name)) continue;
+    let value = attribute.value;
+    if (attribute.name === 'class' && current.classList.contains('row-fading')) {
+      value = [...new Set([...value.split(/\s+/).filter(Boolean), 'row-fading'])].join(' ');
+    }
+    if (current.getAttribute(attribute.name) !== value) current.setAttribute(attribute.name, value);
+  }
+  if (localTime || current.matches('.live-pill')) return;
+  reconcileLiveChildren(current, next);
+}
+
+function reconcileLiveChildren(current, next) {
+  const oldChildren = Array.from(current.childNodes);
+  const keyed = new Map(oldChildren.map(node => [liveNodeKey(node), node]).filter(([key]) => key));
+  const used = new Set();
+  let cursor = current.firstChild;
+  for (const incoming of Array.from(next.childNodes)) {
+    // Metadata templates are not visible DOM and do not need to be redrawn.
+    if (incoming.nodeType === 1 && incoming.matches('template[data-live-filters]')) {
+      const metadata = oldChildren.find(node => node.nodeType === 1 && node.matches('template[data-live-filters]'));
+      if (metadata) { used.add(metadata); if (cursor === metadata) cursor = metadata.nextSibling; }
+      continue;
+    }
+    // A dismissed basket row must never be resurrected by a later refresh.
+    if (incoming.nodeType === 1 && incoming.matches('[data-basket-row]') &&
+        removedRequestRows.has(incoming.dataset.requestId) &&
+        !oldChildren.some(node => node.nodeType === 1 && node.dataset.requestId === incoming.dataset.requestId && node.classList.contains('row-fading'))) continue;
+    const key = liveNodeKey(incoming);
+    const compatible = node => node && node.nodeType === incoming.nodeType &&
+      (node.nodeType !== 1 || node.tagName === incoming.tagName);
+    let match = key ? keyed.get(key) : null;
+    if (!key) {
+      match = oldChildren.find(node => !used.has(node) && !liveNodeKey(node) && compatible(node));
+    }
+    if (!compatible(match) || used.has(match)) match = null;
+    if (match) {
+      used.add(match);
+      reconcileLiveNode(match, incoming);
+      if (match !== cursor) current.insertBefore(match, cursor);
+      cursor = match.nextSibling;
+    } else {
+      const inserted = incoming.cloneNode(true);
+      current.insertBefore(inserted, cursor);
+    }
+  }
+  for (const node of oldChildren) {
+    if (!used.has(node) && !(node.nodeType === 1 && node.matches('[data-basket-row]') &&
+        node.dataset.status !== 'draft' && closingRequestRows.has(node.dataset.requestId)) &&
+        !(node.nodeType === 1 && node.classList.contains('row-fading'))) node.remove();
+  }
+}
+
 const listRegion = document.getElementById('itemLists');
 
 if (listRegion) {
@@ -270,7 +355,7 @@ if (listRegion) {
 
   try {
     const stored = window.sessionStorage.getItem(TAB_KEY);
-    if (stored === 'request' || stored === 'offer') {
+    if (stored === 'request' || stored === 'offer' || stored === 'mine') {
       activeTab = stored;
     }
   } catch (error) {
@@ -284,9 +369,10 @@ if (listRegion) {
     const labels = { live: 'Live', wait: 'Reconnecting', off: 'Not live' };
 
     listRegion.querySelectorAll('.live-pill').forEach((pill) => {
-      pill.hidden = false;
-      pill.dataset.live = state;
-      pill.textContent = labels[state] || state;
+      if (pill.hidden) pill.hidden = false;
+      if (pill.dataset.live !== state) pill.dataset.live = state;
+      const text = labels[state] || state;
+      if (pill.textContent !== text) pill.textContent = text;
     });
   }
 
@@ -306,8 +392,8 @@ if (listRegion) {
 
     tabs.forEach((tab) => {
       const selected = tab.dataset.tab === name;
-      tab.setAttribute('aria-selected', String(selected));
-      tab.tabIndex = selected ? 0 : -1;
+      if (tab.getAttribute('aria-selected') !== String(selected)) tab.setAttribute('aria-selected', String(selected));
+      if (tab.tabIndex !== (selected ? 0 : -1)) tab.tabIndex = selected ? 0 : -1;
 
       if (selected && focus) {
         tab.focus();
@@ -315,7 +401,8 @@ if (listRegion) {
     });
 
     panels.forEach((panel) => {
-      panel.hidden = panel.dataset.panel !== name;
+      const hidden = panel.dataset.panel !== name;
+      if (panel.hidden !== hidden) panel.hidden = hidden;
     });
 
     try {
@@ -332,6 +419,19 @@ if (listRegion) {
     if (tab) {
       event.preventDefault();
       setTab(tab.dataset.tab, { focus: true });
+      return;
+    }
+
+    const historyPage = closest('a[data-history-page]');
+    if (historyPage) {
+      // Leave modified clicks to the browser so pages can still open in another tab.
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const url = new URL(historyPage.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      event.preventDefault();
+      window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      setTab('mine');
+      scheduleRefresh(0);
       return;
     }
 
@@ -418,7 +518,12 @@ if (listRegion) {
     setTab(tabs[(index + step) % tabs.length].dataset.tab, { focus: true });
   });
 
+  if (new URLSearchParams(window.location.search).has('historyPage')) activeTab = 'mine';
   setTab(activeTab);
+  window.addEventListener('popstate', () => {
+    setTab('mine');
+    scheduleRefresh(0);
+  });
 
   // ------------------------------------------------------------------- filters
   // Filters apply as soon as they change - there is no button to forget - and the
@@ -778,6 +883,18 @@ if (listRegion) {
     }
 
     const anchor = captureAnchor();
+    // Prepare newly inserted controls with this browser's state before attachment.
+    next.querySelectorAll('[data-tab]').forEach(tab => {
+      const selected = tab.dataset.tab === activeTab;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+    });
+    next.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== activeTab; });
+    next.querySelectorAll('.live-pill').forEach(pill => {
+      pill.hidden = false;
+      pill.dataset.live = liveState;
+      pill.textContent = { live: 'Live', wait: 'Reconnecting', off: 'Not live' }[liveState] || liveState;
+    });
 
     // The hold bar sits in the header, outside this region, so a change in what is being
     // held cannot be shown by swapping the list alone. Only that bar is rebuilt: reloading
@@ -799,11 +916,17 @@ if (listRegion) {
       holdMinutes: Number(next.dataset.holdMinutes) || 5,
     });
 
-    if (next.getAttribute('data-signature') !== listRegion.getAttribute('data-signature')) {
-      // A type or an owner appeared or vanished, so the filter controls are stale.
-      rememberAcrossReload(anchor);
-      window.location.reload();
-      return;
+    const filterTemplate = next.querySelector('template[data-live-filters]');
+    const filters = document.getElementById('itemFilters');
+    if (filters && filterTemplate) {
+      // Preserve the form itself and its delegated listeners as facets come and go.
+      if (filterTemplate.content.childElementCount) {
+        reconcileLiveChildren(filters, filterTemplate.content);
+        const hidden = filterTemplate.dataset.empty === '1';
+        if (filters.hidden !== hidden) filters.hidden = hidden;
+      } else if (!filters.hidden) {
+        filters.hidden = true;
+      }
     }
 
     const rowTops = captureRowTops(listRegion);
@@ -811,15 +934,13 @@ if (listRegion) {
       panel.getBoundingClientRect().height
     );
 
-    listRegion.innerHTML = next.innerHTML;
+    reconcileLiveNode(listRegion, next);
 
     restoreAnchor(anchor);
     animatePanelHeights(listRegion, panelHeights);
     animateRowsInto(listRegion, rowTops);
     localiseTimeLabels(listRegion);
     relativeTick(listRegion);
-    setLiveState(liveState);
-    setTab(activeTab);
     noteClosedRequests();
     syncRequestDialog();
   }
@@ -832,9 +953,10 @@ if (listRegion) {
 
     refreshing = true;
     const revision = basketRevision;
+    const query = window.location.search;
 
     try {
-      const response = await fetch(`/items${window.location.search}`, {
+      const response = await fetch(`/items${query}`, {
         credentials: 'same-origin',
         headers: { Accept: 'text/html' },
         cache: 'no-store',
@@ -842,7 +964,7 @@ if (listRegion) {
 
       if (response.ok) {
         const html = await response.text();
-        if (revision === basketRevision) {
+        if (revision === basketRevision && query === window.location.search) {
           applyRegion(html);
         } else {
           queued = true;
@@ -882,6 +1004,7 @@ if (listRegion) {
   let dialogState = null;
   const knownClosed = new Set();
   let requestsPrimed = false;
+  let closedHistoryPage = new URLSearchParams(window.location.search).get('historyPage') || '1';
 
   function escapeText(value) {
     const node = document.createElement('span');
@@ -1307,11 +1430,12 @@ if (listRegion) {
     const label = bar.querySelector('.draft-basket-text strong');
 
     if (label) {
-      label.textContent = `${unique} unique item${unique === 1 ? '' : 's'} (${copies} total) reserved`;
+      const text = `${unique} unique item${unique === 1 ? '' : 's'} (${copies} total) reserved`;
+      if (label.textContent !== text) label.textContent = text;
     }
 
-    bar.dataset.items = String(unique);
-    bar.dataset.copies = String(copies);
+    if (bar.dataset.items !== String(unique)) bar.dataset.items = String(unique);
+    if (bar.dataset.copies !== String(copies)) bar.dataset.copies = String(copies);
   }
 
   function updateBasketClock(bar, basket) {
@@ -1517,6 +1641,9 @@ if (listRegion) {
   // list refresh. The first pass only records what is already closed, so opening the
   // page does not announce history; after that, anything newly cancelled is news.
   function noteClosedRequests() {
+    const page = new URLSearchParams(window.location.search).get('historyPage') || '1';
+    const historyChanged = page !== closedHistoryPage;
+    closedHistoryPage = page;
     const closed = Array.from(
       listRegion.querySelectorAll('[data-my-request][data-status="cancelled"]')
     );
@@ -1531,7 +1658,7 @@ if (listRegion) {
 
       knownClosed.add(id);
 
-      if (requestsPrimed) {
+      if (requestsPrimed && !(historyChanged && row.hasAttribute('data-history-row'))) {
         fresh.push(row);
       }
     }
@@ -2296,14 +2423,16 @@ function localiseTimeLabels(root) {
       return;
     }
 
-    element.textContent = date.toLocaleString(undefined, {
+    const text = date.toLocaleString(undefined, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     });
-    element.title = `Kept in UTC as ${iso.replace('T', ' ').replace('Z', '').trim()} UTC`;
+    if (element.textContent !== text) element.textContent = text;
+    const title = `Kept in UTC as ${iso.replace('T', ' ').replace('Z', '').trim()} UTC`;
+    if (element.title !== title) element.title = title;
   });
 }
 
@@ -2377,6 +2506,7 @@ function sweepClosedRequestRows() {
     // A live refresh rebuilds this table from the database, so a row this browser has
     // already seen out must not come back and sit here again.
     if (removedRequestRows.has(id)) {
+      if (row.classList.contains('row-fading')) return;
       removeRowWithSlide(row);
       return;
     }
@@ -2426,6 +2556,7 @@ if (rowRegion) {
 // server keeps sending it for the same few seconds and then stops (EXHAUSTED_ROW_
 // LINGER_MS in lib/store.js), so a refresh cannot bring it back.
 const exhaustedRowKeys = new Set();
+const exhaustedRowElements = new WeakSet();
 
 function sweepExhaustedRows() {
   const region = document.getElementById('itemLists');
@@ -2440,6 +2571,9 @@ function sweepExhaustedRows() {
     if (!key) {
       return;
     }
+
+    if (exhaustedRowElements.has(row)) return;
+    exhaustedRowElements.add(row);
 
     // A refresh in the last seconds of the fade rebuilds the row; the one this page
     // has already seen out must not come back for another turn.

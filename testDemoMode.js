@@ -529,7 +529,7 @@ check('attaching an ESO account asks for its platform and server, both required'
 
   assertMatch(page, /<select name="platform" required>/, 'the platform must be a required choice');
   assertMatch(page, /<select name="worldName" required>/, 'the server must be a required choice');
-  assertMatch(page, /<option value="2">PC<\/option>/, 'platform 2 must be offered by the name the site uses');
+  assertMatch(page, /<option value="2" selected>PC<\/option>/, 'platform 2 must be the default');
   assert(page.includes('>EU Megaserver<'), 'a server already recorded must be offered');
   assert(page.includes('>PTS<'), 'every recorded server is offered, not only the megaservers');
   assert(page.includes('>NA Megaserver<'), 'the known megaservers are offered before the first upload');
@@ -639,7 +639,7 @@ check('a demo session says so, and keeps every tool it can rehearse with', () =>
   });
 
   assertMatch(page, /Demo mode/, 'the banner is missing');
-  assertMatch(page, /no email/i, 'the banner must say no email is sent');
+  assertMatch(page, /email (?:is|are) disabled/i, 'the banner must say email is disabled');
   assertMatch(page, /Add or remove ESO accounts/, 'the demo must be able to try the account dialog');
   assertMatch(page, /Process Requests/, 'the demo must be able to try the owner pages');
 });

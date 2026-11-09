@@ -43,14 +43,16 @@ await test('live region updates exclude the cancelled rows from both header coun
   const cancelled = {dataset:{status:'cancelled',requestQuantity:'8'}};
   const next = {
     dataset:{basketSeconds:'1800',holdMinutes:'30'},
-    querySelectorAll: selector => selector.includes('data-status="draft"') ? [draft] : [draft,cancelled],
+    querySelectorAll: selector => selector.includes('data-status="draft"') ? [draft] : [],
     getAttribute: () => 'new-signature',
+    querySelector: () => null,
   };
   let summary;
   const template = {content:{querySelector:()=>next}};
-  new Function('document','captureAnchor','syncHeaderBar','listRegion','rememberAcrossReload','window',`${code}; applyRegion('');`)(
-    {createElement:()=>template},()=>null,(_held,value)=>{summary=value;},
-    {getAttribute:()=> 'old-signature'},()=>{}, {location:{reload(){}}}
+  new Function('document','captureAnchor','syncHeaderBar','listRegion','rememberAcrossReload','window','captureRowTops','reconcileLiveNode','restoreAnchor','animatePanelHeights','animateRowsInto','localiseTimeLabels','relativeTick','noteClosedRequests','syncRequestDialog',`${code}; applyRegion('');`)(
+    {createElement:()=>template,getElementById:()=>null},()=>null,(_held,value)=>{summary=value;},
+    {getAttribute:()=> 'old-signature',querySelectorAll:()=>[]},()=>{}, {location:{reload(){ throw new Error('Facet changes must not reload'); }}},
+    ()=>new Map(),()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{}
   );
   assert.equal(summary.unique,1);
   assert.equal(summary.copies,4);
