@@ -2538,3 +2538,33 @@ th.action-cell {
   flex: none;
   display: block;
 }
+
+/* The platform and server are chosen, not typed: a name attached by hand has to say where
+   it plays, or a request cannot tell NA from EU. Two choices side by side, one per line
+   once there is no room for both. */
+.account-add-server {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.account-add-server .auth-field {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.auth-field select {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: rgba(8, 18, 42, 0.55);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.auth-field select:focus {
+  outline: none;
+  border-color: var(--accent-top);
+  box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
+}
