@@ -96,7 +96,7 @@ function sourceOf(source, name) {
 // to make an account with. Both functions are lifted out and run, so the markup below is
 // the shipped markup.
 const panel = new Function(
-  `${sourceOf(viewsSource, 'passwordField')}\n${sourceOf(viewsSource, 'emailSignInPanel')}\nreturn emailSignInPanel();`
+  `${sourceOf(viewsSource, 'passwordField')}\n${sourceOf(viewsSource, 'emailSignInForm')}\n${sourceOf(viewsSource, 'signUpDetails')}\nreturn emailSignInForm() + signUpDetails();`
 )();
 
 const signIn = between(panel, 'action="/auth/email"', '</form>');
@@ -401,6 +401,99 @@ t('typing again clears the sentence and the mark', () => {
   assert.equal(note.hidden, true, 'the sentence goes as soon as it is being fixed');
   assert.equal(note.textContent, '');
   assert.equal(boxes.confirm.invalid, null, 'and the box is no longer marked');
+});
+
+// ----------------------------------------------- choosing to make an account
+
+t('the reset link belongs to the sign-in form, above the account form', () => {
+  assert.ok(
+    panel.indexOf('Forgot your password?') > panel.indexOf('Sign In'),
+    'it comes under the button it is about'
+  );
+  assert.ok(
+    panel.indexOf('Forgot your password?') < panel.indexOf('data-signup'),
+    'and before the way to make an account'
+  );
+  assert.doesNotMatch(signUp, /Forgot your password\?/, 'it is not part of the account form');
+});
+
+t('registering hides the ways in, and Cancel puts them back', () => {
+  const styles = fs.readFileSync(new URL('./public/styles.css', import.meta.url), 'utf8');
+
+  // The disclosure carries the state, so the hiding needs no script and the sign-in half
+  // comes back by itself when the account form closes.
+  assert.match(
+    styles,
+    /\.auth-panel:has\(\.auth-signup\[open\]\)\s*\.auth-login\s*\{\s*display:\s*none;/,
+    'the OAuth buttons, the email form and the reset link step aside'
+  );
+
+  assert.match(signUp, /<div class="auth-signup-actions">/, 'the two buttons share a row');
+  assert.ok(
+    signUp.indexOf('Create Account') < signUp.indexOf('>Cancel<'),
+    'Cancel is to the right of the button that goes forward'
+  );
+  assert.match(signUp, /<a class="cancel-button" href="\/" data-cancel-signup>Cancel<\/a>/);
+  assert.match(
+    styles,
+    /\.cancel-button \{[^}]*background: #b91c1c/s,
+    'red, so it reads as the one that throws the form away'
+  );
+  assert.match(styles, /\.auth-signup-actions \{[^}]*gap: 10px/s, 'with a little space between');
+});
+
+t('only the page with the account form loads the script that closes it', () => {
+  assert.match(renderSignInPage({}), /src="\/auth-panel\.js"/, 'the sign-in card closes in place');
+  assert.doesNotMatch(reset, /src="\/auth-panel\.js"/, 'a reset link has no account form');
+});
+
+t('Cancel closes the form and clears it without leaving the page', () => {
+  const source = fs.readFileSync(new URL('./public/auth-panel.js', import.meta.url), 'utf8');
+  const listeners = [];
+  const document = { addEventListener: (type, fn) => listeners.push({ type, fn }) };
+
+  new Function('document', source)(document);
+
+  let cleared = 0;
+  const summary = {
+    focused: false,
+    focus() {
+      this.focused = true;
+    },
+  };
+  const form = {
+    reset() {
+      cleared += 1;
+    },
+  };
+  const details = {
+    open: true,
+    querySelector: (selector) => (selector === 'form' ? form : summary),
+  };
+  const cancel = { closest: (selector) => (selector === 'details' ? details : null) };
+
+  const click = (target) => {
+    const event = {
+      target,
+      preventDefault() {
+        this.cancelled = true;
+      },
+    };
+
+    listeners[0].fn(event);
+    return event;
+  };
+
+  const elsewhere = click({ closest: () => null });
+  assert.equal(elsewhere.cancelled, undefined, 'a click that is not Cancel is left alone');
+  assert.equal(details.open, true, 'and changes nothing');
+
+  const pressed = click({ closest: (selector) => (selector === '[data-cancel-signup]' ? cancel : null) });
+
+  assert.equal(pressed.cancelled, true, 'the link does not navigate');
+  assert.equal(details.open, false, 'the account form closes');
+  assert.equal(cleared, 1, 'and what was typed goes with it');
+  assert.equal(summary.focused, true, 'the way in again takes the focus');
 });
 
 console.log(`\n${total - failures}/${total} passed`);

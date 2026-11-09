@@ -120,6 +120,11 @@ answer with a page that has lost both boxes, so the caret lands in the box to fi
 everything typed is still there. Every password box carries an
 eye that shows what was typed, drawn by `/password-toggle.js`, which listens once on the
 document and therefore reaches the boxes the request dialog builds after a click.
+Choosing *New here? Create an account* replaces the ways in with the account form - the
+OAuth buttons, the email form and the reset link all step aside - and Cancel, beside Create
+Account and red because it discards what was typed, puts them back. The `<details>`
+element carries that state through `:has()` in the stylesheet, so it holds with scripting
+off, and `/auth-panel.js` only takes over the Cancel click so the page is not reloaded.
 What the page asks for is the address, because the address is what the site collects: it
 is where a request answer is sent, and it is what ties the sign-in to an ESO account. The
 password is stored as scrypt with a per-password salt (`lib/passwords.js`), one row per
