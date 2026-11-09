@@ -192,7 +192,7 @@ body {
 .surface {
   flex: 1;
   width: 100%;
-  max-width: 1240px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 30px 24px 40px;
   display: flex;
@@ -734,7 +734,8 @@ table {
 
 th,
 td {
-  padding: 10px 14px;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
   text-align: left;
   border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
@@ -759,7 +760,7 @@ tbody tr:hover {
 td.num,
 th.num {
   text-align: right;
-  width: 70px;
+  width: 58px;
 }
 
 .account-block {
@@ -1870,7 +1871,7 @@ tr.row-fading td {
 /* Where the owner's copy was when they last saved. Scanned rather than read, so it
    stays muted and never wraps into two lines. */
 .location-cell {
-  white-space: nowrap;
+  white-space: normal;
   color: var(--muted);
   font-size: 12px;
 }
@@ -2567,6 +2568,21 @@ th.action-cell {
   outline: none;
   border-color: var(--accent-top);
   box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
+}
+
+/* Below the width the nine columns want, the table gives up its padding and a little of
+   its type size rather than making the reader scroll sideways for the last column. */
+@media (max-width: 1240px) {
+  th,
+  td {
+    padding: 8px 7px;
+    font-size: 12.5px;
+  }
+
+  td.num,
+  th.num {
+    width: 50px;
+  }
 }
 
 /* The header stays at the top of the screen: on a long item list, the way back to the
