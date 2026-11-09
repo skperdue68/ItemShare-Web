@@ -378,9 +378,9 @@ check('the brand draws the mark and the wordmark as two pictures of their own', 
   const header = page.slice(page.indexOf('<header class="top-bar">'), page.indexOf('</header>'));
 
   assert(header.includes('class="brand-mark"'), 'the header must draw the mark');
-  assert(header.includes('src="/brand/mark.svg"'), 'the mark must be its own file, usable alone');
+  assert(header.includes('src="/brand/mark.png"'), 'the mark must be its own file, usable alone');
   assert(header.includes('class="brand-wordmark"'), 'the name must be a picture of its own');
-  assert(header.includes('src="/brand/wordmark.svg"'), 'the name must come from the wordmark file');
+  assert(header.includes('src="/brand/wordmark.png"'), 'the name must come from the wordmark file');
   assert(header.includes('alt="ItemShare"'), 'the wordmark must carry the name for a reader who cannot see it');
   assert(!header.includes('<svg'), 'the artwork must be the files, not a picture pasted into the page');
 });
