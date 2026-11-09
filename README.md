@@ -1285,6 +1285,51 @@ fulfilled answer. It drops and rebuilds its database first, so
 
 It needs a reachable MariaDB; without one it stops before touching anything and says so.
 
+### Demo mode, and what has to happen before anything is shown
+
+The site is readable only after signing in, with any of the three ways in: Discord,
+Google, or an email address and a password. `/` answers a signed-out visitor with the
+sign-in page and nothing else, and `/items` answers 401, so the list, the filters and the
+counts cannot be read before the site can name who is looking.
+
+After signing in, the item list appears once the person has at least one ESO account -
+from their own upload, or a name attached by hand in the **ESO accounts** dialog. Until
+then the page is the upload box, because there are no guilds to compare against and the
+only useful thing is the file that supplies them.
+
+`demo@example.com` with the password `demo` is a sign-in that needs neither. It is a real person row with
+`itemshare_users.is_demo = 1`, one ESO account (`@ItemShareDemo`), one guild -
+**Alphabet Mafia** on PC / NA Megaserver - and the curated catalogue in
+`lib/demoItems.js` shared with it. It is created at startup, and again on a demo sign-in
+if it is missing, so a fresh database already has it. The address on it is
+`demo@example.com`, on the reserved documentation domain, and creating an ordinary
+account with that address is refused, so nobody can take it over.
+
+The demo has its own MariaDB database, `itemshare-demo`, dropped and rebuilt at every
+startup from the same migrations as the real one. It is then filled with a copy of the
+site's own rows - guilds, accounts, shared items, offers, requests - with every person
+anonymised on the way in (`Member 7`, `member7@itemshare.invalid`) and every copied
+password and sign-in identity deleted, so nobody can sign in as a real person and no
+address can be read. The curated `Alphabet Mafia` guild is seeded on top, so the demo
+always has something familiar in it. Its schema cannot drift from the site's, and the next
+visitor always gets the curated demo rather than the leftovers of somebody's session - a
+restart is also how you reset it. A demo session reads that copy instead of the live
+rows, and nothing it does can reach them; signing in as anybody else switches back to
+`ITEMSHARE_DATABASE` on the next request. Sessions stay in the real database, because a
+session has to be read before the site knows who is asking. The database account needs
+CREATE and DROP on `itemshare-demo`, the privilege it already uses to make the real
+database.
+
+The demo is a sandbox rather than a preview: reserving, cancelling, sending a basket,
+answering a request and adding or removing accounts all really happen, inside the copy,
+which is why the counts move for the demo visitor and never for anybody else. Nothing is
+announced to other people's open pages. No email is sent from the demo at all - a sent
+basket is recorded and the owners are told nothing - and the password cannot be reset:
+the reset request is refused before any link is made, and `demo@example.com` can never
+receive mail. Uploading stays switched off: the drop zone is still on the page, but
+the card says so and the page script shows that sentence instead of sending the file. A
+banner says the same on every page.
+
 ## Not done yet
 
 **`declined`.** A request the owner cannot fill is recorded as `cancelled` with the

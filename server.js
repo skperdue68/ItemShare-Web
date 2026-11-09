@@ -63,6 +63,19 @@ import {
   notePasswordUsed,
   RESET_TOKEN_MINUTES,
 } from './lib/store.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  DEMO_DATABASE,
+  DEMO_DISPLAY_NAME,
+  DEMO_LOGIN,
+  copyDemoData,
+  databaseForUser,
+  demoDatabaseConfig,
+  demoRefusal,
+  demoRefusalMessage,
+  ensureDemoData,
+  findDemoSignIn,
+} from './lib/demo.js';
 import { filterList } from './lib/filters.js';
 import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from './lib/email.js';
 import { renderPasswordResetEmail } from './lib/passwordResetEmail.js';
@@ -89,6 +102,8 @@ import {
   renderOwnerRequestsPage,
   renderPage,
   renderRequestFulfillPage,
+  renderSignInPage,
+  renderUploadPage,
 } from './lib/views.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -150,7 +165,7 @@ const HOLD_MINUTES = Math.min(
   ),
   120
 );
-const sessionStore = new MariaDbSessionStore({ withConnection: withDatabase, ttlMs: SESSION_TTL_MS });
+const sessionStore = new MariaDbSessionStore({ withConnection: withSiteDatabase, ttlMs: SESSION_TTL_MS });
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -166,6 +181,14 @@ const sessionMiddleware = session({
   cookie: { httpOnly: true, sameSite: 'lax', secure: false, maxAge: SESSION_TTL_MS },
 });
 app.use(sessionMiddleware);
+
+// Every request after this runs in the database its person belongs to, so a demo
+// session cannot reach the real guilds even through a route that forgot the rule.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+
+  requestDatabase.run(databaseForUser(user), next);
+});
 // A stylesheet taken from a browser cache written before the deploy is the difference
 // between green and red answer buttons and two grey boxes with no layout, so it is sent
 // with no-cache and revalidated on every page: unchanged costs a 304, changed is seen.
@@ -176,11 +199,89 @@ app.get('/styles.css', (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Asking is a writing action too: with no session there is nobody to credit it to and
+// nowhere to send the answer, so the guest path that used to make a person on the first
+// request sits behind the same door as the list.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+
+  if (user || req.method !== 'POST' || !req.path.startsWith('/requests')) {
+    next();
+    return;
+  }
+
+  res.status(401).json({ error: 'Sign in before asking for an item.' });
+});
+
+// Nothing is readable before signing in. The list, the filters and the counts all
+// describe other people's stashes, so the only page without a session is the way in.
+// Registered before every route, so a page added later cannot forget the rule.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || (req.path !== '/' && req.path !== '/items')) {
+    next();
+    return;
+  }
+
+  const user = req.session ? req.session.user : null;
+
+  if (user) {
+    next();
+    return;
+  }
+
+  // The list fragment is fetched by script on a page that already had a session; when
+  // it does not, saying so is better than drawing an empty list.
+  if (req.path === '/items') {
+    res.status(401).json({ error: 'Sign in to see what your guilds share.' });
+    return;
+  }
+
+  res.type('html').send(renderSignInPage({ providers: enabledProviders }));
+});
+
+// A demo session does everything a member does, inside the demo copy - so the refusals
+// here are the few things that would leave it, not the writes themselves. Anything
+// blocked is blocked before the route runs.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+
+  if (!user || !user.isDemo || !demoRefusal(req.method, req.path)) {
+    next();
+    return;
+  }
+
+  const message = demoRefusalMessage(req.path);
+
+  if (req.path === '/upload' || req.path.startsWith('/simulate')) {
+    res.status(403).json({ demo: true, error: message });
+    return;
+  }
+
+  sendPage(req, res, 403, {
+    heading: 'Demo mode',
+    message,
+    details: 'Sign in as a non-demo user to do that on the real site.',
+    tone: 'notice',
+  });
+});
+
 // Socket.IO rides on the same HTTP server as Express, under /socket.io, so live
 // updates need no second port, no extra proxy rule and no separate auth.
 const httpServer = createServer(app);
 const realtime = attachRealtime({ httpServer, sessionMiddleware });
-const notifyItemsChanged = realtime.notifyChange;
+
+// A demo reservation is real only inside the demo copy, so it is never announced to
+// everybody else's open page. The scope is already known: it is the database this
+// request is reading.
+const pushChange = realtime.notifyChange;
+
+function notifyItemsChanged(kind, message) {
+  if (requestDatabase.getStore() === DEMO_DATABASE) {
+    return;
+  }
+
+  pushChange(kind, message);
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -217,6 +318,13 @@ function personLabel(user, accountNames) {
  * connection, and it must not be able to make a real request look failed.
  */
 async function emailOwners({ user, submitted, contacts }) {
+  // A demo basket is recorded inside the demo copy and nobody is told: the addresses
+  // there are invented placeholders, and mail from a rehearsal must never leave.
+  if (user && user.isDemo) {
+    console.log('Email: demo session - requests recorded, no email sent');
+    return { sent: 0, skipped: 0 };
+  }
+
   if (!submitted || submitted.length === 0 || !contacts || contacts.size === 0) {
     return { sent: 0, skipped: 0 };
   }
@@ -333,12 +441,19 @@ async function emailOwners({ user, submitted, contacts }) {
  * Runs after the answer is committed and never throws: a bad mail day must not turn a
  * handover that was recorded into an error page for the owner.
  */
-async function emailAnswered(rows) {
+async function emailAnswered(rows, { demo = false } = {}) {
   const ids = (rows || [])
     .map((row) => Number(row.id))
     .filter((id) => Number.isInteger(id) && id > 0);
 
   if (ids.length === 0) {
+    return { sent: 0, skipped: 0 };
+  }
+
+  // Answering in the demo changes the demo copy only, so the requester - a member whose
+  // address was replaced on the way in - hears nothing.
+  if (demo) {
+    console.log('Email: demo session - answers recorded, no email sent');
     return { sent: 0, skipped: 0 };
   }
 
@@ -420,25 +535,86 @@ function sendPage(req, res, status, options) {
     );
 }
 
-// Migrations run once at startup; request connections just use the database.
+// Migrations run once at startup, in both databases; request connections just use the
+// database that belongs to whoever is asking.
 async function prepareDatabase() {
   const config = readConfig();
   const { connection, migrations } = await openDatabase(config);
+
   await connection.end();
   console.log(`Database ready: ${config.database} on ${config.host}:${config.port}`);
   console.log(`Migrations: ${migrations.length ? migrations.join(', ') : 'already up to date'}`);
+
+  // The demo sign-in lives in its own database - a real person, one ESO account, one
+  // guild and a shelf of items, made here, once, rather than on the first page view -
+  // so nothing a demo session does can reach the real rows. A failure must not stop the
+  // site: everything else works without it.
+  let demoConfig = null;
+  let demoConnection = null;
+
+  try {
+    // Dropped and built again from the same migrations on every start, then seeded: the
+    // demo copy always matches the schema the site is running and never carries anything
+    // over from an earlier run, so a restart is also how it gets reset.
+    demoConfig = demoDatabaseConfig(config);
+    const opened = await openDatabase(demoConfig, { recreate: true });
+    demoConnection = opened.connection;
+
+    // Filled from the site's own rows before the demo's curated guild goes on top, so a
+    // visitor can walk through several guilds, real-looking items and requests rather
+    // than a handful of rows - with every person anonymised on the way in.
+    const copied = await copyDemoData(demoConnection, { sourceDatabase: config.database });
+    const demo = await ensureDemoData(demoConnection);
+
+    console.log(
+      `Demo database: ${demoConfig.database} on ${demoConfig.host}:${demoConfig.port} ` +
+        `(recreated, ${copied.copied} table${copied.copied === 1 ? '' : 's'} copied from ${config.database}` +
+        `${copied.failed.length ? `, ${copied.failed.length} failed` : ''}; ` +
+        `migrations: ${opened.migrations.length ? opened.migrations.length : 'none pending'})`
+    );
+
+    for (const failure of copied.failed) {
+      console.warn(`Demo database: could not copy ${failure.table} - ${failure.error}`);
+    }
+    console.log(
+      `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
+        `${demo.seeded ? 'items written' : 'items already there'} (demo@example.com / demo)`
+    );
+  } catch (error) {
+    console.warn(`Demo database: not ready - ${error.message}`);
+  } finally {
+    if (demoConnection) {
+      await demoConnection.end();
+    }
+  }
 }
 
-// A single short lived connection per request keeps the app simple: the traffic
-// here is one person uploading one file at a time.
-async function withDatabase(handler) {
-  const config = readConfig();
+// Which database a request opens depends on who is asking: a demo session reads the
+// demo copy, everybody else the real one. The choice is carried in async context, so
+// the routes and the store helpers that take a connection stay unchanged.
+const requestDatabase = new AsyncLocalStorage();
+
+async function withDatabaseOn(database, handler) {
+  const config = { ...readConfig(), database };
   const { connection } = await openDatabase(config, { migrate: false });
+
   try {
     return await handler(connection, config);
   } finally {
     await connection.end();
   }
+}
+
+// Sessions always live in the real database: one has to be read before the site knows
+// who is asking, and a demo session has to survive a restart like any other.
+async function withSiteDatabase(handler) {
+  return withDatabaseOn(readConfig().database, handler);
+}
+
+// A single short lived connection per request keeps the app simple: the traffic
+// here is one person uploading one file at a time.
+async function withDatabase(handler) {
+  return withDatabaseOn(requestDatabase.getStore() || readConfig().database, handler);
 }
 
 const SORT_FIELDS = new Set(['type', 'name', 'added']);
@@ -1198,7 +1374,9 @@ app.post('/owner/requests', upload.none(), async (req, res) => {
 
     // The person who asked hears about it too: the copies are waiting in their in-game
     // mailbox and nothing in the game says so.
-    await emailAnswered(outcome.rows);
+    await emailAnswered(outcome.rows, {
+      demo: Boolean(req.session && req.session.user && req.session.user.isDemo),
+    });
 
     if (wantsFragment(req)) {
       // The whole outcome, not just the counts: the card's confirmation names the item,
@@ -1400,7 +1578,9 @@ app.post('/requests/fulfill/:token', async (req, res) => {
       );
     }
 
-    await emailAnswered(outcome.rows);
+    await emailAnswered(outcome.rows, {
+      demo: Boolean(req.session && req.session.user && req.session.user.isDemo),
+    });
 
     res.type('html').send(
       renderMessagePage({
@@ -1604,13 +1784,16 @@ function decoyPasswordHash() {
   return decoyHash;
 }
 
-function startPersonSession(req, { id, provider, providerLabel, username, email }) {
+function startPersonSession(req, { id, provider, providerLabel, username, email, isDemo = false }) {
   req.session.user = {
     id,
     provider,
     providerLabel,
     username,
     email,
+    // Written into the session once, at sign-in, and never from a form: it is what turns
+    // every write away below. A cookie cannot add it, because the session is signed.
+    isDemo: Boolean(isDemo),
     // An address typed into a form is unverified: the site has no proof anybody can read
     // mail there, and saying otherwise would let it join an existing person's account.
     emailVerified: false,
@@ -1624,6 +1807,52 @@ function startPersonSession(req, { id, provider, providerLabel, username, email 
 app.post('/auth/email', async (req, res) => {
   const email = normalizeEmail(req.body && req.body.email);
   const password = String((req.body && req.body.password) || '');
+
+  // The demo address is answered here, before the ordinary lookup: the demo person lives
+  // in the demo database, so the real one is never opened on its behalf.
+  if (email === DEMO_LOGIN) {
+    try {
+      // The demo person is looked up in the demo database, where it is created if it is
+      // missing: a sign-in must never write rows into the real one.
+      const login = await withDatabaseOn(DEMO_DATABASE, async (connection) => {
+        await ensureDemoData(connection);
+        return findDemoSignIn(connection);
+      });
+      // The same decoy hash the ordinary form uses, so a wrong demo password costs the
+      // same as a wrong password anywhere else.
+      const matches = await verifyPassword(
+        password,
+        login ? login.passwordHash : await decoyPasswordHash()
+      );
+
+      if (!login || !matches) {
+        sendPage(req, res, 401, {
+          heading: 'That demo password does not match',
+          message: 'The demo signs in with demo@example.com and the password demo.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      startPersonSession(req, {
+        id: login.userId,
+        provider: 'password',
+        providerLabel: 'demo',
+        username: DEMO_DISPLAY_NAME,
+        email: '',
+        isDemo: true,
+      });
+      res.redirect(303, '/');
+    } catch (error) {
+      sendPage(req, res, 500, {
+        heading: 'The demo could not be opened',
+        message: 'Nothing was changed. Try again in a moment.',
+        details: error.message,
+        tone: 'error',
+      });
+    }
+    return;
+  }
 
   if (!emailLooksValid(email) || password.length === 0) {
     sendPage(req, res, 400, {
@@ -1676,6 +1905,18 @@ app.post('/auth/email/signup', async (req, res) => {
   // The second box the form asks for. It is read here as well as in the browser, because
   // a form posts whether or not a script ever ran.
   const confirm = String((req.body && req.body.confirm) || '');
+
+  // The demo address is reserved. An ordinary account created with it would be answered
+  // by the demo branch on every sign-in, so the form refuses it instead of making one.
+  if (email === DEMO_LOGIN) {
+    sendPage(req, res, 400, {
+      heading: 'That address is the demo',
+      message:
+        'demo@example.com is the demo sign-in, with the password demo. Create an account with your own address instead.',
+      tone: 'notice',
+    });
+    return;
+  }
 
   if (!emailLooksValid(email)) {
     sendPage(req, res, 400, {
@@ -2682,7 +2923,7 @@ httpServer.listen(PORT, () => {
       ? `Unsent requests: held for ${HOLD_MINUTES} minute${HOLD_MINUTES === 1 ? '' : 's'} (REQUEST_HOLD_MINUTES), swept every ${Math.round(SWEEP_INTERVAL_MS / 1000)}s`
       : 'Unsent requests: expiry sweep disabled (REQUEST_SWEEP_INTERVAL_MS=0)'
   );
-  console.log(`Database target: ${readConfig().database}`);
+  console.log(`Database target: ${readConfig().database} (demo: ${DEMO_DATABASE})`);
 
   if (ICON_BACKFILL_INTERVAL_MS > 0) {
     console.log(
