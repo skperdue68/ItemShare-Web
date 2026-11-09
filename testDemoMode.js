@@ -372,6 +372,27 @@ check('the demo pair is boxed rather than another grey hint', () => {
   assertMatch(page, /<strong>demo<\/strong>/, 'the demo password must still be in it');
 });
 
+check('the browsing-as label carries a real middle dot, not its escaped entity', () => {
+  const page = renderPage({
+    ...emptyData,
+    user: { id: 5, username: 'someone', provider: 'password' },
+    accounts: [
+      {
+        accountName: DEMO_ACCOUNT,
+        itemCount: 2,
+        guildCount: 1,
+        guilds: [{}],
+        platform: 2,
+        worldName: 'NA Megaserver',
+      },
+    ],
+  });
+
+  assert(page.includes('Browsing as'), 'the picker must say which account is being browsed as');
+  assert(page.includes('PC \u00b7 NA Megaserver'), 'the label must use a real middle dot');
+  assert(!page.includes('&amp;middot;'), 'the entity must not reach the reader escaped');
+});
+
 check('the addon is one click away, signed out and signed in', () => {
   const signedIn = renderSignInPage({ providers });
 
