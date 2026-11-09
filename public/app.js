@@ -690,13 +690,20 @@ if (listRegion) {
   // waiting, and the next item added brings it back.
   let headerBarFetching = false;
 
-  async function syncHeaderBar(heldNow) {
+  async function syncHeaderBar(heldNow, summary = { unique: 0, copies: 0 }) {
     const current = document.querySelector('[data-basket]');
 
     if (!heldNow) {
       if (current) {
         current.remove();
       }
+      return;
+    }
+
+    // Already there: only the numbers move, so the running clock is left alone instead of
+    // being restarted from a render that is already a moment old.
+    if (current) {
+      updateHeaderBar(current, summary);
       return;
     }
 
@@ -753,12 +760,18 @@ if (listRegion) {
     // held cannot be shown by swapping the list alone. Only that bar is rebuilt: reloading
     // the page instead threw away anything half-typed and asked the browser's own "leave
     // this page?" question, which is how sending a basket used to end.
-    const heldNow = Boolean(next.querySelector('[data-basket-row]'));
-    const heldOnPage = Boolean(document.querySelector('[data-basket]'));
+    // Every refresh reconciles the bar, not only one where its presence differs: the two
+    // numbers on it move as items are added, topped up or removed, and an empty bag takes
+    // the whole bar away.
+    const heldRows = Array.from(next.querySelectorAll('[data-basket-row]'));
 
-    if (heldNow !== heldOnPage) {
-      syncHeaderBar(heldNow);
-    }
+    syncHeaderBar(heldRows.length > 0, {
+      unique: heldRows.length,
+      copies: heldRows.reduce(
+        (sum, row) => sum + (Number(row.dataset.requestQuantity) || 1),
+        0
+      ),
+    });
 
     if (next.getAttribute('data-signature') !== listRegion.getAttribute('data-signature')) {
       // A type or an owner appeared or vanished, so the filter controls are stale.
@@ -1228,7 +1241,46 @@ if (listRegion) {
   // basket says it at the moment the confusion is actually possible, and only then.
 
   function holdMinutes() {
-    return Math.max(1, Number(document.body.dataset.holdMinutes) || 5);
+    // The bar is drawn from the basket the server just read, so it carries the number the
+    // hold really is. The body attribute is the same number on a page with no bar, and 5
+    // is only a last resort for a page that predates either.
+    const bar = document.querySelector('[data-basket]');
+    const fromBar = bar ? Number(bar.dataset.holdMinutes) : 0;
+
+    return Math.max(1, fromBar || Number(document.body.dataset.holdMinutes) || 5);
+  }
+
+  /** What the bag holds right now: different items, and copies in all. */
+  function basketSummary() {
+    const bar = document.querySelector('[data-basket]');
+
+    if (bar) {
+      return {
+        unique: Number(bar.dataset.items) || 0,
+        copies: Number(bar.dataset.copies) || Number(bar.dataset.items) || 0,
+      };
+    }
+
+    const rows = Array.from(document.querySelectorAll('[data-basket-row]'));
+
+    return {
+      unique: rows.length,
+      copies: rows.reduce((sum, row) => sum + (Number(row.dataset.requestQuantity) || 1), 0),
+    };
+  }
+
+  /** Keeps the bar's two numbers honest when the list changes underneath it. */
+  function updateHeaderBar(bar, { unique, copies }) {
+    const label = bar.querySelector('.draft-basket-text strong');
+
+    if (label) {
+      label.textContent = `${unique} item${unique === 1 ? '' : 's'} (${copies} cop${
+        copies === 1 ? 'y' : 'ies'
+      }) reserved - not sent`;
+    }
+
+    bar.dataset.items = String(unique);
+    bar.dataset.copies = String(copies);
   }
 
   function explainFirstHold(name, copies) {
@@ -1300,11 +1352,11 @@ if (listRegion) {
     password = '',
     confirm = '',
   }) {
-    // Read before the request goes: with no basket on the page yet, this copy is the first
-    // one, and the notice is for exactly that moment. Emptying the bag takes the header bar
-    // away, so adding again finds the same two marks missing and asks the same question.
-    const basketWasEmpty =
-      !document.querySelector('[data-basket]') && !document.querySelector('[data-basket-row]');
+    // Read before the request goes, and read as a count: a bag with nothing in it is the
+    // moment the notice is about, whether it has never held anything or was emptied a
+    // moment ago. The quantity is settled by the dialog before this runs, so the copy that
+    // is about to be added is the one being counted for.
+    const basketWasEmpty = basketSummary().unique === 0;
 
     try {
       const payload = new URLSearchParams({ kind, id, quantity });
