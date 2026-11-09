@@ -862,11 +862,6 @@ th.num {
   text-align: center;
 }
 
-.footer-links {
-  display: block;
-  margin-top: 6px;
-}
-
 @media (max-width: 720px) {
   .top-bar {
     height: auto;
@@ -2711,11 +2706,6 @@ a.history-page:hover, .history-page.is-current {
 
 .guide-drawer .guide-steps {
   gap: 12px;
-}
-
-.guide-more {
-  margin: 12px 0 0;
-  font-size: 12.5px;
 }
 
 /* The last step is a caution rather than another instruction, so it is marked out. */
