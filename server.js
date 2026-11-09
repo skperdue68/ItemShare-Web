@@ -63,6 +63,13 @@ import {
   notePasswordUsed,
   RESET_TOKEN_MINUTES,
 } from './lib/store.js';
+import {
+  DEMO_DISPLAY_NAME,
+  DEMO_LOGIN,
+  demoRefusal,
+  ensureDemoData,
+  findDemoSignIn,
+} from './lib/demo.js';
 import { filterList } from './lib/filters.js';
 import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from './lib/email.js';
 import { renderPasswordResetEmail } from './lib/passwordResetEmail.js';
@@ -89,6 +96,8 @@ import {
   renderOwnerRequestsPage,
   renderPage,
   renderRequestFulfillPage,
+  renderSignInPage,
+  renderUploadPage,
 } from './lib/views.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -175,6 +184,77 @@ app.get('/styles.css', (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Asking is a writing action too: with no session there is nobody to credit it to and
+// nowhere to send the answer, so the guest path that used to make a person on the first
+// request sits behind the same door as the list.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+
+  if (user || req.method !== 'POST' || !req.path.startsWith('/requests')) {
+    next();
+    return;
+  }
+
+  res.status(401).json({ error: 'Sign in before asking for an item.' });
+});
+
+// Nothing is readable before signing in. The list, the filters and the counts all
+// describe other people's stashes, so the only page without a session is the way in.
+// Registered before every route, so a page added later cannot forget the rule.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || (req.path !== '/' && req.path !== '/items')) {
+    next();
+    return;
+  }
+
+  const user = req.session ? req.session.user : null;
+
+  if (user) {
+    next();
+    return;
+  }
+
+  // The list fragment is fetched by script on a page that already had a session; when
+  // it does not, saying so is better than drawing an empty list.
+  if (req.path === '/items') {
+    res.status(401).json({ error: 'Sign in to see what your guilds share.' });
+    return;
+  }
+
+  res.type('html').send(renderSignInPage({ providers: enabledProviders }));
+});
+
+// A demo session reads everything and writes nothing. Refusing here, before any route
+// runs, is what keeps a demo reservation out of the database: the page may draw the
+// button, but the POST never reaches the handler that would write.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+
+  if (!user || !user.isDemo || !demoRefusal(req.method, req.path)) {
+    next();
+    return;
+  }
+
+  const message =
+    'This is the demo: nothing was saved. No reservation was made, no count changed and no email was sent.';
+
+  if (
+    req.path.startsWith('/requests') ||
+    req.path === '/upload' ||
+    req.path.startsWith('/simulate')
+  ) {
+    res.status(403).json({ demo: true, error: message });
+    return;
+  }
+
+  sendPage(req, res, 403, {
+    heading: 'Demo mode',
+    message,
+    details: 'Sign up and upload your ItemShareSavedVars.lua to take part for real.',
+    tone: 'notice',
+  });
+});
 
 // Socket.IO rides on the same HTTP server as Express, under /socket.io, so live
 // updates need no second port, no extra proxy rule and no separate auth.
@@ -424,6 +504,20 @@ function sendPage(req, res, status, options) {
 async function prepareDatabase() {
   const config = readConfig();
   const { connection, migrations } = await openDatabase(config);
+
+  // The demo sign-in is a real person with a guild and a shelf of items, so it is made
+  // here - after the migrations, once - rather than on the first page view. A failure
+  // must not stop the site: everything else works without it.
+  try {
+    const demo = await ensureDemoData(connection);
+    console.log(
+      `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +
+        `${demo.seeded ? 'items written' : 'items already there'} (Demo / Demo)`
+    );
+  } catch (error) {
+    console.warn(`Demo sign-in: not ready - ${error.message}`);
+  }
+
   await connection.end();
   console.log(`Database ready: ${config.database} on ${config.host}:${config.port}`);
   console.log(`Migrations: ${migrations.length ? migrations.join(', ') : 'already up to date'}`);
@@ -1604,13 +1698,16 @@ function decoyPasswordHash() {
   return decoyHash;
 }
 
-function startPersonSession(req, { id, provider, providerLabel, username, email }) {
+function startPersonSession(req, { id, provider, providerLabel, username, email, isDemo = false }) {
   req.session.user = {
     id,
     provider,
     providerLabel,
     username,
     email,
+    // Written into the session once, at sign-in, and never from a form: it is what turns
+    // every write away below. A cookie cannot add it, because the session is signed.
+    isDemo: Boolean(isDemo),
     // An address typed into a form is unverified: the site has no proof anybody can read
     // mail there, and saying otherwise would let it join an existing person's account.
     emailVerified: false,
@@ -1624,6 +1721,50 @@ function startPersonSession(req, { id, provider, providerLabel, username, email 
 app.post('/auth/email', async (req, res) => {
   const email = normalizeEmail(req.body && req.body.email);
   const password = String((req.body && req.body.password) || '');
+
+  // "Demo" in the email box is the demo sign-in, not an address: it is the one account
+  // that exists without one, so it is answered before the address checks below.
+  if (email === DEMO_LOGIN) {
+    try {
+      const login = await withDatabase(async (connection) => {
+        await ensureDemoData(connection);
+        return findDemoSignIn(connection);
+      });
+      // The same decoy hash the ordinary form uses, so a wrong demo password costs the
+      // same as a wrong password anywhere else.
+      const matches = await verifyPassword(
+        password,
+        login ? login.passwordHash : await decoyPasswordHash()
+      );
+
+      if (!login || !matches) {
+        sendPage(req, res, 401, {
+          heading: 'That demo password does not match',
+          message: 'The demo signs in with Demo as both the email and the password.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      startPersonSession(req, {
+        id: login.userId,
+        provider: 'password',
+        providerLabel: 'demo',
+        username: DEMO_DISPLAY_NAME,
+        email: '',
+        isDemo: true,
+      });
+      res.redirect(303, '/');
+    } catch (error) {
+      sendPage(req, res, 500, {
+        heading: 'The demo could not be opened',
+        message: 'Nothing was changed. Try again in a moment.',
+        details: error.message,
+        tone: 'error',
+      });
+    }
+    return;
+  }
 
   if (!emailLooksValid(email) || password.length === 0) {
     sendPage(req, res, 400, {

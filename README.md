@@ -1285,6 +1285,32 @@ fulfilled answer. It drops and rebuilds its database first, so
 
 It needs a reachable MariaDB; without one it stops before touching anything and says so.
 
+### Demo mode, and what has to happen before anything is shown
+
+The site is readable only after signing in, with any of the three ways in: Discord,
+Google, or an email address and a password. `/` answers a signed-out visitor with the
+sign-in page and nothing else, and `/items` answers 401, so the list, the filters and the
+counts cannot be read before the site can name who is looking.
+
+After signing in, the item list appears once the person has at least one ESO account -
+from their own upload, or a name attached by hand in the **ESO accounts** dialog. Until
+then the page is the upload box, because there are no guilds to compare against and the
+only useful thing is the file that supplies them.
+
+`Demo` / `Demo` is a sign-in that needs neither. It is a real person row with
+`itemshare_users.is_demo = 1`, one ESO account (`@ItemShareDemo`), one guild -
+**Alphabet Mafia** on PC / NA Megaserver - and the curated catalogue in
+`lib/demoItems.js` shared with it. It is created at startup, and again on a demo sign-in
+if it is missing, so a fresh database already has it. The address on it is
+`demo@itemshare.invalid` and the sign-in identity is `demo`, so nobody can create it by
+signing up.
+
+A demo session is read-only, enforced in `server.js` before any route runs: every POST
+except logging out is refused, so nothing is reserved, no request is sent, no email goes
+out, no count changes for anybody else, and no ESO account can be added or removed. A
+banner says so on every page, and the refusal is shown in the basket as a toast rather
+than a failure.
+
 ## Not done yet
 
 **`declined`.** A request the owner cannot fill is recorded as `cancelled` with the
