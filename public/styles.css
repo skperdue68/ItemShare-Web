@@ -52,7 +52,7 @@ body {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -60,16 +60,18 @@ body {
    the room the header's next item will take; the account area stays on the far right. */
 .top-bar-left {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 40px;
+  gap: 12px 32px;
   min-width: 0;
+  max-width: 100%;
 }
 
 /* The mark is a picture file of its own, so it can be used anywhere on its own and the
    header only decides how tall it is. */
 .brand-mark {
-  height: 40px;
-  width: auto;
+  width: 72px;
+  height: auto;
   flex: none;
   display: block;
 }
@@ -84,8 +86,8 @@ body {
 /* The name is its own picture file too, so the two halves of the brand can be used
    apart: the mark alone, the wordmark alone, or the two together. */
 .brand-wordmark {
-  height: 26px;
-  width: auto;
+  width: 166px;
+  height: auto;
   display: block;
 }
 
