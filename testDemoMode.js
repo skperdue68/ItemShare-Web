@@ -35,6 +35,12 @@ import {
   pickScenario,
 } from './lib/demoActivity.js';
 import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
+import {
+  DEMO_ASK_TTL_MS,
+  DEMO_RESTOCK_MS,
+  abandonedAsksSql,
+  shouldRestock,
+} from './lib/demoShelf.js';
 import { AGE_HOURS, planAges, untouchedRowsSql } from './lib/itemAges.js';
 import { stamp } from './lib/log.js';
 import { platformName, serverLabel } from './lib/serverLabel.js';
@@ -401,6 +407,26 @@ check('the addon is one click away, signed out and signed in', () => {
   });
 
   assertMatch(uploadGate, /downloads\/dl4533/, 'the upload gate must say where to get the file');
+});
+
+check('the demo lets go of asks nobody was going to answer', () => {
+  const sql = abandonedAsksSql(3);
+
+  assert(sql.includes("status = 'pending'"), 'only a request still standing can be released');
+  assert(
+    /requester_account_name IN \(\?, \?, \?\)/.test(sql),
+    "only the guildmates' asks are released, never the visitor's own"
+  );
+  assert(sql.includes('submitted_at < ?'), 'an ask still being filled is left alone');
+  assert(/status_reason = \?/.test(sql), 'the release says why, so the history reads properly');
+  assert(DEMO_ASK_TTL_MS === 120000, `two minutes, not ${DEMO_ASK_TTL_MS}`);
+});
+
+check('a demo restock runs at most once a minute', () => {
+  assert(shouldRestock(0, 5000), 'the first call always runs');
+  assert(!shouldRestock(1000, 1000 + DEMO_RESTOCK_MS - 1), 'never twice inside the minute');
+  assert(shouldRestock(1000, 1000 + DEMO_RESTOCK_MS), 'the next minute it runs again');
+  assert(DEMO_RESTOCK_MS === 60000, `a minute, not ${DEMO_RESTOCK_MS}`);
 });
 
 check('every line the site prints carries the time it happened', () => {

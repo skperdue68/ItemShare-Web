@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readCookie, readGrouping } from './lib/preferences.js';
+import { keepDemoShelfFull } from './lib/demoShelf.js';
 import { errorLine, logLine, warnLine } from './lib/log.js';
 // ItemShare upload site: signs in with Discord or Google (both optional),
 // accepts ItemShareSavedVars.lua and replaces every shared item for every ESO
@@ -1855,6 +1856,10 @@ app.post('/auth/email', async (req, res) => {
       // missing: a sign-in must never write rows into the real one.
       const login = await withDatabaseOn(DEMO_DATABASE, async (connection) => {
         await ensureDemoData(connection);
+        // Somebody arriving finds the shelves as full as the catalogues allow, whatever
+        // the last visitor's session or the activity loop left behind. Debounced, so
+        // signing in twice does not write them twice.
+        await keepDemoShelfFull(connection);
         return findDemoSignIn(connection);
       });
       // The same decoy hash the ordinary form uses, so a wrong demo password costs the
@@ -2994,9 +2999,15 @@ async function tickDemoActivity() {
   demoActivityBusy = true;
 
   try {
-    const outcome = await withDatabaseOn(DEMO_DATABASE, (connection) =>
-      runDemoActivity(connection)
-    );
+    const outcome = await withDatabaseOn(DEMO_DATABASE, async (connection) => {
+      // A copy browsed all afternoon must not run down: the shelf is topped up from the
+      // demo's own catalogues at most once a minute, and asks the cast made and never
+      // followed through on are let go, so a visitor arriving later still finds
+      // everything there to request. Cheap, and only while a demo page is open.
+      await keepDemoShelfFull(connection);
+
+      return runDemoActivity(connection);
+    });
 
     if (outcome) {
       realtime.notifyDemoChange('simulation', outcome.summary);

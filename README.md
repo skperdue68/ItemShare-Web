@@ -1343,6 +1343,15 @@ banner says the same on every page. Removing its own `@ItemShareDemo` is rehears
 it is attached again in the same request, because the demo has nothing to browse or ask as
 without it - every other account really is removed.
 
+The shelves do not run down. A row whose last copy is reserved leaves the page after a
+few seconds, exactly as a real owner's does, so a copy browsed all afternoon would slowly
+empty and the next visitor would find nothing worth asking for. While a demo page is open,
+the demo re-saves its own and the guildmates' catalogues at most once a minute - the same
+write an owner's next upload makes - and lets go of asks the guildmates sent and never
+followed through on after two minutes (`lib/demoShelf.js`). A visitor's own requests are
+never released; the guildmates answer those. Item rows, request history and the date each
+offer was first made all survive a top-up.
+
 **Other people.** A visitor who owned every row in the copy would have nothing to ask
 for: the Request tab would mirror their own bag. `lib/demoCast.js` writes three
 guildmates into the demo's own guild - `@NightMarket`, `@QuietSmith` and
