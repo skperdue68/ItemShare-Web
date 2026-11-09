@@ -69,6 +69,7 @@ import {
   DEMO_DISPLAY_NAME,
   DEMO_LOGIN,
   databaseForUser,
+  demoDatabaseConfig,
   demoRefusal,
   ensureDemoData,
   findDemoSignIn,
@@ -525,18 +526,22 @@ async function prepareDatabase() {
   // guild and a shelf of items, made here, once, rather than on the first page view -
   // so nothing a demo session does can reach the real rows. A failure must not stop the
   // site: everything else works without it.
-  const demoConfig = { ...config, database: DEMO_DATABASE };
+  let demoConfig = null;
   let demoConnection = null;
 
   try {
-    const opened = await openDatabase(demoConfig);
+    // Dropped and built again from the same migrations on every start, then seeded: the
+    // demo copy always matches the schema the site is running and never carries anything
+    // over from an earlier run, so a restart is also how it gets reset.
+    demoConfig = demoDatabaseConfig(config);
+    const opened = await openDatabase(demoConfig, { recreate: true });
     demoConnection = opened.connection;
 
     const demo = await ensureDemoData(demoConnection);
 
     console.log(
       `Demo database: ${demoConfig.database} on ${demoConfig.host}:${demoConfig.port} ` +
-        `(migrations: ${opened.migrations.length ? opened.migrations.join(', ') : 'already up to date'})`
+        `(recreated; migrations: ${opened.migrations.length ? opened.migrations.length : 'none pending'})`
     );
     console.log(
       `Demo sign-in: ${demo.created ? 'created' : 'already there'}, ` +

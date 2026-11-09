@@ -1305,13 +1305,16 @@ if it is missing, so a fresh database already has it. The address on it is
 `demo@itemshare.invalid` and the sign-in identity is `demo`, so nobody can create it by
 signing up.
 
-The demo has its own MariaDB database, `ItemShare-Demo`, created at startup with the same
-migrations as the real one and holding only the demo person, its account, its guild and
-its items. A demo session therefore reads a copy of the schema instead of the live rows,
-and nothing it does can reach them; signing in as anybody else switches back to
+The demo has its own MariaDB database, `itemshare-demo`, dropped and rebuilt at every
+startup from the same migrations as the real one, then seeded with the demo person, its
+account, its guild and its items. Its schema cannot drift from the site's, and the next
+visitor always gets the curated demo rather than the leftovers of somebody's session - a
+restart is also how you reset it. A demo session reads that copy instead of the live
+rows, and nothing it does can reach them; signing in as anybody else switches back to
 `ITEMSHARE_DATABASE` on the next request. Sessions stay in the real database, because a
 session has to be read before the site knows who is asking. The database account needs
-the same CREATE privilege it already has for the real one.
+CREATE and DROP on `itemshare-demo`, the privilege it already uses to make the real
+database.
 
 A demo session is read-only, enforced in `server.js` before any route runs: every POST
 except logging out is refused, so nothing is reserved, no request is sent, no email goes

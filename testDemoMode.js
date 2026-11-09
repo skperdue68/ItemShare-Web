@@ -14,6 +14,7 @@ import {
   DEMO_PASSWORD,
   DEMO_WORLD,
   databaseForUser,
+  demoDatabaseConfig,
   demoRefusal,
   ensureDemoData,
   findDemoSignIn,
@@ -283,8 +284,36 @@ check('an ordinary session shows no demo banner', () => {
 });
 
 check('the demo has a database of its own, apart from the real one', () => {
-  assert(DEMO_DATABASE === 'ItemShare-Demo', `expected ItemShare-Demo, got ${DEMO_DATABASE}`);
+  assert(DEMO_DATABASE === 'itemshare-demo', `expected itemshare-demo, got ${DEMO_DATABASE}`);
   assert(DEMO_DATABASE !== 'itemshare', 'the demo must not share the real database');
+});
+
+check('the demo connection keeps the site settings and swaps only the name', () => {
+  const config = demoDatabaseConfig({
+    host: 'db.internal',
+    port: 3307,
+    user: 'itemshare',
+    password: 'secret',
+    database: 'itemshare',
+  });
+
+  assert(config.database === DEMO_DATABASE, `expected ${DEMO_DATABASE}, got ${config.database}`);
+  assert(config.host === 'db.internal' && config.port === 3307, 'the host and port must be kept');
+  assert(config.user === 'itemshare' && config.password === 'secret', 'the login must be kept');
+});
+
+check('the demo database can never be the site database', () => {
+  for (const name of ['itemshare-demo', 'ItemShare-Demo', '']) {
+    let refused = false;
+
+    try {
+      demoDatabaseConfig({ database: name });
+    } catch {
+      refused = true;
+    }
+
+    assert(refused, `"${name}" must be refused, because the demo copy is dropped at startup`);
+  }
 });
 
 check('only a demo session is pointed at the demo database', () => {
