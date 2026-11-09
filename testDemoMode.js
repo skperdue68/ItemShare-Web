@@ -372,41 +372,41 @@ check('the demo pair is boxed rather than another grey hint', () => {
   assertMatch(page, /<strong>demo<\/strong>/, 'the demo password must still be in it');
 });
 
-check('the addon is one click away, signed out and signed in', () => {
-  const signedIn = renderSignInPage({ providers });
-
-  assertMatch(signedIn, /https:\/\/www\.minion\.gg\//, 'Minion must be linked');
-  assertMatch(
-    signedIn,
-    /https:\/\/www\.esoui\.com\/downloads\/dl4533\//,
-    'the latest ESOUI file must be linked, by addon id rather than a versioned name'
-  );
-  assertMatch(
-    signedIn,
-    /downloads\/info4533-ItemShare\.html/,
-    'the ESOUI page with the documentation must be linked too'
-  );
-
+check('the addon links live in the header, once, signed out and signed in', () => {
   const demoPage = renderPage({
     ...emptyData,
     user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
     accounts: [{ accountName: DEMO_ACCOUNT, itemCount: 9, guildCount: 1, guilds: [] }],
   });
-
-  assertMatch(demoPage, /downloads\/dl4533/, 'a signed-in demo must see where the addon comes from');
-  assertMatch(
-    demoPage,
-    /class="addon-downloads compact"/,
-    'the account card carries the compact form of the same links'
-  );
-
   const uploadGate = renderPage({
     ...emptyData,
     user: { id: 5, username: 'someone', provider: 'password' },
     accounts: [],
   });
 
-  assertMatch(uploadGate, /downloads\/dl4533/, 'the upload gate must say where to get the file');
+  for (const [name, page] of [
+    ['sign-in', renderSignInPage({ providers })],
+    ['demo', demoPage],
+    ['upload gate', uploadGate],
+  ]) {
+    const copies = (page.match(/class="addon-downloads"/g) || []).length;
+
+    assert(copies === 1, `${name}: expected the addon line once, found ${copies}`);
+
+    const header = page.slice(
+      page.indexOf('<header class="top-bar">'),
+      page.indexOf('</header>') + '</header>'.length
+    );
+
+    assert(header.includes('esoui.com/downloads/dl4533'), `${name}: the addon must sit in the top bar`);
+    assert(header.includes('www.minion.gg'), `${name}: Minion must be linked beside it`);
+    assert(page.includes('downloads/info4533-ItemShare.html'), `${name}: the ESOUI page must be linked too`);
+
+    // The demo banner used to carry its own copy, which is how the same box appeared
+    // twice on one screen.
+    const banner = page.slice(page.indexOf('Demo mode'), page.indexOf('Your ESO accounts'));
+    assert(!banner.includes('addon-downloads'), `${name}: the demo banner must not repeat it`);
+  }
 });
 
 check('the demo lets go of asks nobody was going to answer', () => {
