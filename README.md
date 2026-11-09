@@ -752,6 +752,7 @@ npm run simulate -- --rounds 12
 | `npm start` | `server.js` | boots without it and shows the error | - |
 | `npm run backfill` | `backfillIcons.js` | yes | no |
 | `npm run seed:demo` | `seedDemo.js` | yes | no |
+| `npm run requests:reopen` | `reopenRequests.js` | yes | no |
 | `npm run simulate` | `simulate.js` | yes | only for live pushes |
 | `npm run email:test` | `testEmail.js` | no | no |
 
@@ -819,6 +820,55 @@ quantity and location, and every standing offer, so nothing has to be inferred f
 site afterwards. It exits non-zero with an explanation if there are no guilds to seed
 into - upload your own file first, since the demo account shares into guilds that
 already exist rather than inventing any.
+
+### npm run requests:reopen
+
+Puts requests whose hold ran out back into the requester's basket. A request starts as a
+`draft` that holds part of a stack, and the site's sweeper marks it `expired` when its
+deadline passes; that row was never sent, so no owner was ever told about it. By default
+reopening it holds the copies again and puts it back under *In your basket*, where **Send
+requests** is, and nothing is asked of the owner until they press it. `--pending` files it
+as a sent request instead: it counts against the owner's stack and waits in their list
+exactly as a submitted basket would, but no email goes out, which is the point when the
+owner already knows and the site just needs to catch up.
+
+| Flag | Meaning |
+| --- | --- |
+| `--all` | Every expired request in the database |
+| `--id <n>` | One request id. Repeat it, or comma-separate: `--id 12,13` |
+| `--email <address>` | Only that person's requests |
+| `--account <@Name>` | Only requests asked from that ESO account |
+| `--item <text>` | Only items whose name contains this text |
+| `--basket` | Back in the requester's basket, held for `--minutes`. The default |
+| `--pending` | Filed as a sent request: waits in the owner's list, no email sent |
+| `--minutes <n>` | How long the reopened hold lasts. Default `5`, at most `120` |
+| `--limit <n>` | Stop after `n` requests |
+| `--dry-run` | Say what would be reopened, write nothing |
+| `--help`, `-h` | Print usage and exit |
+
+```bash
+npm run requests:reopen -- --dry-run --all                 # what expired, changes nothing
+npm run requests:reopen -- --email someone@example.com     # just that person's
+npm run requests:reopen -- --account @Ghost --item dagger  # narrower still
+npm run requests:reopen -- --id 128,129 --minutes 30       # two rows, half an hour
+npm run requests:reopen -- --pending --email someone@example.com   # make it real, quietly
+```
+
+`--pending` changes what the owner knows. Without it the row is a basket entry the person
+can still drop; with it the request is in the owner's list and counts against their stack
+the moment the command runs, and only they can answer it. Neither path emails anybody - the
+notification is the site's job when a basket is submitted - so a pending row is found the
+next time the owner opens their list.
+
+A run with no scope flag changes nothing and exits `2`, because "everything expired" is a
+dangerous thing to type by accident. Every row is measured against what is free *now* - a
+stack can come back smaller, or somebody else can hold the copies - so a row that no longer
+fits is listed with its reason and left alone, and one that only partly fits comes back
+with the copies that are really there. Exit codes: `0` reopened (or a dry run that found
+something), `1` nothing matched or everything was skipped, `2` usage.
+
+The command pushes nothing, so an open page shows the new hold on its next refresh - the
+basket and the "already asked for" counts are read from the tables each time.
 
 ### npm run simulate
 
