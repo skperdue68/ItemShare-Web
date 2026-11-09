@@ -355,6 +355,52 @@ check('a visitor is shown the three ways in and no items', () => {
   assert(!page.includes('data-item-key'), 'no item may be rendered to a visitor');
 });
 
+check('the demo pair is boxed rather than another grey hint', () => {
+  const page = renderSignInPage({ providers });
+
+  assertMatch(page, /class="demo-callout"/, 'the demo sign-in must be its own box');
+  assertMatch(page, /class="demo-callout-body"/, 'the box must carry the explanation');
+  assertMatch(page, /demo@example\.com/, 'the demo address must still be in it');
+  assertMatch(page, /<strong>demo<\/strong>/, 'the demo password must still be in it');
+});
+
+check('the addon is one click away, signed out and signed in', () => {
+  const signedIn = renderSignInPage({ providers });
+
+  assertMatch(signedIn, /https:\/\/www\.minion\.gg\//, 'Minion must be linked');
+  assertMatch(
+    signedIn,
+    /https:\/\/www\.esoui\.com\/downloads\/dl4533\//,
+    'the latest ESOUI file must be linked, by addon id rather than a versioned name'
+  );
+  assertMatch(
+    signedIn,
+    /downloads\/info4533-ItemShare\.html/,
+    'the ESOUI page with the documentation must be linked too'
+  );
+
+  const demoPage = renderPage({
+    ...emptyData,
+    user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
+    accounts: [{ accountName: DEMO_ACCOUNT, itemCount: 9, guildCount: 1, guilds: [] }],
+  });
+
+  assertMatch(demoPage, /downloads\/dl4533/, 'a signed-in demo must see where the addon comes from');
+  assertMatch(
+    demoPage,
+    /class="addon-downloads compact"/,
+    'the account card carries the compact form of the same links'
+  );
+
+  const uploadGate = renderPage({
+    ...emptyData,
+    user: { id: 5, username: 'someone', provider: 'password' },
+    accounts: [],
+  });
+
+  assertMatch(uploadGate, /downloads\/dl4533/, 'the upload gate must say where to get the file');
+});
+
 check('a signed-in person with no ESO account is asked to upload', () => {
   const page = renderPage({
     ...emptyData,
