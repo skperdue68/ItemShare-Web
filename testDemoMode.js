@@ -43,7 +43,8 @@ import {
 } from './lib/demoShelf.js';
 import { AGE_HOURS, planAges, untouchedRowsSql } from './lib/itemAges.js';
 import { stamp } from './lib/log.js';
-import { platformName, serverLabel } from './lib/serverLabel.js';
+import { platformName, readAccountServer, serverChoices, serverLabel } from './lib/serverLabel.js';
+import { linkAccountToUser, listAccountServers } from './lib/store.js';
 import { emailLine, renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
 let passed = 0;
@@ -472,6 +473,102 @@ check('only rows nobody has touched since they were inserted are dated', () => {
   }
 
   assert(refused, 'a table with no living dates must be refused rather than guessed at');
+});
+
+check('attaching an ESO account asks for its platform and server, both required', () => {
+  const page = renderPage({
+    ...emptyData,
+    user: { id: 5, username: 'someone', provider: 'password' },
+    accounts: [{ accountName: '@someone', itemCount: 1, guildCount: 1, guilds: [] }],
+    accountServers: [
+      { platform: 2, worldName: 'EU Megaserver' },
+      { platform: 2, worldName: 'PTS' },
+    ],
+  });
+
+  assertMatch(page, /<select name="platform" required>/, 'the platform must be a required choice');
+  assertMatch(page, /<select name="worldName" required>/, 'the server must be a required choice');
+  assertMatch(page, /<option value="2">PC<\/option>/, 'platform 2 must be offered by the name the site uses');
+  assert(page.includes('>EU Megaserver<'), 'a server already recorded must be offered');
+  assert(page.includes('>PTS<'), 'every recorded server is offered, not only the megaservers');
+  assert(page.includes('>NA Megaserver<'), 'the known megaservers are offered before the first upload');
+});
+
+check('the attach form refuses a body with no platform or no server', () => {
+  const known = serverChoices([]);
+  assert(known.platforms.length === 1, 'only PC is known before any upload');
+  assert(known.worlds.length === 2, 'the two megaservers are the known worlds');
+
+  const recorded = serverChoices([
+    { platform: 2, worldName: 'PTS' },
+    { platform: 2, worldName: 'PTS' },
+  ]);
+  assert(recorded.worlds.filter((world) => world === 'PTS').length === 1, 'a server recorded twice is offered once');
+
+  assert(
+    serverLabel(readAccountServer({ platform: '2', worldName: 'NA Megaserver' })) === 'PC \u00b7 NA Megaserver',
+    'a complete choice reads back as one label'
+  );
+  assert(readAccountServer({ worldName: 'NA Megaserver' }) === null, 'a platform is required');
+  assert(readAccountServer({ platform: '0', worldName: 'NA Megaserver' }) === null, 'platform 0 means "not on a file yet"');
+  assert(readAccountServer({ platform: '2', worldName: '   ' }) === null, 'a server is required');
+});
+
+await checkAsync('a name attached from the form is written with its platform and server', async () => {
+  const log = [];
+  const connection = {
+    async execute(sql, params = []) {
+      log.push({ sql, params });
+      return [[], []];
+    },
+  };
+
+  const outcome = await linkAccountToUser(connection, {
+    accountName: '@new-player',
+    userId: 9,
+    platform: 2,
+    worldName: 'EU Megaserver',
+  });
+
+  assert(outcome === 'linked', `expected a new link, got ${outcome}`);
+
+  const insert = log.find((call) => /INSERT INTO itemshare_accounts/.test(call.sql));
+  assert(insert, 'the account was never written');
+  assert(insert.params.includes('EU Megaserver'), 'the server must be written with the name');
+  assert(insert.params.includes(2), 'the platform must be written with the name');
+  assert(insert.params.includes('@new-player'), 'the name must be written');
+});
+
+await checkAsync('re-attaching the demo account keeps the server its file recorded', async () => {
+  const log = [];
+  const connection = {
+    async execute(sql, params = []) {
+      log.push({ sql, params });
+      if (/SELECT user_id/.test(sql)) {
+        return [[{ user_id: 42 }], []];
+      }
+      return [[], []];
+    },
+  };
+
+  const outcome = await linkAccountToUser(connection, { accountName: DEMO_ACCOUNT, userId: 42 });
+  assert(outcome === 'already-linked', `expected the existing link, got ${outcome}`);
+
+  const update = log.find((call) => /UPDATE itemshare_accounts/.test(call.sql));
+  assert(update, 'the account was never re-attached');
+  assert(!/platform/.test(update.sql), 'with no form behind it there is no platform to write');
+});
+
+await checkAsync('the form reads the servers already recorded in the database', async () => {
+  const connection = {
+    async execute() {
+      return [[{ platform: 2, world_name: 'PTS' }, { platform: 2, world_name: 'EU Megaserver' }], []];
+    },
+  };
+
+  const rows = await listAccountServers(connection);
+  assert(rows.length === 2, `expected two recorded servers, got ${rows.length}`);
+  assert(rows[0].worldName === 'PTS' && rows[0].platform === 2, 'the row must come back as platform and name');
 });
 
 check('a signed-in person with no ESO account is asked to upload', () => {
