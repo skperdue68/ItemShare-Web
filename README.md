@@ -360,7 +360,14 @@ account* belongs to. **Offering** deliberately spans every linked account and na
 account and character holding each item, so a second account never hides what the first
 one shares. **Your requests** covers everything you have asked for, from any account.
 
-Every row shows the owning account, quantity, item type and trait. `Location` is a column
+The line under every item name carries the pieces that tell one copy from another, in
+the order a reader checks them: level, trait, crafting style, enchantment. They are bare
+values - `50 · Precise · Breton · Absorb Stamina` - with no labels, and a piece the item
+does not have is skipped rather than shown blank. Two Briarheart daggers share a name, a
+set and a colour, so seeing that one is level 50 and *Precise* and the other level 10 and
+*Sharpened* should not mean scanning across to a column: the pieces sit where the name
+is, on **Request**, on **Offering** and on the owner's *Requests for your items* page.
+Every row also shows the owning account and quantity. `Location` is a column
 on **Offering** only, where it reads `Inventory (Character Name)` and the character is not
 repeated beside the account: which bag a copy is in is the question the person handing it
 over has to answer, and nothing the person asking is helped by. **Request** leaves the
