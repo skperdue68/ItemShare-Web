@@ -21,6 +21,31 @@ function refreshAfterChange() {
   window.location.reload();
 }
 
+// ----------------------------------------------------------------- demo presence
+// A demo page keeps the sandbox alive: the server lets the demo's other guildmates act
+// only while at least one demo page is open, and this is how it knows. Nothing is sent
+// from an ordinary page, and a failed ping costs nothing - the activity simply pauses.
+if (document.body && document.body.dataset.demo === '1') {
+  const pingDemo = () => {
+    fetch('/demo/heartbeat', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+    }).catch(() => {});
+  };
+
+  pingDemo();
+  window.setInterval(pingDemo, 15000);
+
+  // A tab that was hidden and comes back says so at once, rather than waiting up to
+  // fifteen seconds for the next tick.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      pingDemo();
+    }
+  });
+}
+
 // ---------------------------------------------------------------------- toast
 // One short lived message, replaced by whatever the next step has to say. The
 // upload is the only thing here that takes long enough to need reassuring.

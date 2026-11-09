@@ -1330,6 +1330,23 @@ receive mail. Uploading stays switched off: the drop zone is still on the page, 
 the card says so and the page script shows that sentence instead of sending the file. A
 banner says the same on every page.
 
+**Other people.** A visitor who owned every row in the copy would have nothing to ask
+for: the Request tab would mirror their own bag. `lib/demoCast.js` writes three
+guildmates into the demo's own guild - `@NightMarket`, `@QuietSmith` and
+`@AetherCartel`, each with a slice of `lib/demoItems.js` - so their items are visible to
+the demo visitor and the demo's are visible to them. They exist only in `itemshare-demo`,
+and the rows are written through `replaceAccounts`, the same call an upload uses.
+
+**Activity while somebody watches.** `lib/demoActivity.js` does one small thing per tick
+as one of those guildmates, against the demo connection only: answering a request the
+visitor sent, asking the visitor for something they own (so it appears under Process
+Requests), taking back a request before sending it, or re-saving their file. Every action
+is the same store call the routes use, so the demo rehearses the real path - with invented
+addresses, so nothing is emailed, and with the resulting push sent to the demo room
+rather than to every open page. `POST /demo/heartbeat` is what says a demo page is still
+there: no heartbeat for 45 seconds and the activity pauses, and it starts again when a
+demo page reopens. `DEMO_ACTIVITY_MS` is the average gap between actions (default 15s, `0` turns it off), and each pause is drawn fresh between 60% and 140% of it, so the sandbox does not beat like a metronome.
+
 ## Not done yet
 
 **`declined`.** A request the owner cannot fill is recorded as `cancelled` with the

@@ -9,6 +9,7 @@
 import {
   DEMO_ACCOUNT,
   DEMO_DATABASE,
+  DEMO_EMAIL,
   DEMO_GUILD,
   DEMO_LOGIN,
   DEMO_PASSWORD,
@@ -21,6 +22,18 @@ import {
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
+import {
+  DEMO_CAST,
+  castCatalogue,
+  castEmail,
+  ensureDemoCast,
+} from './lib/demoCast.js';
+import {
+  DEMO_ACTIVITY_SCENARIOS,
+  demoActivityPause,
+  pickScenario,
+} from './lib/demoActivity.js';
+import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
 import { renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
 let passed = 0;
@@ -196,7 +209,12 @@ await checkAsync('an existing demo person is not rewritten on every visit', asyn
   assert(result.userId === 42, 'the existing person should be reused');
   assert(!result.created, 'nobody should be created twice');
   assert(!result.seeded, 'existing items must be left alone');
-  assert(connection.calls(/INSERT INTO itemshare_users/).length === 0, 'no second person');
+  assert(
+    connection
+      .calls(/INSERT INTO itemshare_users/)
+      .filter((call) => call.params.includes(DEMO_EMAIL)).length === 0,
+    'no second demo person'
+  );
   assert(connection.calls(/INSERT INTO itemshare_shared_items/).length === 0, 'no rewrite');
 });
 
@@ -438,6 +456,136 @@ check('an ordinary upload card carries no demo restriction', () => {
   });
 
   assert(!page.includes('demoUploadNotice'), 'only a demo may be told uploading is off');
+});
+
+// --------------------------------------------------------------------- the cast
+check('the demo guild has other people to ask, and none of them is the demo', () => {
+  assert(DEMO_CAST.length >= 3, `expected at least three guildmates, got ${DEMO_CAST.length}`);
+
+  const accounts = DEMO_CAST.map((person) => person.account);
+  assert(new Set(accounts).size === accounts.length, 'each guildmate is a separate account');
+  assert(!accounts.includes(DEMO_ACCOUNT), 'the demo account itself cannot be a guildmate');
+
+  for (const person of DEMO_CAST) {
+    const { items } = castCatalogue(person);
+    assert(items.length > 0, `${person.account} shares nothing, so nobody can ask them`);
+    assert(
+      items.every((item) => item && item.name && item.qualityName),
+      `${person.account} has a catalogue entry that is not an item`
+    );
+    assert(
+      /@demo-cast\.invalid$/.test(castEmail(person.account)),
+      `${person.account} needs an address that cannot receive mail`
+    );
+  }
+});
+
+await checkAsync('the cast is written into the demo guild through the upload path', async () => {
+  const connection = fakeConnection();
+  const result = await ensureDemoCast(connection, {
+    guildId: DEMO_GUILD.id,
+    guildName: DEMO_GUILD.name,
+    platform: DEMO_WORLD.platform,
+    worldName: DEMO_WORLD.worldName,
+  });
+
+  assert(
+    result.seeded.length === DEMO_CAST.length,
+    `expected ${DEMO_CAST.length} seeded, got ${result.seeded.length}`
+  );
+
+  const shared = connection.calls(/INSERT INTO itemshare_shared_items/);
+  assert(shared.length >= DEMO_CAST.length, 'every guildmate must share at least one item');
+
+  const written = JSON.stringify(shared.map((call) => call.params));
+  assert(written.includes('@NightMarket'), 'the guildmates\u2019 items must name their account');
+
+  const links = connection.calls(/INSERT IGNORE INTO itemshare_shared_item_guilds/);
+  assert(links.length >= DEMO_CAST.length, 'every shared item must carry its guild link');
+  assert(
+    links.some((call) => call.params.includes(DEMO_GUILD.id)),
+    'the items must be offered to the demo guild'
+  );
+
+  const identities = connection.calls(/INSERT INTO itemshare_user_identities/);
+  assert(
+    identities.some((call) => call.params.includes('demo-cast')),
+    'a guildmate needs a person row of its own, kept apart from real sign-ins'
+  );
+});
+
+await checkAsync('a guildmate who already shares is left alone', async () => {
+  const connection = fakeConnection({ sharedCount: 3 });
+  const result = await ensureDemoCast(connection, { guildId: DEMO_GUILD.id });
+
+  assert(result.seeded.length === 0, 'nothing should be written again');
+  assert(result.kept.length === DEMO_CAST.length, 'every guildmate is already there');
+  assert(
+    connection.calls(/INSERT INTO itemshare_shared_items/).length === 0,
+    'an existing shelf must not be rewritten on every boot'
+  );
+});
+
+// ----------------------------------------------------------------- the activity
+check('every action is reachable, and a request is seen from both sides', () => {
+  const seen = new Set(
+    [0.05, 0.3, 0.55, 0.85].map((value) => pickScenario(() => value))
+  );
+
+  assert(seen.size === DEMO_ACTIVITY_SCENARIOS.length, `expected every scenario, got ${[...seen]}`);
+  assert(seen.has('ask') && seen.has('answer'), 'asking and answering must both happen');
+});
+
+check('the pause between actions is drawn fresh rather than fixed', () => {
+  const shortest = demoActivityPause(15000, () => 0);
+  const longest = demoActivityPause(15000, () => 1);
+
+  assert(shortest === 9000, `expected 60% of the base, got ${shortest}`);
+  assert(longest === 21000, `expected 140% of the base, got ${longest}`);
+  assert(
+    shortest !== longest && demoActivityPause(15000, () => 0.5) === 15000,
+    'each action must wait a random time, with the configured interval as the average'
+  );
+  assert(demoActivityPause(0) === 0, '0 means no activity at all');
+});
+
+check('a demo page counts as watching until it goes quiet', () => {
+  const viewers = new Map();
+  noteViewer(viewers, 'a', 1000);
+  noteViewer(viewers, 'b', 1000);
+
+  assert(activeDemoViewers(viewers, 1000 + DEMO_VIEWER_TTL_MS) === 2, 'a live page is counted');
+  assert(
+    activeDemoViewers(viewers, 1000 + DEMO_VIEWER_TTL_MS + 1) === 0,
+    'a silent page must stop the activity'
+  );
+  assert(viewers.size === 0, 'the silent page must be forgotten, not counted for ever');
+});
+
+check('the heartbeat a demo page sends is not one of the refusals', () => {
+  assert(
+    !demoRefusal('POST', '/demo/heartbeat'),
+    'the page must be able to say it is still open'
+  );
+});
+
+check('a demo page marks itself so the sandbox knows somebody is watching', () => {
+  const demoPage = renderPage({
+    ...emptyData,
+    user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
+    accounts: [{ accountName: DEMO_ACCOUNT, itemCount: 9, guildCount: 1, guilds: [] }],
+  });
+  const ordinaryPage = renderPage({
+    ...emptyData,
+    user: { id: 5, username: 'someone', provider: 'password' },
+    accounts: [{ accountName: '@someone', itemCount: 3, guildCount: 1, guilds: [] }],
+  });
+
+  assertMatch(demoPage, /<body[^>]*data-demo="1"/, 'the demo page must carry data-demo');
+  assert(
+    !ordinaryPage.includes('data-demo'),
+    'an ordinary page must not keep the sandbox alive'
+  );
 });
 
 console.log('');
