@@ -113,7 +113,11 @@ the account. Both are ordinary forms on the sign-in page, so they work with scri
 and need nothing in `.env`; the OAuth buttons are the extra rather than the requirement.
 Creating the account asks for the password twice, and both copies are compared on the
 server as well as in the browser (`passwordConfirmationProblem` in `lib/passwords.js`), so
-a form posted with scripting off is held to the same rule. Every password box carries an
+a form posted with scripting off is held to the same rule. With scripting on,
+`/password-check.js` asks the same questions on the form itself - a pair that disagrees, a
+password too short or too long - and cancels the submit rather than letting the server
+answer with a page that has lost both boxes, so the caret lands in the box to fix and
+everything typed is still there. Every password box carries an
 eye that shows what was typed, drawn by `/password-toggle.js`, which listens once on the
 document and therefore reaches the boxes the request dialog builds after a click.
 What the page asks for is the address, because the address is what the site collects: it

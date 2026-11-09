@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { passwordConfirmationProblem } from './lib/passwords.js';
-import { renderResetPasswordPage } from './lib/views.js';
+import { renderResetPasswordPage, renderSignInPage } from './lib/views.js';
 
 let total = 0;
 let failures = 0;
@@ -252,6 +252,155 @@ t('the request dialog asks twice and checks before it sends', () => {
   assert.match(appSource, /confirm\.value !== password\.value/, 'checked before anything is sent');
   assert.match(appSource, /set\(\s*'confirm', confirm\s*\)/, 'and posted with the request');
   assert.match(appSource, /data-dialog-note/, 'with somewhere to say a pair disagreed');
+});
+
+// --------------------------- the pair is checked before the form is posted
+
+/**
+ * The page-side check, run against a stand-in form.
+ *
+ * The script touches only the document and what the form answers, so plain objects are
+ * enough to exercise it: one listener per event, and boxes that remember being focused,
+ * marked and cleared.
+ */
+function loadPasswordCheck() {
+  const source = fs.readFileSync(new URL('./public/password-check.js', import.meta.url), 'utf8');
+  const listeners = [];
+  const document = { addEventListener: (type, fn) => listeners.push({ type, fn }) };
+
+  new Function('document', source)(document);
+
+  const listener = (type) => listeners.find((entry) => entry.type === type);
+
+  return {
+    form({ password, confirm }) {
+      let form = null;
+
+      const box = (value) => ({
+        value,
+        focused: false,
+        invalid: null,
+        focus() {
+          this.focused = true;
+        },
+        setAttribute(name, given) {
+          if (name === 'aria-invalid') this.invalid = given;
+        },
+        removeAttribute() {
+          this.invalid = null;
+        },
+        closest: () => form,
+      });
+
+      const boxes = {
+        password: box(password),
+        confirm: confirm === null ? null : box(confirm),
+      };
+      const note = { hidden: true, textContent: '' };
+
+      form = {
+        querySelector(selector) {
+          if (selector === '[data-form-note]') return note;
+          if (selector === 'input[name="password"]') return boxes.password;
+          if (selector === 'input[name="confirm"]') return boxes.confirm;
+          return null;
+        },
+      };
+
+      return { form, boxes, note };
+    },
+    submit(target) {
+      const event = {
+        target,
+        preventDefault() {
+          this.cancelled = true;
+        },
+      };
+
+      listener('submit').fn(event);
+      return Boolean(event.cancelled);
+    },
+    type(target) {
+      listener('input').fn({ target });
+    },
+  };
+}
+
+t('the two-box forms have a place to say what is wrong, and load the check', () => {
+  assert.match(signUp, /data-form-note[^>]*role="alert"/, 'the sign-up form can speak');
+  assert.match(reset, /data-form-note[^>]*role="alert"/, 'and so can a reset link');
+
+  assert.match(renderSignInPage({}), /src="\/password-check\.js"/, 'the sign-up form is on the sign-in page');
+  assert.match(reset, /src="\/password-check\.js"/, 'a reset link is two boxes of its own');
+});
+
+t('a pair that disagrees is stopped on the form, in the server\u2019s words', () => {
+  const check = loadPasswordCheck();
+  const { form, boxes, note } = check.form({ password: 'hunter22', confirm: 'hunter23' });
+
+  assert.equal(check.submit(form), true, 'the submit is cancelled, so the page stays');
+  assert.equal(note.hidden, false, 'and the sentence is shown');
+  assert.equal(
+    note.textContent,
+    passwordConfirmationProblem('hunter22', 'hunter23'),
+    'the browser and the server say the same thing'
+  );
+  assert.equal(boxes.confirm.invalid, 'true', 'the second box is marked');
+  assert.equal(boxes.confirm.focused, true, 'and takes the caret');
+});
+
+t('a password of the wrong length is stopped the same way', () => {
+  const check = loadPasswordCheck();
+  const short = check.form({ password: 'hunter2', confirm: 'hunter2' });
+
+  assert.equal(check.submit(short.form), true);
+  assert.match(short.note.textContent, /at least 8 characters/);
+  assert.equal(short.boxes.password.focused, true, 'the first box is the one to fix');
+
+  const long = check.form({ password: 'x'.repeat(201), confirm: 'x'.repeat(201) });
+  assert.equal(check.submit(long.form), true);
+  assert.match(long.note.textContent, /at most 200 characters/);
+});
+
+t('an empty second box is asked for, not compared to nothing', () => {
+  const check = loadPasswordCheck();
+  const { form, note } = check.form({ password: 'hunter22', confirm: '' });
+
+  assert.equal(check.submit(form), true);
+  assert.equal(note.textContent, passwordConfirmationProblem('hunter22', ''));
+});
+
+t('a pair that agrees is posted as usual', () => {
+  const check = loadPasswordCheck();
+  const { form, note } = check.form({ password: 'hunter22', confirm: 'hunter22' });
+
+  note.hidden = false;
+  note.textContent = 'left over from an earlier attempt';
+
+  assert.equal(check.submit(form), false, 'nothing is cancelled');
+  assert.equal(note.hidden, true, 'and the old sentence goes');
+  assert.equal(note.textContent, '');
+});
+
+t('signing in asks once, so that form is left alone', () => {
+  const check = loadPasswordCheck();
+  const { form } = check.form({ password: 'hunter22', confirm: null });
+
+  assert.equal(check.submit(form), false, 'the one-box form posts untouched');
+});
+
+t('typing again clears the sentence and the mark', () => {
+  const check = loadPasswordCheck();
+  const { form, boxes, note } = check.form({ password: 'hunter22', confirm: 'hunter23' });
+
+  check.submit(form);
+  assert.equal(note.hidden, false);
+  assert.equal(boxes.confirm.invalid, 'true');
+
+  check.type(boxes.confirm);
+  assert.equal(note.hidden, true, 'the sentence goes as soon as it is being fixed');
+  assert.equal(note.textContent, '');
+  assert.equal(boxes.confirm.invalid, null, 'and the box is no longer marked');
 });
 
 console.log(`\n${total - failures}/${total} passed`);
