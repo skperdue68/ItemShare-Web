@@ -502,6 +502,11 @@ t('it names the number of copies when there is more than one', () => {
 t('it names the hold the page was built with', () => {
   assert.match(holdNotice().notice.innerHTML, /expire in 5 minutes/, 'the default');
   assert.match(holdNotice({ minutes: 12 }).notice.innerHTML, /expire in 12 minutes/);
+  assert.match(
+    source,
+    /const fromBar = bar \? Number\(bar\.dataset\.holdMinutes\) : 0;/,
+    'the length comes from the bar the server drew, so it is the configured hold'
+  );
 });
 
 t('escape closes it rather than trapping anybody', () => {
@@ -514,8 +519,18 @@ t('escape closes it rather than trapping anybody', () => {
 t('it is said for the first copy in an empty basket, and only then', () => {
   assert.match(
     source,
-    /const basketWasEmpty =\s*!document\.querySelector\('\[data-basket\]'\) && !document\.querySelector\('\[data-basket-row\]'\)/,
-    'both marks of a basket already on the page are read before the request goes'
+    /const basketWasEmpty = basketSummary\(\)\.unique === 0/,
+    'the bag is judged by what it holds, so a bag emptied a moment ago counts as empty'
+  );
+  assert.match(
+    source,
+    /function basketSummary\(\)[\s\S]{0,800}?\[data-basket-row\]/,
+    'the count comes from the bar, or from the basket rows when there is no bar'
+  );
+  assert.match(
+    source,
+    /data-seconds|dataset\.copies/,
+    'and it reads the copies as well as the items'
   );
   assert.match(source, /if \(basketWasEmpty\) \{\s*explainFirstHold\(name, asked\);/, 'and it gates the notice');
   assert.equal(source.includes('HOLD_NOTICE_KEY'), false, 'nothing remembers that it was shown');
