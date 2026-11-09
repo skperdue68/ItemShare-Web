@@ -1945,12 +1945,14 @@ th .sort-link {
   color: var(--text);
 }
 
-.browsing-picker select option {
+.browsing-picker select option,
+.auth-field select option {
   background-color: #0e1a33;
   color: var(--text);
 }
 
-.browsing-picker select option:checked {
+.browsing-picker select option:checked,
+.auth-field select option:checked {
   background-color: #2454bd;
   color: #ffffff;
 }
@@ -2541,7 +2543,8 @@ th.action-cell {
   font: inherit;
   font-size: 15px;
   color: var(--text);
-  background: rgba(8, 18, 42, 0.55);
+  background: #0e1a33;
+  color-scheme: dark;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 9px 11px;
@@ -2552,6 +2555,30 @@ th.action-cell {
   border-color: var(--accent-top);
   box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
 }
+
+.request-history-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.history-page {
+  padding: 6px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  color: var(--text);
+  background: #0e1a33;
+  text-decoration: none;
+}
+
+a.history-page:hover, .history-page.is-current {
+  background: #2454bd;
+  color: #fff;
+}
+
+.history-page[aria-disabled="true"] { opacity: 0.45; }
 
 /* Below the width the nine columns want, the table gives up its padding and a little of
    its type size rather than making the reader scroll sideways for the last column. */
