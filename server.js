@@ -104,6 +104,7 @@ import { demoActivityPause, runDemoActivity } from './lib/demoActivity.js';
 import { activeDemoViewers, noteViewer } from './lib/demoPresence.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
+  renderGuidePage,
   renderListRegion,
   renderMessagePage,
   renderForgotPasswordPage,
@@ -580,6 +581,18 @@ function sendPage(req, res, status, options) {
       })
     );
 }
+
+// The guide is the one page that has to work before signing in: it is where the addon and
+// the upload step are explained, so a visitor can read what the site is for before
+// deciding to sign in at all.
+app.get('/how-to', (req, res) => {
+  res.type('html').send(
+    renderGuidePage({
+      user: req.session ? req.session.user || null : null,
+      providers: enabledProviders,
+    })
+  );
+});
 
 // Whether the demo copy exists. The activity loop is not started against a database that
 // was never built, so a site without the demo runs quietly instead of logging a failure
