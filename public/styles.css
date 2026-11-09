@@ -2236,6 +2236,87 @@ th .sort-link {
   color: var(--text);
 }
 
+/* Choosing to make an account replaces the ways in rather than adding to them: somebody
+   registering is not signing in, and the OAuth buttons, the email form and the reset link
+   would only be things to read past. The disclosure carries the state, so this needs no
+   script; where :has() is not understood both stay visible, as they always were. */
+.auth-panel:has(.auth-signup[open]) .auth-login {
+  display: none;
+}
+
+.auth-login {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  width: 100%;
+}
+
+.auth-signup[open] {
+  width: 100%;
+  max-width: 340px;
+  text-align: left;
+}
+
+/* The summary has done its job once the form is open - the heading below says the same
+   thing and Cancel is the way back - so it goes rather than sitting above the fields as a
+   control that only collapses what is being filled in. */
+.auth-signup[open] > summary {
+  display: none;
+}
+
+.auth-signup-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+/* Create Account, then Cancel a little to its right: the one way forward, and the way back
+   that throws the form away. Cancel is red for that reason and is still a link, so it works
+   with the scripts off. */
+.auth-signup-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.auth-signup-actions .primary-button {
+  flex: 1;
+}
+
+.cancel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 20px;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 9px;
+  background: #b91c1c;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cancel-button:hover,
+.cancel-button:focus-visible {
+  background: #dc2626;
+}
+
+/* The reset link belongs to the sign-in form above it, not to the account form: it is
+   under Sign In, with the disclosure a little way below it. */
+.auth-forgot {
+  margin: 12px 0 4px;
+  text-align: center;
+}
+
+.auth-forgot a {
+  color: var(--muted-strong);
+}
+
 .auth-signup[open] summary {
   margin-bottom: 12px;
 }
