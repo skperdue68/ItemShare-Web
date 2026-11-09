@@ -88,6 +88,12 @@ body {
   color: #f8fafc;
 }
 
+/* The name is one word made of two: "Share" carries the accent so the picture and the
+   name can be used apart - the mark alone, or the wordmark on its own. */
+.brand-share {
+  color: #93c5fd;
+}
+
 .brand-subtitle {
   font-size: 12px;
   font-weight: 500;

@@ -372,6 +372,16 @@ check('the demo pair is boxed rather than another grey hint', () => {
   assertMatch(page, /<strong>demo<\/strong>/, 'the demo password must still be in it');
 });
 
+check('the brand shows the people-and-present mark with its name beside it', () => {
+  const page = renderSignInPage({ providers });
+  const header = page.slice(page.indexOf('<header class="top-bar">'), page.indexOf('</header>'));
+
+  assert(header.includes('brand-mark'), 'the header must draw the mark');
+  assert(header.includes('#2dd4bf') && header.includes('#fb7185'), 'both people must be in the mark');
+  assert(header.includes('brand-share'), 'the name must be its own text, not baked into the picture');
+  assert(header.includes('>Item<span class="brand-share">Share</span>'), 'the name must read ItemShare');
+});
+
 check('the addon is one click away, signed out and signed in', () => {
   const signedIn = renderSignInPage({ providers });
 
