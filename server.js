@@ -825,7 +825,7 @@ async function viewerAccountNames(req, connection, user) {
       data.requests = user ? await getRequesterRequests(connection, user.id) : [];
       data.basketRows = user ? await getBasketRows(connection, user.id) : [];
       data.basket = user
-        ? await getDraftBasket(connection, user.id)
+        ? await getDraftBasket(connection, user.id, HOLD_MINUTES)
         : { count: 0, quantity: 0, secondsLeft: 0, holdMinutes: HOLD_MINUTES };
     });
   } catch (error) {
@@ -1193,7 +1193,7 @@ app.post('/requests/submit', async (req, res) => {
 
       return {
         sent,
-        basket: await getDraftBasket(connection, user.id),
+        basket: await getDraftBasket(connection, user.id, HOLD_MINUTES),
         submitted,
         contacts: [...contacts.entries()],
       };

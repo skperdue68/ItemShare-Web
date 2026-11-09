@@ -11,6 +11,7 @@
     "email:preview": "node previewEmail.js",
     "test:fulfillment": "node testFulfillment.js",
     "test:reserve-dialog": "node testReserveDialog.js",
+    "test:basket-state": "node testBasketState.js",
     "test:grouping": "node testGrouping.js",
     "test:password-forms": "node testPasswordForms.js",
     "test:reopen-requests": "node testReopenRequests.js",
