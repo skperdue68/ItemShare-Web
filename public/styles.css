@@ -54,24 +54,21 @@ body {
   min-width: 0;
 }
 
-.brand-mark {
-  width: 46px;
-  height: 46px;
-  flex: none;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  color: #ffffff;
-  background: linear-gradient(180deg, var(--accent-top) 0%, var(--accent-bottom) 100%);
-  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28);
+/* The brand and the addon line travel together on the left, and the gap between them is
+   the room the header's next item will take; the account area stays on the far right. */
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  min-width: 0;
 }
 
-.brand-mark svg {
-  width: 30px;
-  height: 30px;
+/* The mark is a picture file of its own, so it can be used anywhere on its own and the
+   header only decides how tall it is. */
+.brand-mark {
+  height: 40px;
+  width: auto;
+  flex: none;
   display: block;
 }
 
@@ -82,17 +79,12 @@ body {
   min-width: 0;
 }
 
-.brand-title {
-  font-size: 22px;
-  line-height: 1;
-  font-weight: 800;
-  color: #f8fafc;
-}
-
-/* The name is one word made of two: "Share" carries the accent so the picture and the
-   name can be used apart - the mark alone, or the wordmark on its own. */
-.brand-share {
-  color: #5aa9f0;
+/* The name is its own picture file too, so the two halves of the brand can be used
+   apart: the mark alone, the wordmark alone, or the two together. */
+.brand-wordmark {
+  height: 26px;
+  width: auto;
+  display: block;
 }
 
 .brand-subtitle {
@@ -2184,7 +2176,7 @@ th .sort-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 0 18px;
+  margin: 0;
   padding: 7px 10px 7px 14px;
   border: 1px solid var(--panel-border-strong);
   border-radius: 999px;

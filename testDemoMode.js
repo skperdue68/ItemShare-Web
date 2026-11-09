@@ -373,14 +373,16 @@ check('the demo pair is boxed rather than another grey hint', () => {
   assertMatch(page, /<strong>demo<\/strong>/, 'the demo password must still be in it');
 });
 
-check('the brand shows the people-and-present mark with its name beside it', () => {
+check('the brand draws the mark and the wordmark as two pictures of their own', () => {
   const page = renderSignInPage({ providers });
   const header = page.slice(page.indexOf('<header class="top-bar">'), page.indexOf('</header>'));
 
-  assert(header.includes('brand-mark'), 'the header must draw the mark');
-  assert(header.includes('#0f9f90') && header.includes('#f2543b'), 'both people must be in the mark');
-  assert(header.includes('brand-share'), 'the name must be its own text, not baked into the picture');
-  assert(header.includes('>Item<span class="brand-share">Share</span>'), 'the name must read ItemShare');
+  assert(header.includes('class="brand-mark"'), 'the header must draw the mark');
+  assert(header.includes('src="/brand/mark.svg"'), 'the mark must be its own file, usable alone');
+  assert(header.includes('class="brand-wordmark"'), 'the name must be a picture of its own');
+  assert(header.includes('src="/brand/wordmark.svg"'), 'the name must come from the wordmark file');
+  assert(header.includes('alt="ItemShare"'), 'the wordmark must carry the name for a reader who cannot see it');
+  assert(!header.includes('<svg'), 'the artwork must be the files, not a picture pasted into the page');
 });
 
 check('the browsing-as label carries a real middle dot, not its escaped entity', () => {
@@ -431,8 +433,16 @@ check('the addon links live in the header, once, signed out and signed in', () =
     );
 
     assert(header.includes('esoui.com/downloads/dl4533'), `${name}: the addon must sit in the top bar`);
-    assert(header.includes('www.minion.gg'), `${name}: Minion must be linked beside it`);
-    assert(page.includes('downloads/info4533-ItemShare.html'), `${name}: the ESOUI page must be linked too`);
+    assert(!header.includes('www.minion.gg'), `${name}: the Minion link is gone`);
+    assert(!page.includes('downloads/info4533-ItemShare.html'), `${name}: the ESOUI page link is gone`);
+
+    // Brand and addon line share one left-hand group, so the line sits in the same place
+    // whether or not somebody is signed in and whatever width the account area takes.
+    const brandAt = header.indexOf('class="brand"');
+    const addonAt = header.indexOf('class="addon-downloads"');
+
+    assert(header.includes('class="top-bar-left"'), `${name}: the left-hand group must exist`);
+    assert(brandAt !== -1 && addonAt > brandAt, `${name}: the addon line must sit beside the brand`);
 
     // The demo banner used to carry its own copy, which is how the same box appeared
     // twice on one screen.
