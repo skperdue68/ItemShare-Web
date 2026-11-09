@@ -65,6 +65,7 @@ import {
 } from './lib/store.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
+  DEMO_ACCOUNT,
   DEMO_DATABASE,
   DEMO_DISPLAY_NAME,
   DEMO_GUILD,
@@ -74,6 +75,7 @@ import {
   demoDatabaseConfig,
   demoRefusal,
   demoRefusalMessage,
+  demoRemovalRestores,
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
@@ -2300,11 +2302,25 @@ app.post('/accounts/remove', async (req, res) => {
   try {
     // Ownership is the condition of the update itself, so a name from the form can never
     // unlink somebody else's account.
-    const removed = await withDatabase((connection) =>
-      detachAccountFromUser(connection, { userId: user.id, accountName })
-    );
+    const outcome = await withDatabase(async (connection) => {
+      const removed = await detachAccountFromUser(connection, { userId: user.id, accountName });
 
-    if (!removed) {
+      if (!removed) {
+        return { removed: false, restored: false };
+      }
+
+      // The demo's own account goes straight back: it is what the demo browses and asks
+      // as, and a demo with no account is a demo that cannot do anything. Attached again
+      // in the same request, so a page never sees the gap.
+      if (demoRemovalRestores(user, accountName)) {
+        await linkAccountToUser(connection, { accountName: DEMO_ACCOUNT, userId: user.id });
+        return { removed: true, restored: true };
+      }
+
+      return { removed: true, restored: false };
+    });
+
+    if (!outcome.removed) {
       sendPage(req, res, 404, {
         heading: 'That account is not attached to you',
         message: 'Nothing was changed.',
@@ -2314,6 +2330,18 @@ app.post('/accounts/remove', async (req, res) => {
     }
 
     req.session.accountNames = null;
+
+    if (outcome.restored) {
+      sendPage(req, res, 200, {
+        heading: 'The demo account stays attached',
+        message: `${DEMO_ACCOUNT} is the account the demo browses and asks as, so it was attached again straight away.`,
+        details:
+          'Removing any other account really removes it. This one is put back so the demo always has something to request from.',
+        tone: 'notice',
+      });
+      return;
+    }
+
     res.redirect(303, '/');
   } catch (error) {
     sendPage(req, res, 500, {

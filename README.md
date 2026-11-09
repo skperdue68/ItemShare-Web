@@ -235,8 +235,19 @@ stored on the account, on every guild and on every guild link, because a guild i
 is two different guilds, and so is the same id on PC and Xbox.
 
 A guild is therefore identified by its id **and** its world, `itemshare_guilds` is keyed
-by both, and a share is only visible to an account on the same world as the owner. The
-account list shows the server beside each name.
+by both, and a share is only visible to an account on the same world as the owner.Both halves are shown beside each name, in the **Add or remove ESO accounts** dialog and
+in the account list, as `PC &middot; NA Megaserver`; the browsing picker shows them too, so
+two accounts can be told apart while choosing. Only the value the site knows is spelled
+out (2 is PC); any other platform number is printed as the number the addon wrote rather
+than guessed at.
+
+An ESO account is still one row, keyed by its `@handle`. The same handle on NA and EU, or
+on PC and console, is therefore one account carrying whichever world its most recent
+upload reported: the guild links keep both worlds' memberships, but the account's own
+platform and world - and so the browsing picker - cannot yet say which one is meant.
+Telling them apart needs the account key to be `(handle, platform, world)` through
+uploads, linking and the browsing choice, which is a migration and a change to how a
+session names its account; it is not something display can fix.
 
 `0` / `''` mean **not known**, never a world of their own. An unknown world matches
 whatever it is compared with, the same way the guild rule itself is only applied when
@@ -1328,7 +1339,9 @@ basket is recorded and the owners are told nothing - and the password cannot be 
 the reset request is refused before any link is made, and `demo@example.com` can never
 receive mail. Uploading stays switched off: the drop zone is still on the page, but
 the card says so and the page script shows that sentence instead of sending the file. A
-banner says the same on every page.
+banner says the same on every page. Removing its own `@ItemShareDemo` is rehearsed too:
+it is attached again in the same request, because the demo has nothing to browse or ask as
+without it - every other account really is removed.
 
 **Other people.** A visitor who owned every row in the copy would have nothing to ask
 for: the Request tab would mirror their own bag. `lib/demoCast.js` writes three

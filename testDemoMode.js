@@ -19,6 +19,7 @@ import {
   demoDatabaseConfig,
   demoRefusal,
   demoRefusalMessage,
+  demoRemovalRestores,
   ensureDemoData,
   findDemoSignIn,
 } from './lib/demo.js';
@@ -34,6 +35,7 @@ import {
   pickScenario,
 } from './lib/demoActivity.js';
 import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
+import { platformName, serverLabel } from './lib/serverLabel.js';
 import { emailLine, renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
 let passed = 0;
@@ -567,6 +569,58 @@ check('the heartbeat a demo page sends is not one of the refusals', () => {
     !demoRefusal('POST', '/demo/heartbeat'),
     'the page must be able to say it is still open'
   );
+});
+
+check('an ESO account says which platform and server it lives on', () => {
+  assert(platformName(2) === 'PC', `expected PC for platform 2, got "${platformName(2)}"`);
+  assert(platformName(0) === '', 'an account with no file behind it has no platform');
+  assert(
+    platformName(7) === 'platform 7',
+    'a platform number this site cannot name is shown as itself, never guessed at'
+  );
+  assert(
+    serverLabel({ platform: 2, worldName: 'NA Megaserver' }) === 'PC \u00b7 NA Megaserver',
+    'both halves belong on one line'
+  );
+  assert(serverLabel({ worldName: 'PTS' }) === 'PTS', 'a world without a platform is still shown');
+  assert(serverLabel({ platform: 2 }) === 'PC', 'a platform without a world is still shown');
+  assert(serverLabel({}) === '', 'nothing known says nothing');
+});
+
+check('the accounts dialog shows the platform and the server beside the name', () => {
+  const page = renderPage({
+    ...emptyData,
+    user: { id: 42, username: 'Demo', provider: 'password', isDemo: true },
+    accounts: [
+      {
+        accountName: DEMO_ACCOUNT,
+        itemCount: 9,
+        guildCount: 1,
+        platform: 2,
+        worldName: 'NA Megaserver',
+        guilds: [],
+      },
+    ],
+  });
+
+  assertMatch(page, /PC \u00b7 NA Megaserver/, 'the account must name its platform and megaserver');
+  assert(page.includes(DEMO_ACCOUNT), 'the account must still be named beside them');
+});
+
+check('removing the demo account puts it straight back', () => {
+  assert(
+    demoRemovalRestores({ isDemo: true }, DEMO_ACCOUNT),
+    'the demo account is the one the demo browses as, so it must be restored'
+  );
+  assert(
+    !demoRemovalRestores({ isDemo: true }, '@SomeoneElse'),
+    'another account really can be removed in the demo'
+  );
+  assert(
+    !demoRemovalRestores({ isDemo: false }, DEMO_ACCOUNT),
+    'an ordinary person keeps the removal they asked for'
+  );
+  assert(!demoRemovalRestores(null, DEMO_ACCOUNT), 'a visitor has nothing to restore');
 });
 
 check('the demo shows its own address as a verified sign-in, like anybody else', () => {
