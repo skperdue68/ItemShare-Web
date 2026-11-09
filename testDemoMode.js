@@ -28,7 +28,11 @@ import {
   castEmail,
   ensureDemoCast,
 } from './lib/demoCast.js';
-import { DEMO_ACTIVITY_SCENARIOS, pickScenario } from './lib/demoActivity.js';
+import {
+  DEMO_ACTIVITY_SCENARIOS,
+  demoActivityPause,
+  pickScenario,
+} from './lib/demoActivity.js';
 import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
 import { renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
@@ -530,6 +534,19 @@ check('every action is reachable, and a request is seen from both sides', () => 
 
   assert(seen.size === DEMO_ACTIVITY_SCENARIOS.length, `expected every scenario, got ${[...seen]}`);
   assert(seen.has('ask') && seen.has('answer'), 'asking and answering must both happen');
+});
+
+check('the pause between actions is drawn fresh rather than fixed', () => {
+  const shortest = demoActivityPause(15000, () => 0);
+  const longest = demoActivityPause(15000, () => 1);
+
+  assert(shortest === 9000, `expected 60% of the base, got ${shortest}`);
+  assert(longest === 21000, `expected 140% of the base, got ${longest}`);
+  assert(
+    shortest !== longest && demoActivityPause(15000, () => 0.5) === 15000,
+    'each action must wait a random time, with the configured interval as the average'
+  );
+  assert(demoActivityPause(0) === 0, '0 means no activity at all');
 });
 
 check('a demo page counts as watching until it goes quiet', () => {

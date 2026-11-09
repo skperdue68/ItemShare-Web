@@ -1345,7 +1345,7 @@ is the same store call the routes use, so the demo rehearses the real path - wit
 addresses, so nothing is emailed, and with the resulting push sent to the demo room
 rather than to every open page. `POST /demo/heartbeat` is what says a demo page is still
 there: no heartbeat for 45 seconds and the activity pauses, and it starts again when a
-demo page reopens. `DEMO_ACTIVITY_MS` sets the pace (default 15s, `0` turns it off).
+demo page reopens. `DEMO_ACTIVITY_MS` is the average gap between actions (default 15s, `0` turns it off), and each pause is drawn fresh between 60% and 140% of it, so the sandbox does not beat like a metronome.
 
 ## Not done yet
 

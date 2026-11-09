@@ -93,7 +93,7 @@ import {
   verifyPassword,
 } from './lib/passwords.js';
 import { attachRealtime } from './lib/realtime.js';
-import { runDemoActivity } from './lib/demoActivity.js';
+import { demoActivityPause, runDemoActivity } from './lib/demoActivity.js';
 import { activeDemoViewers, noteViewer } from './lib/demoPresence.js';
 import { MariaDbSessionStore } from './lib/sessionStore.js';
 import {
@@ -2980,8 +2980,25 @@ async function tickDemoActivity() {
   }
 }
 
+// A random wait, not a fixed beat: each action is followed by a pause drawn between 60%
+// and 140% of the interval, the way `npm run simulate` spaces its own actions, so the
+// copy reads as a site somebody is using. Re-armed only after a tick finishes, so two
+// can never overlap, and unref'd because housekeeping must not hold the process open.
+function scheduleDemoActivity(delayMs = demoActivityPause(DEMO_ACTIVITY_MS)) {
+  const timer = setTimeout(async () => {
+    await tickDemoActivity();
+    scheduleDemoActivity();
+  }, delayMs);
+
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
+
+  return timer;
+}
+
 if (DEMO_ACTIVITY_MS > 0) {
-  setInterval(tickDemoActivity, DEMO_ACTIVITY_MS).unref();
+  scheduleDemoActivity();
 }
 
 httpServer.listen(PORT, () => {
@@ -2989,7 +3006,9 @@ httpServer.listen(PORT, () => {
   console.log('Live updates: socket.io on /socket.io');
   console.log(
     DEMO_ACTIVITY_MS > 0
-      ? `Demo activity: one action every ${Math.round(DEMO_ACTIVITY_MS / 1000)}s while a demo page is open (DEMO_ACTIVITY_MS)`
+      ? `Demo activity: one action every ${Math.round(
+          (DEMO_ACTIVITY_MS * 0.6) / 1000
+        )}-${Math.round((DEMO_ACTIVITY_MS * 1.4) / 1000)}s at random while a demo page is open (DEMO_ACTIVITY_MS)`
       : 'Demo activity: off (DEMO_ACTIVITY_MS=0)'
   );
   console.log(
