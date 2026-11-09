@@ -476,11 +476,17 @@ t('the first copy is put on the page and says it is held, not asked for', () => 
 
   assert.equal(run.created.length, 1, 'a dialog is put on the page');
   assert.match(run.notice.innerHTML, /Reserved - not sent yet/);
-  assert.match(run.notice.innerHTML, /Briarheart Dagger is held for you/);
+  assert.match(run.notice.innerHTML, /class="modal-title-bar"/, 'the heading is a title bar');
+  assert.match(run.notice.innerHTML, /Briarheart Dagger has been reserved, but not sent yet/);
   assert.match(
     run.notice.innerHTML,
-    /Nothing has been asked for until you press <strong>Send requests<\/strong>/,
+    /will not be requested until you submit your request/,
     'the difference between reserved and requested is the whole point of it'
+  );
+  assert.match(
+    run.notice.innerHTML,
+    /class="primary-button" type="button" data-close-hold>Keep looking/,
+    'keep looking is drawn like the send button rather than as a quiet link'
   );
   assert.match(run.notice.innerHTML, /data-send-hold/, 'with the button that does send it');
   assert.match(run.notice.innerHTML, /data-close-hold/, 'and a way to keep looking');
@@ -489,13 +495,13 @@ t('the first copy is put on the page and says it is held, not asked for', () => 
 t('it names the number of copies when there is more than one', () => {
   const run = holdNotice({ copies: 3 });
 
-  assert.match(run.notice.innerHTML, /3 copies of Briarheart Dagger are held/);
-  assert.match(run.notice.innerHTML, /then the copies go back/);
+  assert.match(run.notice.innerHTML, /3 copies of Briarheart Dagger have been reserved/);
+  assert.match(run.notice.innerHTML, /Items will not be requested/);
 });
 
 t('it names the hold the page was built with', () => {
-  assert.match(holdNotice().notice.innerHTML, /ends in 5 minutes/, 'the default');
-  assert.match(holdNotice({ minutes: 12 }).notice.innerHTML, /ends in 12 minutes/);
+  assert.match(holdNotice().notice.innerHTML, /expire in 5 minutes/, 'the default');
+  assert.match(holdNotice({ minutes: 12 }).notice.innerHTML, /expire in 12 minutes/);
 });
 
 t('escape closes it rather than trapping anybody', () => {

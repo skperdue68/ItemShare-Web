@@ -698,6 +698,17 @@ if (listRegion) {
 
     const anchor = captureAnchor();
 
+    // The hold bar sits in the header, outside this region, so a change in what is being
+    // held cannot be shown by swapping the list alone: the header has to be built again.
+    const heldNow = Boolean(next.querySelector('[data-basket-row]'));
+    const heldOnPage = Boolean(document.querySelector('[data-basket]'));
+
+    if (heldNow !== heldOnPage) {
+      rememberAcrossReload(anchor);
+      window.location.reload();
+      return;
+    }
+
     if (next.getAttribute('data-signature') !== listRegion.getAttribute('data-signature')) {
       // A type or an owner appeared or vanished, so the filter controls are stale.
       rememberAcrossReload(anchor);
@@ -1176,12 +1187,12 @@ if (listRegion) {
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="holdTitle">
-        <h2 id="holdTitle">Reserved - not sent yet</h2>
-        <p>${escapeText(what)} ${copies > 1 ? 'are' : 'is'} held for you and off everyone else's list.</p>
-        <p class="muted">Nothing has been asked for until you press <strong>Send requests</strong>. The hold ends in ${minutes} minute${minutes === 1 ? '' : 's'}, then the ${copies > 1 ? 'copies go' : 'copy goes'} back.</p>
+        <h2 id="holdTitle" class="modal-title-bar">Reserved - not sent yet</h2>
+        <p>${escapeText(what)} ${copies > 1 ? 'have' : 'has'} been reserved, but not sent yet.</p>
+        <p class="muted">${copies > 1 ? 'Items' : 'Item'} will not be requested until you submit your request, your reservation will expire in ${minutes} minute${minutes === 1 ? '' : 's'}.</p>
         <div class="modal-actions">
-          <button class="filter-clear" type="button" data-close-hold>Keep looking</button>
-          <button class="primary-button" type="button" data-send-hold>Send requests</button>
+          <button class="primary-button" type="button" data-close-hold>Keep looking</button>
+          <button class="primary-button" type="button" data-send-hold>Send Requests</button>
         </div>
       </div>`;
 
@@ -1212,17 +1223,19 @@ if (listRegion) {
           button.click();
         } else {
           refreshAfterChange();
-          showToast('Press Send requests above the list to ask for it.', 'ok');
+          showToast('Press Send Requests in the header to ask for it.', 'ok');
         }
       }
     });
 
     document.addEventListener('keydown', onKey);
 
-    const send = backdrop.querySelector('[data-send-hold]');
+    // Keep looking is the default answer: pressing Enter on this notice should not send a
+    // request somebody only meant to look at.
+    const keepLooking = backdrop.querySelector('[data-close-hold]');
 
-    if (send) {
-      send.focus();
+    if (keepLooking) {
+      keepLooking.focus();
     }
   }
 
