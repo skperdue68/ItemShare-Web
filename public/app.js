@@ -1274,9 +1274,7 @@ if (listRegion) {
     const label = bar.querySelector('.draft-basket-text strong');
 
     if (label) {
-      label.textContent = `${unique} item${unique === 1 ? '' : 's'} (${copies} cop${
-        copies === 1 ? 'y' : 'ies'
-      }) reserved - not sent`;
+      label.textContent = `${unique} unique item${unique === 1 ? '' : 's'} (${copies} total) reserved`;
     }
 
     bar.dataset.items = String(unique);
