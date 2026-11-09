@@ -2193,26 +2193,7 @@ th .sort-link {
 }
 
 /* Where the addon comes from, in the header: the site has nothing to read without it, so
-   it stays visible on every page instead of living at the bottom of one card. */
-.addon-downloads {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding: 7px 10px 7px 14px;
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 999px;
-  background: rgba(7, 16, 38, 0.55);
-  min-width: 0;
-}
-
-.addon-downloads-lead {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted-strong);
-  white-space: nowrap;
-}
-
+   it stays visible on every page. One button, no ring around it. */
 .addon-download {
   display: inline-flex;
   align-items: center;
@@ -2230,27 +2211,6 @@ th .sort-link {
 .addon-download:hover {
   background: rgba(37, 99, 235, 0.36);
   border-color: rgba(147, 197, 253, 0.8);
-}
-
-.addon-downloads-note {
-  font-size: 11px;
-  color: var(--muted);
-  text-decoration: underline;
-  white-space: nowrap;
-}
-
-/* Room is what the header runs out of first: the label goes, then the link, never the
-   two buttons - those are the only way to get the addon. */
-@media (max-width: 1180px) {
-  .addon-downloads-lead {
-    display: none;
-  }
-}
-
-@media (max-width: 940px) {
-  .addon-downloads-note {
-    display: none;
-  }
 }
 
 .auth-signup summary {

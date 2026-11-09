@@ -423,7 +423,7 @@ check('the addon links live in the header, once, signed out and signed in', () =
     ['demo', demoPage],
     ['upload gate', uploadGate],
   ]) {
-    const copies = (page.match(/class="addon-downloads"/g) || []).length;
+    const copies = (page.match(/class="addon-download"/g) || []).length;
 
     assert(copies === 1, `${name}: expected the addon line once, found ${copies}`);
 
@@ -439,7 +439,7 @@ check('the addon links live in the header, once, signed out and signed in', () =
     // Brand and addon line share one left-hand group, so the line sits in the same place
     // whether or not somebody is signed in and whatever width the account area takes.
     const brandAt = header.indexOf('class="brand"');
-    const addonAt = header.indexOf('class="addon-downloads"');
+    const addonAt = header.indexOf('class="addon-download"');
 
     assert(header.includes('class="top-bar-left"'), `${name}: the left-hand group must exist`);
     assert(brandAt !== -1 && addonAt > brandAt, `${name}: the addon line must sit beside the brand`);
