@@ -1906,6 +1906,9 @@ function showOwnerRequestsCard(html) {
   }
 
   modal.innerHTML = html;
+  // The fragment arrives from the server, which can only write UTC; the reader's own
+  // clock is put on it here, the same way the item list's times are done on load.
+  localiseTimeLabels(modal);
 
   const close = modal.querySelector('[data-owner-requests-close]');
 
@@ -2335,9 +2338,11 @@ function animatePanelHeights(root, heights) {
 //
 // Units are counted the way a person counts: years and months first, anchored on the
 // original date so a month-end does not skip a month, then days, hours, minutes, seconds.
-// A unit that is zero is left out, because zero is not news: "12s", "8m 41s",
-// "1y 4mo 19d 7h 33m 5s". One timer drives every cell on the page, and a cell whose text
-// has not changed is not written to, so a long list costs only the arithmetic per tick.
+// A unit that is zero is left out, because zero is not news: "12s", "08m 41s",
+// "01y 04mo 19d 07h 33m 05s". Every unit that is shown keeps two digits, so a column
+// right-aligns and the older rows never shift sideways as a count goes from one digit to
+// two. One timer drives every cell on the page, and a cell whose text has not changed is
+// not written to, so a long list costs only the arithmetic per tick.
 const RELATIVE_TICK_MS = 1000;
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -2397,17 +2402,23 @@ function relativeUnits(from, to) {
   return { years, months, days, hours, minutes, seconds };
 }
 
-/** "1y 4mo 19d 7h 33m 5s", skipping the units that are zero, and "just now" at zero. */
+/**
+ * "01y 04mo 19d 07h 33m 05s", skipping the units that are zero, and "just now" at zero.
+ *
+ * Each unit is two digits wide for the same reason a clock is: the countdown is read as a
+ * column, and "1m" growing to "10m" must not push the rest of the row along with it.
+ */
 function relativeText(from, to) {
   const units = relativeUnits(from, to);
   const parts = [];
+  const pad = (value) => String(value).padStart(2, '0');
 
-  if (units.years) parts.push(`${units.years}y`);
-  if (units.months) parts.push(`${units.months}mo`);
-  if (units.days) parts.push(`${units.days}d`);
-  if (units.hours) parts.push(`${units.hours}h`);
-  if (units.minutes) parts.push(`${units.minutes}m`);
-  if (units.seconds) parts.push(`${units.seconds}s`);
+  if (units.years) parts.push(`${pad(units.years)}y`);
+  if (units.months) parts.push(`${pad(units.months)}mo`);
+  if (units.days) parts.push(`${pad(units.days)}d`);
+  if (units.hours) parts.push(`${pad(units.hours)}h`);
+  if (units.minutes) parts.push(`${pad(units.minutes)}m`);
+  if (units.seconds) parts.push(`${pad(units.seconds)}s`);
 
   return parts.length > 0 ? parts.join(' ') : 'just now';
 }
@@ -2469,7 +2480,12 @@ function localiseTimeLabels(root) {
       minute: '2-digit',
     });
     if (element.textContent !== text) element.textContent = text;
-    const title = `Kept in UTC as ${iso.replace('T', ' ').replace('Z', '').trim()} UTC`;
+    // A note the server wrote about the moment (how many asks stand behind the row) is
+    // carried in an attribute so rewriting the title does not throw it away.
+    const note = element.getAttribute('data-local-note');
+    const title = `Kept in UTC as ${iso.replace('T', ' ').replace('Z', '').trim()} UTC${
+      note ? ` - ${note}` : ''
+    }`;
     if (element.title !== title) element.title = title;
   });
 }
