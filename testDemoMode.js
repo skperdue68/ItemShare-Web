@@ -34,7 +34,7 @@ import {
   pickScenario,
 } from './lib/demoActivity.js';
 import { DEMO_VIEWER_TTL_MS, activeDemoViewers, noteViewer } from './lib/demoPresence.js';
-import { renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
+import { emailLine, renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
 
 let passed = 0;
 let failed = 0;
@@ -566,6 +566,32 @@ check('the heartbeat a demo page sends is not one of the refusals', () => {
   assert(
     !demoRefusal('POST', '/demo/heartbeat'),
     'the page must be able to say it is still open'
+  );
+});
+
+check('the demo shows its own address as a verified sign-in, like anybody else', () => {
+  const demo = emailLine({ id: 42, username: 'Demo', isDemo: true, email: '', emailVerified: false });
+
+  assertMatch(demo, /demo@example\.com/, 'the demo address must be shown');
+  assertMatch(demo, /\(verified\)/, 'it must read as verified, the way an ordinary sign-in does');
+  assert(
+    !demo.includes('not shared with this site'),
+    'the demo must not look like a provider that withheld its address'
+  );
+
+  const provider = emailLine({
+    id: 5,
+    username: 'someone',
+    email: 'them@example.com',
+    emailVerified: true,
+  });
+  assertMatch(provider, /\(verified\)/, 'an ordinary verified address still reads verified');
+
+  const quiet = emailLine({ id: 6, username: 'quiet', email: '', emailVerified: false });
+  assertMatch(
+    quiet,
+    /not shared with this site/,
+    'a provider that shares no address must still say so'
   );
 });
 
