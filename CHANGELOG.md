@@ -37,6 +37,10 @@ landed on `main`.
 
 ### Changed
 
+- **The two how-to screenshots** are shown at the size they were captured at, centred in the
+  column, rather than stretched to its full width: the narrow right-click menu stays as sharp
+  as it was captured instead of being blown up, and a picture wider than the column is still
+  held to it rather than making the page scroll sideways.
 - **How to use ItemShare** is two sections now: *Been given a guild code?* for anybody who
   was handed one - sign in, choose **Use Guild Code** at the top of the next screen, and that
   guild's offerings are there, with no addon and no file - and *Adding your own items* for
