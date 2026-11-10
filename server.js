@@ -18,6 +18,9 @@ import express from 'express';
 import session from 'express-session';
 import multer from 'multer';
 import dotenv from 'dotenv';
+import { readDiscordBotConfig, createDiscordBotRouter } from './lib/discord-bot-api.js';
+import { createDiscordBotStore } from './lib/discord-bot-store.js';
+import { createGuildSyncReader } from './lib/discord-bot-guildsync.js';
 
 import { extractShareData } from './lib/savedVars.js';
 import { describeConnectionFailure, openDatabase, readConfig } from './lib/database.js';
@@ -188,6 +191,25 @@ const HOLD_MINUTES = Math.min(
 const sessionStore = new MariaDbSessionStore({ withConnection: withSiteDatabase, ttlMs: SESSION_TTL_MS });
 
 const app = express();
+// Bot authentication is independent of browser sessions and the demo-cookie database.
+// Disabled unless explicitly enabled on the experimental test deployment.
+const discordBotConfig = readDiscordBotConfig();
+if (discordBotConfig.enabled) {
+  const identities = createGuildSyncReader({scope:discordBotConfig.scope});
+  const store = createDiscordBotStore({
+    withDatabase:withSiteDatabase,scope:discordBotConfig.scope,holdMinutes:HOLD_MINUTES,
+    resolveConfirmedAccounts:identities.confirmedAccounts,
+    recipientClaimAllowed:identities.claimAllowed,
+  });
+  app.use('/api/discord/v1',createDiscordBotRouter({
+    config:discordBotConfig,store,logger:warnLine,
+    onSubmitted:async({user,submitted,contacts})=>{
+      // The request is committed before mail. Always update browsers, even if mail fails.
+      notifyItemsChanged('request',`Discord member submitted an ItemShare request`);
+      await emailOwners({user,submitted,contacts:new Map(contacts)});
+    },
+  }));
+}
 app.use(express.urlencoded({ extended: false }));
 
 // One instance serves both the pages and the socket handshake, so a socket can tell
@@ -1122,7 +1144,11 @@ app.post('/requests', async (req, res) => {
           await getBrowsingAccount(connection, user.id)
         );
 
-        return createRequest(connection, {
+        // Serialize availability checks with Discord requests for the same item.
+        await connection.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+        await connection.beginTransaction();
+        try {
+        const requested = await createRequest(connection, {
           userId: user.id,
           requesterAccounts: browsingAccount ? [browsingAccount] : accountNames,
           ownAccounts: accountNames,
@@ -1134,6 +1160,12 @@ app.post('/requests', async (req, res) => {
           // An account without matching recorded guilds must upload before reserving.
           restrictToGuilds: true,
         });
+        await connection.commit();
+        return requested;
+        } catch (error) {
+          await connection.rollback();
+          throw error;
+        }
     });
 
     // Everyone looking at that stack needs the new count straight away.

@@ -19,6 +19,8 @@
     "test:server-identity": "node testServerIdentity.js",
     "test:demo-mode": "node testDemoMode.js",
     "test:guild-codes": "node testGuildCodes.js",
+    "test:discord-api": "node --test testDiscordBotApi.js testDiscordBotGuildSync.js",
+    "test:discord-store": "node testDiscordBotStore.js",
     "requests:reopen": "node reopenRequests.js",
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js"
