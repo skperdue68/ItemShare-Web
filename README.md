@@ -456,8 +456,10 @@ answer different questions and one order cannot serve all of them. `Item`, `Stor
 on at the same time, joining the end of the queue. The columns apply in the order the
 headings were pressed, not the order they sit on screen, so *Mail to* then *Asked* means
 each mailbox in turn with its oldest ask first inside it. An active heading carries its
-place in that queue (`2\u25bc`), because otherwise a second column looks idle while the
-first decides most of the table. A row with nothing in the column - no recorded place, say
+place in that queue as a small superscript before the arrow - `\u00b2\u25bc` reads as the
+second sort, biggest first - and the numbers renumber when a column in front of them is
+switched off, so a queue never shows `2` with nothing above it. Without that number a
+second column looks idle while the first decides most of the table. A row with nothing in the column - no recorded place, say
 - sinks to the bottom whichever way that column runs, rather than floating up on a
 descending pass, and the queue is remembered in `itemshare_owner_sort`, never in the
 address bar. `Requested` and `Amount Sent` do not sort: they describe what you have

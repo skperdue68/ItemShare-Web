@@ -63,6 +63,20 @@ export function cycleOrder(order, field) {
   return order.filter((entry, index) => index !== at);
 }
 
+/**
+ * Where a column stands in the queue: 1 for the one that decides, 2 for the one that only
+ * breaks its ties, and so on. Null when the column is off.
+ *
+ * Read from the queue every time the headings are painted rather than kept on the heading,
+ * which is what makes removing a column renumber the ones behind it: switch off the first
+ * sort and the second is no longer second, with nothing in front of it.
+ */
+export function queuePlace(order, field) {
+  const at = (order || []).findIndex((entry) => entry.field === field);
+
+  return at === -1 ? null : { rank: at + 1, dir: order[at].dir };
+}
+
 function text(value) {
   return String(value === undefined || value === null ? '' : value).trim();
 }
@@ -138,31 +152,47 @@ if (typeof document !== 'undefined') {
   }
 
   // The badge is the whole point of a queued order: without it a second column looks like
-  // it did nothing, because the first column still decides most of the table.
+  // it did nothing, because the first still decides most of the table. The rank is drawn as
+  // a superscript before the arrow, the way a footnote to it would be written, so "2 then
+  // a down arrow" reads as the second sort, biggest first.
   function paintHeadings(card, order) {
     for (const button of card.querySelectorAll('[data-request-sort]')) {
       const field = button.dataset.requestSort;
-      const at = order.findIndex((entry) => entry.field === field);
-      const entry = at === -1 ? null : order[at];
+      const place = queuePlace(order, field);
       const badge = button.querySelector('[data-sort-queue]');
       const heading = button.closest('th');
 
-      button.dataset.dir = entry ? entry.dir : '';
-      button.classList.toggle('active', Boolean(entry));
-      button.setAttribute('aria-label', entry ? `${QUEUE_LABEL[field] || field}, sorted ${
-        entry.dir === 'asc' ? 'ascending' : 'descending'
-      }, ${at + 1} in the order` : `${QUEUE_LABEL[field] || field}, not sorted`);
+      button.dataset.dir = place ? place.dir : '';
+      button.classList.toggle('active', Boolean(place));
+      button.setAttribute(
+        'aria-label',
+        place
+          ? `${QUEUE_LABEL[field] || field}, sorted ${
+              place.dir === 'asc' ? 'ascending' : 'descending'
+            }, ${place.rank} in the sort order`
+          : `${QUEUE_LABEL[field] || field}, not sorted`
+      );
 
       if (heading) {
         heading.setAttribute(
           'aria-sort',
-          entry ? (entry.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+          place ? (place.dir === 'asc' ? 'ascending' : 'descending') : 'none'
         );
       }
 
       if (badge) {
-        badge.textContent = entry ? `${at + 1}${entry.dir === 'asc' ? '\u25b2' : '\u25bc'}` : '';
-        badge.hidden = !entry;
+        // Rebuilt rather than edited: a heading that just lost its turn has to come back as
+        // nothing, not as a stale number.
+        badge.replaceChildren();
+
+        if (place) {
+          const rank = document.createElement('sup');
+          rank.className = 'sort-rank';
+          rank.textContent = String(place.rank);
+          badge.append(rank, place.dir === 'asc' ? '\u25b2' : '\u25bc');
+        }
+
+        badge.hidden = !place;
       }
     }
   }

@@ -1434,10 +1434,22 @@ th .sort-link.active {
    its place in that queue: 2▼ reads as "second thing asked for, biggest first". Small and
    muted, because it is a footnote to the heading rather than part of its name. */
 th .sort-queue {
-  margin-left: 3px;
-  font-size: 10px;
+  margin-left: 4px;
+  font-size: 11px;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--muted-strong);
+}
+
+/* The queue position, raised beside the arrow the way a footnote marker is: small enough
+   that the heading still reads as a word, big enough to count. /requests-sort.js rebuilds
+   it on every press, so a column whose predecessor is switched off is renumbered to 1
+   instead of sitting there labelled 2 with nothing in front of it. */
+th .sort-queue .sort-rank {
+  font-size: 9px;
+  line-height: 0;
+  vertical-align: super;
+  font-weight: 700;
 }
 
 th .sort-queue[hidden] {

@@ -14,6 +14,7 @@ import {
   cycleOrder,
   formatOrder,
   parseOrder,
+  queuePlace,
   sortRows,
 } from './public/requests-sort.js';
 
@@ -105,6 +106,50 @@ await t('a column asked for later joins the end, so it only breaks ties', () => 
     { field: 'name', dir: 'asc' },
     { field: 'stored', dir: 'asc' },
   ]);
+});
+
+await t('the rank of a column is its place in the queue', () => {
+  const order = [
+    { field: 'name', dir: 'asc' },
+    { field: 'mail', dir: 'desc' },
+    { field: 'asked', dir: 'asc' },
+  ];
+
+  assert.deepEqual(queuePlace(order, 'name'), { rank: 1, dir: 'asc' });
+  assert.deepEqual(queuePlace(order, 'mail'), { rank: 2, dir: 'desc' });
+  assert.deepEqual(queuePlace(order, 'asked'), { rank: 3, dir: 'asc' });
+  assert.equal(queuePlace(order, 'stored'), null, 'a column that is off has no rank');
+  assert.equal(queuePlace([], 'name'), null);
+});
+
+await t('removing an earlier sort renumbers the ones behind it', () => {
+  const order = [
+    { field: 'name', dir: 'asc' },
+    { field: 'mail', dir: 'desc' },
+    { field: 'asked', dir: 'asc' },
+  ];
+
+  // Pressing the first column twice takes it off: ascending, descending, then nothing.
+  const withoutName = cycleOrder(cycleOrder(order, 'name'), 'name');
+
+  assert.deepEqual(withoutName, [
+    { field: 'mail', dir: 'desc' },
+    { field: 'asked', dir: 'asc' },
+  ]);
+  assert.equal(queuePlace(withoutName, 'name'), null);
+  assert.deepEqual(queuePlace(withoutName, 'mail'), { rank: 1, dir: 'desc' }, 'second becomes first');
+  assert.deepEqual(queuePlace(withoutName, 'asked'), { rank: 2, dir: 'asc' }, 'third becomes second');
+});
+
+await t('reversing a sort keeps its rank, so a direction change does not reorder the queue', () => {
+  const order = [
+    { field: 'mail', dir: 'asc' },
+    { field: 'asked', dir: 'desc' },
+  ];
+  const reversed = cycleOrder(order, 'mail');
+
+  assert.deepEqual(queuePlace(reversed, 'mail'), { rank: 1, dir: 'desc' });
+  assert.deepEqual(queuePlace(reversed, 'asked'), { rank: 2, dir: 'desc' });
 });
 
 await t('a field that is not sortable leaves the queue alone', () => {
