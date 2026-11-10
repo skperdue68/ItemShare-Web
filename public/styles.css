@@ -2096,6 +2096,117 @@ th .sort-link {
   box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.35);
 }
 
+/* Signed-in header: the way in for somebody who was given a code, beside the avatar
+   rather than inside its menu, because the person who needs it has just been invited and
+   does not yet know their way around. It only exists while signed in - a code is written
+   to an account, so there is nothing to open it on before that. */
+.auth-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.code-link {
+  padding: 8px 13px;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.16);
+  color: #dbeafe;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.code-link:hover,
+.code-link:focus-visible {
+  border-color: rgba(147, 197, 253, 0.75);
+  background: rgba(37, 99, 235, 0.3);
+  color: #ffffff;
+}
+
+/* On a phone the header has room for the avatar and not much else; the menu entry of the
+   same name is still there, so nothing is lost. */
+@media (max-width: 720px) {
+  .code-link {
+    display: none;
+  }
+}
+
+/* Guild codes. The form is one choice and one button, so they share a row until the screen
+   is narrow enough that the choice needs the whole line. */
+.guild-page .card + .card {
+  margin-top: 18px;
+}
+
+.guild-code-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.guild-code-form .auth-field {
+  flex: 1 1 280px;
+}
+
+.guild-code-form select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: rgba(8, 18, 42, 0.55);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+/* A code is read out loud and typed by hand, so it is set like one: wide letter spacing, a
+   monospaced face, and the halves pulled apart by the dash the server put in it. */
+.code-value {
+  display: inline-block;
+  padding: 4px 10px;
+  font-family: Consolas, monospace;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #dbeafe;
+}
+
+.code-made .code-value {
+  margin: 6px 0 10px;
+}
+
+.code-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.code-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(8, 18, 42, 0.44);
+}
+
+.code-guild {
+  flex: 1 1 200px;
+  font-size: 13px;
+  color: var(--muted-strong);
+}
+
+.code-uses {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* The eye on a password box. It sits inside the field's right edge, out of the way of the
    text, and the picture swaps on `aria-pressed` so the state is never carried by the icon
    alone. The button is transparent because it belongs to the box, not next to it. */

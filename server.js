@@ -46,6 +46,10 @@ import {
   listAccountServers,
   getViewerFacets,
   getViewerGuilds,
+  createGuildCode,
+  findOwnGuild,
+  listGuildCodes,
+  redeemGuildCode,
   getBrowsingAccount,
   issueRequestEmailToken,
   linkAccountToUser,
@@ -89,6 +93,7 @@ import { emailConfig, renderRequestEmail, renderStatusEmail, sendEmail } from '.
 import { renderPasswordResetEmail } from './lib/passwordResetEmail.js';
 import { getItemTip } from './lib/uesp.js';
 import { buildProviders } from './lib/providers.js';
+import { isGuildCode, normalizeGuildCode } from './lib/guildCodes.js';
 import { normalizeEsoAccountName } from './lib/accountNames.js';
 import {
   emailLooksValid,
@@ -109,6 +114,8 @@ import {
   renderMessagePage,
   renderForgotPasswordPage,
   renderResetPasswordPage,
+  renderGuildCodesPage,
+  renderJoinGuildPage,
   renderOwnerRequestsCard,
   renderOwnerRequestsPage,
   renderPage,
@@ -1318,6 +1325,318 @@ function wantsFragment(req) {
     String(req.query.fragment || '') === '1'
   );
 }
+
+// ---------------------------------------------------------------- guild codes
+// A member hands out a code for one guild; somebody else types it and is given that
+// guild. The membership is written to the account they browse as and marked with the code
+// it came from, so the next upload - which replaces what the game reported - leaves it
+// alone. Nothing is granted from the form: the guild is looked up among the person's own
+// guilds, and the code is looked up in the table, before anything is written.
+
+function signedOutGuildPage(req, res) {
+  sendPage(req, res, 401, {
+    heading: 'Sign in to use a guild code',
+    message: 'A code decides which guilds somebody may see, so the site has to know who is asking.',
+    details: 'Sign in from the header, then open this page again.',
+    tone: 'notice',
+  });
+}
+
+/** The guild a create form named, or null when the value is not that shape. */
+function readGuildChoice(value) {
+  const parts = String(value || '').split('|');
+
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [guildId, platform, worldName] = parts.map((part) => {
+    try {
+      return decodeURIComponent(part);
+    } catch {
+      return '';
+    }
+  });
+
+  const guild = Number(guildId);
+  const onPlatform = Number(platform);
+
+  if (!Number.isFinite(guild) || guild <= 0 || !Number.isFinite(onPlatform) || onPlatform <= 0) {
+    return null;
+  }
+
+  if (!String(worldName || '').trim()) {
+    return null;
+  }
+
+  return { guildId: guild, platform: onPlatform, worldName: String(worldName).slice(0, 64) };
+}
+
+/** The accounts and the guilds they belong to, which is what both pages are built from. */
+async function guildsOf(connection, userId) {
+  const accounts = await getViewerAccounts(connection, userId);
+
+  return {
+    accounts,
+    guilds: await getViewerGuilds(
+      connection,
+      accounts.map((row) => row.eso_account_name)
+    ),
+  };
+}
+
+app.get('/guilds/codes', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    signedOutGuildPage(req, res);
+    return;
+  }
+
+  try {
+    const data = await withDatabase(async (connection) => {
+      const { accounts, guilds } = await guildsOf(connection, user.id);
+
+      return { accounts, guilds, codes: await listGuildCodes(connection, user.id) };
+    });
+
+    const justMade = normalizeGuildCode(req.query && req.query.made);
+
+    res.type('html').send(
+      renderGuildCodesPage({
+        ...data,
+        made: isGuildCode(justMade) ? justMade : '',
+        user,
+        providers: enabledProviders,
+      })
+    );
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'Your codes could not be loaded',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/guilds/codes', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    signedOutGuildPage(req, res);
+    return;
+  }
+
+  const chosen = readGuildChoice(req.body && req.body.guild);
+
+  if (!chosen) {
+    sendPage(req, res, 400, {
+      heading: 'Choose a guild for the code',
+      message: 'A code is for one guild, on one server.',
+      details: 'Pick one of your guilds from the list, then press Create code.',
+      tone: 'error',
+    });
+    return;
+  }
+
+  try {
+    const made = await withDatabase(async (connection) => {
+      const mine = await findOwnGuild(connection, user.id, chosen);
+
+      if (!mine) {
+        return null;
+      }
+
+      return createGuildCode(connection, { userId: user.id, guild: mine });
+    });
+
+    if (!made) {
+      sendPage(req, res, 403, {
+        heading: 'That guild is not one of yours',
+        message: 'A code can only be made for a guild one of your ESO accounts belongs to.',
+        details: 'Nothing was changed. If you have just joined in game, upload a saved variables file and the guild will be there.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    // Redirected rather than answered directly, so a refresh of the page does not make a
+    // second code. The code is carried in the address only long enough to be shown once.
+    res.redirect(303, `/guilds/codes?made=${encodeURIComponent(made.code)}`);
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That code could not be made',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.get('/guilds/join', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    signedOutGuildPage(req, res);
+    return;
+  }
+
+  try {
+    const data = await withDatabase(async (connection) => ({
+      accounts: await getViewerAccounts(connection, user.id),
+      servers: await listAccountServers(connection),
+    }));
+
+    res.type('html').send(
+      renderJoinGuildPage({ user, providers: enabledProviders, ...data })
+    );
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That page could not be loaded',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
+
+app.post('/guilds/join', async (req, res) => {
+  const user = req.session ? req.session.user || null : null;
+
+  if (!user) {
+    signedOutGuildPage(req, res);
+    return;
+  }
+
+  const typed = normalizeGuildCode(req.body && req.body.code);
+
+  const askAgain = (status, notice) => {
+    res.status(status).type('html').send(
+      renderJoinGuildPage({
+        notice,
+        code: typed,
+        user,
+        providers: enabledProviders,
+      })
+    );
+  };
+
+  if (!isGuildCode(typed)) {
+    askAgain(400, 'A code is eight letters and numbers, like K7QM-3XPD. Dashes and spaces do not matter.');
+    return;
+  }
+
+  // The account name is typed here only when the site does not know one yet. Asking at the
+  // moment the code is entered is better than a page that says "attach an account first":
+  // the code is already in hand, and what was typed is not thrown away.
+  const typedAccount = normalizeEsoAccountName(req.body && req.body.accountName);
+
+  try {
+    const outcome = await withDatabase(async (connection) => {
+      const known = await getViewerAccounts(connection, user.id);
+      const accounts = known.map((row) => row.eso_account_name);
+
+      if (accounts.length === 0) {
+        if (!typedAccount) {
+          return { status: 'need-account', servers: await listAccountServers(connection) };
+        }
+
+        const where = readAccountServer(req.body);
+
+        if (!where) {
+          return { status: 'need-server', servers: await listAccountServers(connection) };
+        }
+
+        // Linking is what an upload does too, and it refuses an account already attached to
+        // somebody else rather than moving it - the same answer the accounts dialog gives.
+        const linked = await linkAccountToUser(connection, {
+          accountName: typedAccount,
+          userId: user.id,
+          ...where,
+        });
+
+        if (linked === 'conflict') {
+          return { status: 'conflict', accountName: typedAccount };
+        }
+
+        req.session.accountNames = null;
+        accounts.push(typedAccount);
+      }
+
+      return redeemGuildCode(connection, {
+        userId: user.id,
+        code: typed,
+        accounts,
+        accountName: typedAccount || (await getBrowsingAccount(connection, user.id)),
+      });
+    });
+
+    if (outcome.status === 'joined') {
+      notifyItemsChanged('guild', `${user.username || 'Someone'} joined a guild with a code`);
+
+      sendPage(req, res, 200, {
+        heading: `You are in ${outcome.guildName || 'that guild'}`,
+        message: `${outcome.accountName} now belongs to ${
+          outcome.guildName || 'that guild'
+        }${outcome.worldName ? ` on ${outcome.worldName}` : ''}, so what it shares is in your list.`,
+        details:
+          'The next upload keeps it: a membership that came from a code is not replaced by what your saved variables file reports.',
+        tone: 'notice',
+      });
+      return;
+    }
+
+    if (outcome.status === 'already') {
+      sendPage(req, res, 200, {
+        heading: `You are already in ${outcome.guildName || 'that guild'}`,
+        message: 'One of your accounts already belongs to it, so its items are already in your list.',
+        details: 'Nothing was changed.',
+        tone: 'notice',
+      });
+      return;
+    }
+
+    // No account on file: the code is kept and the page asks whose account it is, in a box
+    // over the top of it, rather than sending the person away to find one.
+    if (outcome.status === 'need-account' || outcome.status === 'need-server') {
+      res.status(400).type('html').send(
+        renderJoinGuildPage({
+          needAccount: true,
+          servers: outcome.servers,
+          code: typed,
+          user,
+          providers: enabledProviders,
+          notice:
+            outcome.status === 'need-server'
+              ? 'Choose the platform and server that account plays on.'
+              : '',
+        })
+      );
+      return;
+    }
+
+    if (outcome.status === 'conflict') {
+      sendPage(req, res, 409, {
+        heading: 'That ESO account is already taken',
+        message: `${outcome.accountName} is attached to another sign-in.`,
+        details:
+          'If it is yours and you cannot get into that sign-in, the site owner can move it for you. Nothing was changed.',
+        tone: 'error',
+      });
+      return;
+    }
+
+    askAgain(404, 'That code is not one this site made. Check it with the person who invited you.');
+  } catch (error) {
+    sendPage(req, res, 500, {
+      heading: 'That code could not be used',
+      message: 'Nothing was changed.',
+      details: error.message,
+      tone: 'error',
+    });
+  }
+});
 
 app.get('/owner/requests', async (req, res) => {
   const user = req.session ? req.session.user || null : null;
