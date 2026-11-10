@@ -46,6 +46,11 @@ landed on `main`.
 
 ### Changed
 
+- **An upload no longer fails because one ESO account in the file belongs to somebody
+  else.** That account is left exactly as it was and the rest of the file is stored, so a
+  file copied from another player, or a file on a shared computer, still updates the
+  accounts that are yours. The upload message names what was updated and what was not, and
+  why. A file holding nothing but somebody else's account stores nothing and says so.
 - **How to use ItemShare** is two sections now: *Been given a guild code?* for anybody who
   was handed one - sign in, choose **Use Guild Code** at the top of the next screen, and that
   guild's offerings are there, with no addon and no file - and *Adding your own items* for
