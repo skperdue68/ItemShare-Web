@@ -458,12 +458,12 @@ column - no trait, no recorded location - sink to the bottom whichever way it ru
 queue is remembered in the `itemshare_sort` cookie and the grouping in `itemshare_group`,
 so both survive a reload without ever appearing in the URL.
 
-Under the tabs and above the table, **Search this list** narrows what is already on the
-page, and a cross at the end of the box empties it and puts the list back. It applies about
-a second after the last keystroke rather than on every letter, so a word is finished before
-the table redraws around it. Request and Offering each keep their own word: the box shows
-the term for the tab in front of you, a word narrows only that tab's table, and switching
-tabs switches both. Matching is partial and ignores case, and looks at everything a row says:
+On the row above the table, beside **Grouped by type**, **Search this list** narrows what is
+already on the page, and a cross at the end of the box empties it and puts the list back. It
+applies about a second after the last keystroke rather than on every letter, so a word is
+finished before the table redraws around it. Request and Offering each have their own box and
+their own word: typing on one leaves the other list untouched, and switching tabs brings
+back that tab's word with the rows it narrows. Matching is partial and ignores case, and looks at everything a row says:
 the name, its type and trait, its enchantment, style and set, the storage place, and who
 offers it. The type headings are labels for the rows rather than entries of their own, so
 they take no part in the matching: a heading stays while any row under it matches and goes

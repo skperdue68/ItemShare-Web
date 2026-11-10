@@ -247,9 +247,9 @@ t('a standing offer has no location to be found by', () => {
 t('the heading row holds a search box with a cross to clear it', () => {
   const html = listSearchBox();
 
-  assert.match(html, /<input class="list-search-input" id="listSearch" type="search"/);
+  assert.match(html, /<input class="list-search-input" id="listSearch-request" type="search"/);
   assert.match(html, /placeholder="Search this list"/);
-  assert.match(html, /data-list-search>/);
+  assert.match(html, /data-list-search="request">/);
   assert.match(html, /aria-label="Search this list"/);
 });
 
@@ -266,27 +266,30 @@ t('the search box is not part of any form, so it cannot be submitted', () => {
   assert.doesNotMatch(listSearchBox(), /name="/, 'nothing to post');
 });
 
-t('the search sits under the tabs and above the table it narrows', () => {
+t('the search shares the row with the grouping switch', () => {
   const region = renderListRegion({
     user: { id: 1, username: 'eva', provider: 'password' },
     accounts: [{ accountName: '@eva', guildCount: 1, guilds: [{}] }],
     sharedItems: [],
-    requestItems: [],
+    requestItems: [item(2, 'Ancient Silk', 'Apparel', { account_name: '@sender2' })],
     alwaysShare: [],
     requestOffers: [],
-    facets: { types: [], owners: [] },
+    facets: { types: [{ name: 'Apparel', total: 1 }], owners: ['@sender2'] },
     filters: {},
     requests: [],
     basketRows: [],
   });
 
-  const tabs = region.indexOf('class="tabs"');
+  const panel = region.indexOf('id="panelRequest"');
+  const tools = region.indexOf('<div class="list-tools">');
   const search = region.indexOf('class="list-search"');
-  const table = region.indexOf('id="panelRequest"');
+  const toggle = region.indexOf('data-group-toggle');
 
-  assert.ok(tabs > -1 && search > -1 && table > -1, 'the tabs, the box and the table are all drawn');
-  assert.ok(tabs < search, 'the box is no longer up beside the tabs');
-  assert.ok(search < table, 'it is the last thing before the list');
+  assert.ok(panel > -1 && tools > -1 && search > -1 && toggle > -1, 'all four are drawn');
+  assert.ok(panel < tools, 'the row belongs to the list it narrows');
+  assert.ok(tools < search && search < toggle, 'the box and the switch share the row, box first');
+  assert.equal(region.indexOf('class="list-search"', search + 1), -1, 'one box for the tab');
+  assert.match(region, /id="listSearch-request"/);
 });
 
 // ------------------------------------------------- the count while searching
@@ -304,7 +307,10 @@ function appBetween(start, end) {
   return appSource.slice(from, to);
 }
 
-const searchSource = appBetween('  function applyListSearch()', '  // The search belongs');
+const searchSource = appBetween(
+  '  function applyListSearch(tab = activeTab)',
+  '  function updateSearchClear(tab)'
+);
 
 function headingRow(count) {
   const countElement = { textContent: `(${count})` };
@@ -394,7 +400,10 @@ t('a group with nothing to show loses its heading', () => {
 // the time - one is only hidden - so a pass that walked every body would filter rows its
 // word was never meant for.
 function panelOf(rows) {
-  return { querySelectorAll: (selector) => (selector === 'table tbody' ? [{ rows }] : []) };
+  return {
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector === 'table tbody' ? [{ rows }] : []),
+  };
 }
 
 function runTabSearch(tab, terms, panels) {

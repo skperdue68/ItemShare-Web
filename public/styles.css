@@ -1183,22 +1183,19 @@ a.primary-button {
   margin-left: 0;
 }
 
-/* The search sits on its own line between the tabs and the table, across the width of the
-   card: it narrows every list under it rather than one column of one table, so it is not
-   squeezed into a corner beside the tabs. Dark blue like the other fields, white text,
+/* The search shares the line with the grouping switch: the box narrows the one table it is
+   drawn over, and the switch changes how that table is cut up, so the two belong together.
+   The box takes whatever room the switch leaves and keeps its blue, its white text and its
    rounded corners. */
 .list-search {
   position: relative;
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  margin: 0 0 12px;
+  min-width: 0;
+  margin: 0;
 }
 
-/* Your requests is a log rather than a list of things on offer, so the search - and the
-   space it takes beside the tabs - goes with it. */
-.list-search[hidden] {
-  display: none;
-}
 
 .list-search-input {
   width: 100%;
@@ -2829,7 +2826,9 @@ th.action-cell {
    headings, or flat in whatever order the columns were asked for. */
 .list-tools {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
   margin: 0 0 10px;
 }
 
