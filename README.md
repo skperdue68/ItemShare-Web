@@ -503,7 +503,7 @@ chip on a row underneath; clicking a chip removes just that value. **Added** is 
 at a time - the last day, the last 7 days, the last 30 days, or **LAST CHANCE** - and it is
 the same menu as the other two rather than a dropdown. Filters are ordinary query
 parameters, repeated once per value (`/?type=Weapon&type=Armor&owner=@Name&added=7`), so a
-filtered view can be bookmarked and works with scripts off. **Reset** takes all of them
+filtered view can be bookmarked and works with scripts off. **RESET** takes all of them
 off.
 
 Expiry belongs to the owner's file. `expireDays` in the account scope - `["expireDays"] =

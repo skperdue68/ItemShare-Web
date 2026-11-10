@@ -23,4 +23,4 @@ landed on `main`.
   Offered by instead of a native dropdown.
 - The filter card no longer has its own *Item name* box. Each list's **Search this list**
   field does that job, so the address bar carries no `q` parameter any more.
-- **Clear filters** is now **Reset**.
+- **Clear filters** is now **RESET**.

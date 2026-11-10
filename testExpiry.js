@@ -166,7 +166,7 @@ t('a single choice has no count badge', () => {
 t('the filter card has no item name box and says Reset', () => {
   assert.doesNotMatch(bar, /name="q"/);
   assert.doesNotMatch(bar, /Item name/);
-  assert.match(bar, />Reset</);
+  assert.match(bar, />RESET</);
   assert.doesNotMatch(bar, /Clear filters/);
 });
 
