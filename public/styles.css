@@ -1183,34 +1183,30 @@ a.primary-button {
   margin-left: 0;
 }
 
-/* The search above the tabs narrows the rows already on the page instead of fetching a
-   new list, so it answers while it is being typed. It sits at the left of the centred
-   heading row, where the list's own controls live, and is one field plus one cross. */
+/* The search shares the line with the grouping switch: the box narrows the one table it is
+   drawn over, and the switch changes how that table is cut up, so the two belong together.
+   The box takes whatever room the switch leaves and keeps its blue, its white text and its
+   rounded corners. */
 .list-search {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  position: relative;
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  width: 200px;
+  min-width: 0;
+  margin: 0;
 }
 
-/* Your requests is a log rather than a list of things on offer, so the search - and the
-   space it takes beside the tabs - goes with it. */
-.list-search[hidden] {
-  display: none;
-}
 
 .list-search-input {
   width: 100%;
-  padding: 6px 26px 6px 10px;
+  height: 38px;
+  padding: 0 36px 0 14px;
   border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  background: rgba(6, 14, 32, 0.55);
-  color: #e5ecff;
+  border-radius: 12px;
+  background: rgba(7, 16, 38, 0.72);
+  color: #f8fafc;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .list-search-input::placeholder {
@@ -1232,13 +1228,13 @@ a.primary-button {
 
 .list-search-clear {
   position: absolute;
-  right: 6px;
+  right: 10px;
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--muted-strong);
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
   cursor: pointer;
 }
@@ -1257,21 +1253,6 @@ a.primary-button {
   display: none;
 }
 
-/* Narrow screens have no room beside the heading, so the field moves above the tabs and
-   takes the width instead of squeezing them. */
-@media (max-width: 760px) {
-  .list-head {
-    flex-wrap: wrap;
-  }
-
-  .list-search {
-    position: static;
-    order: 2;
-    transform: none;
-    width: 100%;
-    margin-top: 10px;
-  }
-}
 
 /* "12 different items shared by other members of your guilds": the answer to
    "how much is there for me here?", above the tabs and below the basket clock. */
@@ -2845,7 +2826,9 @@ th.action-cell {
    headings, or flat in whatever order the columns were asked for. */
 .list-tools {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
   margin: 0 0 10px;
 }
 

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 
 import { SORT_FIELDS, parseSortOrder, queuePlace } from './lib/sortQueue.js';
 import { orderFor } from './lib/store.js';
-import { inventoryTable, listSearchBox, offerTable } from './lib/views.js';
+import { inventoryTable, listSearchBox, offerTable, renderListRegion } from './lib/views.js';
 
 let total = 0;
 let failures = 0;
@@ -247,9 +247,9 @@ t('a standing offer has no location to be found by', () => {
 t('the heading row holds a search box with a cross to clear it', () => {
   const html = listSearchBox();
 
-  assert.match(html, /<input class="list-search-input" id="listSearch" type="search"/);
+  assert.match(html, /<input class="list-search-input" id="listSearch-request" type="search"/);
   assert.match(html, /placeholder="Search this list"/);
-  assert.match(html, /data-list-search>/);
+  assert.match(html, /data-list-search="request">/);
   assert.match(html, /aria-label="Search this list"/);
 });
 
@@ -264,6 +264,32 @@ t('the cross starts out of the way, and is a button rather than a glyph', () => 
 t('the search box is not part of any form, so it cannot be submitted', () => {
   assert.doesNotMatch(listSearchBox(), /<form/);
   assert.doesNotMatch(listSearchBox(), /name="/, 'nothing to post');
+});
+
+t('the search shares the row with the grouping switch', () => {
+  const region = renderListRegion({
+    user: { id: 1, username: 'eva', provider: 'password' },
+    accounts: [{ accountName: '@eva', guildCount: 1, guilds: [{}] }],
+    sharedItems: [],
+    requestItems: [item(2, 'Ancient Silk', 'Apparel', { account_name: '@sender2' })],
+    alwaysShare: [],
+    requestOffers: [],
+    facets: { types: [{ name: 'Apparel', total: 1 }], owners: ['@sender2'] },
+    filters: {},
+    requests: [],
+    basketRows: [],
+  });
+
+  const panel = region.indexOf('id="panelRequest"');
+  const tools = region.indexOf('<div class="list-tools">');
+  const search = region.indexOf('class="list-search"');
+  const toggle = region.indexOf('data-group-toggle');
+
+  assert.ok(panel > -1 && tools > -1 && search > -1 && toggle > -1, 'all four are drawn');
+  assert.ok(panel < tools, 'the row belongs to the list it narrows');
+  assert.ok(tools < search && search < toggle, 'the box and the switch share the row, box first');
+  assert.equal(region.indexOf('class="list-search"', search + 1), -1, 'one box for the tab');
+  assert.match(region, /id="listSearch-request"/);
 });
 
 // ------------------------------------------------- the count while searching
@@ -281,7 +307,10 @@ function appBetween(start, end) {
   return appSource.slice(from, to);
 }
 
-const searchSource = appBetween('  function applyListSearch()', '  // The search belongs');
+const searchSource = appBetween(
+  '  function applyListSearch(tab = activeTab)',
+  '  function updateSearchClear(tab)'
+);
 
 function headingRow(count) {
   const countElement = { textContent: `(${count})` };
@@ -310,10 +339,12 @@ function runSearch(term, rows) {
     querySelectorAll: (selector) => (selector === 'table tbody' ? [{ rows }] : []),
     querySelector: () => null,
   };
-  const apply = new Function('listRegion', 'listSearch', `${searchSource}; return applyListSearch;`)(
-    region,
-    term
-  );
+  const apply = new Function(
+    'listRegion',
+    'activeTab',
+    'listSearchByTab',
+    `${searchSource}; return applyListSearch;`
+  )(region, 'request', { request: term, offer: '' });
 
   apply();
 
@@ -363,6 +394,64 @@ t('a group with nothing to show loses its heading', () => {
   assert.equal(apparel.hidden, true, 'no Apparel row matches, so the heading goes');
   assert.equal(weapons.hidden, false);
   assert.equal(weapons.count.textContent, '(1 of 1)');
+});
+
+// A word is typed over one tab, so it narrows that one tab. Both tables are in the page all
+// the time - one is only hidden - so a pass that walked every body would filter rows its
+// word was never meant for.
+function panelOf(rows) {
+  return {
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector === 'table tbody' ? [{ rows }] : []),
+  };
+}
+
+function runTabSearch(tab, terms, panels) {
+  const region = {
+    querySelectorAll: () => [],
+    querySelector: (selector) => {
+      const match = /^\[data-panel="([a-z]+)"\]$/.exec(selector);
+      return match ? panels[match[1]] || null : null;
+    },
+  };
+  const apply = new Function(
+    'listRegion',
+    'activeTab',
+    'listSearchByTab',
+    `${searchSource}; return applyListSearch;`
+  )(region, tab, terms);
+
+  apply();
+}
+
+t('a word typed on one tab leaves the other tab alone', () => {
+  const requested = [itemRow('Briarheart Dagger Weapons Sharpened'), itemRow('Amber Ring Weapons Robust')];
+  const offered = [itemRow('Briarheart Dagger Weapons Sharpened'), itemRow('Amber Ring Weapons Robust')];
+
+  runTabSearch('request', { request: 'dagger', offer: '' }, {
+    request: panelOf(requested),
+    offer: panelOf(offered),
+  });
+
+  assert.equal(requested[0].hidden, false, 'the dagger asked for stays');
+  assert.equal(requested[1].hidden, true, 'the ring asked for goes');
+  assert.equal(offered[0].hidden, false, 'Offering keeps every row it had');
+  assert.equal(offered[1].hidden, false);
+});
+
+t('each tab keeps its own word', () => {
+  const requested = [itemRow('Briarheart Dagger Weapons Sharpened'), itemRow('Amber Ring Weapons Robust')];
+  const offered = [itemRow('Briarheart Dagger Weapons Sharpened'), itemRow('Amber Ring Weapons Robust')];
+
+  runTabSearch('offer', { request: 'dagger', offer: 'ring' }, {
+    request: panelOf(requested),
+    offer: panelOf(offered),
+  });
+
+  assert.equal(offered[1].hidden, false, 'Offering is narrowed by the word typed on it');
+  assert.equal(offered[0].hidden, true);
+  assert.equal(requested[0].hidden, false, 'Request was not re-run against the other tab word');
+  assert.equal(requested[1].hidden, false);
 });
 
 t('clearing the search puts the plain totals back', () => {
