@@ -28,8 +28,12 @@ landed on `main`.
   the demo catalogue now carries the level, the champion point requirement and the glyph it
   is enchanted with - `Level CP160`, *Glyph of Increase Physical Harm* and so on - instead of
   reading as a level 0 item with no enchantment. The simulator's three people share the same
-  gear, so they carry it too. Materials, consumables and furnishings have no level to report
-  and are unchanged.
+  gear, so they carry it too.
+- **Every shared item shows a level.** The demo and simulated catalogues give the things
+  that are not gear - materials, consumables, furnishings and motifs - level 1, which is
+  what an item with no requirement carries. They still have no champion points, glyph or
+  style, because they have none: the row reads *Level 1* and stops there, rather than
+  looking as though its level were simply unknown.
 
 ### Changed
 

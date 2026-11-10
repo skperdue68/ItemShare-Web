@@ -1469,8 +1469,10 @@ only useful thing is the file that supplies them.
 **Alphabet Mafia** on PC / NA Megaserver - and the curated catalogue in
 `lib/demoItems.js` shared with it. The catalogue carries the fields an upload carries, not
 just names: its weapons, armour and jewellery are level 50, CP 160 and enchanted, so the
-requirement and enchantment columns have something to read. Materials, consumables,
-furnishings and motifs have no level or glyph, which is also what a real file reports. It is created at startup, and again on a demo sign-in
+requirement and enchantment columns have something to read. Everything that is not gear -
+materials, consumables, furnishings and motifs - is level 1, the level an item with no
+requirement carries, so no row looks as though its level were unknown. None of them carries
+a champion point requirement, a glyph or a style, because none of those exists for it. It is created at startup, and again on a demo sign-in
 if it is missing, so a fresh database already has it. The address on it is
 `demo@example.com`, on the reserved documentation domain, and creating an ordinary
 account with that address is refused, so nobody can take it over.

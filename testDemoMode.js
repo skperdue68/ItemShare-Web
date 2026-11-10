@@ -30,7 +30,7 @@ import {
   castEmail,
   ensureDemoCast,
 } from './lib/demoCast.js';
-import { DEMO_EXPIRE_DAYS, ITEMS, buildItem } from './lib/demoItems.js';
+import { DEMO_EXPIRE_DAYS, ITEMS, OFFERS, buildItem, buildOffer } from './lib/demoItems.js';
 import {
   DEMO_ACTIVITY_SCENARIOS,
   demoActivityPause,
@@ -163,7 +163,7 @@ check('the demo gear carries its level, its champion points and its enchantment'
   );
   assert(
     ITEMS.find((spec) => spec.name === 'Dwemer Frame').cp === undefined,
-    'a material has no level or champion points to report'
+    'a material has no champion points to report'
   );
 
   const built = buildItem(gear[0], 0, [DEMO_GUILD.id]);
@@ -192,6 +192,66 @@ check('the demo gear carries its level, its champion points and its enchantment'
 
   assertMatch(html, /Level CP160/, 'the row says what it requires');
   assertMatch(html, /Glyph of Increase Magical Harm/, 'and what it is enchanted with');
+});
+
+// Not everything on the shelf is gear, and the list reads as a list of items rather than a
+// list of gear: a material with no level printed at all looked half-finished beside the
+// sword above it. Everything the catalogue shares is level 1 unless it is gear and says
+// otherwise. What a material has not got is a champion point requirement, a glyph or a
+// style, and none of those is invented for it.
+check('what is not gear is level 1, and claims nothing else', () => {
+  const plain = ITEMS.filter((spec) => ![1, 2, 3].includes(spec.type));
+  const plainOffers = OFFERS.filter((spec) => ![1, 2, 3].includes(spec.type));
+
+  assert(plain.length >= 3, `expected some non-gear on the demo shelf, got ${plain.length}`);
+  assert(plainOffers.length >= 1, `expected non-gear on the always-shared list, got ${plainOffers.length}`);
+
+  for (const spec of plain) {
+    assert(spec.level === 1, `${spec.name} carries level 1`);
+    assert(spec.cp === undefined, `${spec.name} carries no champion points`);
+    assert(spec.enchant === undefined, `${spec.name} carries no glyph`);
+    assert(spec.style === undefined, `${spec.name} carries no style`);
+
+    const row = buildItem(spec, 0, [DEMO_GUILD.id]);
+
+    assert(row.requiredLevel === 1 && row.requiredCp === 0, `${spec.name} reaches the list as level 1`);
+    assert(row.enchantName === '' && row.styleName === '', `${spec.name} stays bare otherwise`);
+  }
+
+  for (const spec of plainOffers) {
+    assert(spec.level === 1, `${spec.name} carries level 1`);
+    assert(spec.cp === undefined && spec.enchant === undefined, `${spec.name} carries nothing else`);
+    assert(
+      buildOffer(spec, 0, [DEMO_GUILD.id]).requiredLevel === 1,
+      `${spec.name} reaches the offer list as level 1`
+    );
+  }
+
+  // And the line a reader gets out of it: a level, the name, and no glyph made up to fill
+  // the space beside it.
+  const frame = ITEMS.find((spec) => spec.name === 'Dwemer Frame');
+  const row = buildItem(frame, 0, [DEMO_GUILD.id]);
+  const html = inventoryTable(
+    [
+      {
+        ...row,
+        // The list reads the row a query hands it, which is snake_case.
+        item_name: row.itemName,
+        item_count: row.itemCount,
+        item_key_hash: 'demo-plain',
+        guild_names: DEMO_GUILD.name,
+        required_level: row.requiredLevel,
+        required_cp: row.requiredCp,
+        enchant_name: row.enchantName,
+        style_name: row.styleName,
+      },
+    ],
+    { mine: false, filters: {} }
+  );
+
+  assertMatch(html, /Level 1/, 'the row says it is level 1');
+  assertMatch(html, /Dwemer Frame/, 'and still names the item');
+  assert(!html.includes('Glyph'), 'with no glyph invented for it');
 });
 
 // ------------------------------------------------------------------ what is refused
