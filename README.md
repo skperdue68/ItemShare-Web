@@ -450,6 +450,19 @@ clicks: ascending, descending, then back to the default. The chosen order is rem
 in the `itemshare_sort` cookie and the grouping in `itemshare_group`, so both survive a
 reload without ever appearing in the URL.
 
+The owner's *Requests for your items* table sorts differently, because its four columns
+answer different questions and one order cannot serve all of them. `Item`, `Stored at`,
+`Mail to` and `Asked` each cycle ascending, descending, off - and a second heading can be
+on at the same time, joining the end of the queue. The columns apply in the order the
+headings were pressed, not the order they sit on screen, so *Mail to* then *Asked* means
+each mailbox in turn with its oldest ask first inside it. An active heading carries its
+place in that queue (`2\u25bc`), because otherwise a second column looks idle while the
+first decides most of the table. A row with nothing in the column - no recorded place, say
+- sinks to the bottom whichever way that column runs, rather than floating up on a
+descending pass, and the queue is remembered in `itemshare_owner_sort`, never in the
+address bar. `Requested` and `Amount Sent` do not sort: they describe what you have
+answered, not how to find a row.
+
 `Added` is the day an item first entered its owner's shared list - the day they offered
 it - not the day of their latest upload, so re-uploading a long-held item does not make
 it look new. An item that leaves the file altogether - unshared, or every copy handed

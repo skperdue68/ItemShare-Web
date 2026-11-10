@@ -1430,6 +1430,29 @@ th .sort-link.active {
   border-bottom-color: var(--muted-strong);
 }
 
+/* This table sorts by a queue of columns rather than one, so each active heading carries
+   its place in that queue: 2▼ reads as "second thing asked for, biggest first". Small and
+   muted, because it is a footnote to the heading rather than part of its name. */
+th .sort-queue {
+  margin-left: 3px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-strong);
+}
+
+th .sort-queue[hidden] {
+  display: none;
+}
+
+/* The sentence explaining the headings. Centred to match the note under the table, and
+   quieter than it: one is how the table works, the other is what it means. */
+.sort-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .seen-cell {
   white-space: nowrap;
   color: var(--muted);
