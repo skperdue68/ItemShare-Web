@@ -30,7 +30,7 @@ import {
   castEmail,
   ensureDemoCast,
 } from './lib/demoCast.js';
-import { DEMO_EXPIRE_DAYS, ITEMS } from './lib/demoItems.js';
+import { DEMO_EXPIRE_DAYS, ITEMS, buildItem } from './lib/demoItems.js';
 import {
   DEMO_ACTIVITY_SCENARIOS,
   demoActivityPause,
@@ -47,7 +47,13 @@ import { AGE_HOURS, planAges, untouchedRowsSql } from './lib/itemAges.js';
 import { stamp } from './lib/log.js';
 import { platformName, readAccountServer, serverChoices, serverLabel } from './lib/serverLabel.js';
 import { linkAccountToUser, listAccountServers } from './lib/store.js';
-import { emailLine, renderPage, renderSignInPage, renderUploadPage } from './lib/views.js';
+import {
+  emailLine,
+  inventoryTable,
+  renderPage,
+  renderSignInPage,
+  renderUploadPage,
+} from './lib/views.js';
 
 let passed = 0;
 let failed = 0;
@@ -137,6 +143,55 @@ check('the demo guild is the one that was asked for, on PC and NA', () => {
 
 check('the demo account is not the one seedDemo.js writes into real guilds', () => {
   assert(DEMO_ACCOUNT !== '@DemoTrader', 'the demo must use its own account');
+});
+
+// A shelf of names says nothing about whether a piece is any use: ESO gates gear by level or
+// by champion points, and the enchantment is often the reason somebody wants it. The
+// catalogue is the shape an upload writes, so those fields have to be filled the way a real
+// file fills them - without them every demo row read as a level 0 item with no glyph.
+check('the demo gear carries its level, its champion points and its enchantment', () => {
+  const gear = ITEMS.filter((spec) => spec.cp);
+
+  assert(gear.length >= 5, `expected the demo to share some gear, got ${gear.length}`);
+  assert(
+    gear.every((spec) => spec.level === 50 && spec.cp === 160),
+    'CP gear is level 50 with a champion point requirement'
+  );
+  assert(
+    gear.every((spec) => String(spec.enchant || '').startsWith('Glyph of')),
+    'every gear row names the glyph it carries'
+  );
+  assert(
+    ITEMS.find((spec) => spec.name === 'Dwemer Frame').cp === undefined,
+    'a material has no level or champion points to report'
+  );
+
+  const built = buildItem(gear[0], 0, [DEMO_GUILD.id]);
+
+  assert(built.requiredCp === 160 && built.requiredLevel === 50, 'both reach the row');
+  assert(built.enchantName === gear[0].enchant, 'and so does the glyph');
+
+  // The catalogue is camelCase, the way an upload hands a row to the store; the list reads
+  // the row the query returns, which is snake_case. Both ends are covered here: the fields
+  // the writer sets, then the line the reader gets out of them.
+  const staff = ITEMS.find((spec) => spec.name === "Mother's Sorrow Inferno Staff");
+  const staffRow = buildItem(staff, 0, [DEMO_GUILD.id]);
+  const html = inventoryTable(
+    [
+      {
+        ...staffRow,
+        item_key_hash: 'demo',
+        guild_names: DEMO_GUILD.name,
+        required_level: staffRow.requiredLevel,
+        required_cp: staffRow.requiredCp,
+        enchant_name: staffRow.enchantName,
+      },
+    ],
+    { mine: false, filters: {} }
+  );
+
+  assertMatch(html, /Level CP160/, 'the row says what it requires');
+  assertMatch(html, /Glyph of Increase Magical Harm/, 'and what it is enchanted with');
 });
 
 // ------------------------------------------------------------------ what is refused

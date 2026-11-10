@@ -1467,7 +1467,10 @@ only useful thing is the file that supplies them.
 `demo@example.com` with the password `demo` is a sign-in that needs neither. It is a real person row with
 `itemshare_users.is_demo = 1`, one ESO account (`@ItemShareDemo`), one guild -
 **Alphabet Mafia** on PC / NA Megaserver - and the curated catalogue in
-`lib/demoItems.js` shared with it. It is created at startup, and again on a demo sign-in
+`lib/demoItems.js` shared with it. The catalogue carries the fields an upload carries, not
+just names: its weapons, armour and jewellery are level 50, CP 160 and enchanted, so the
+requirement and enchantment columns have something to read. Materials, consumables,
+furnishings and motifs have no level or glyph, which is also what a real file reports. It is created at startup, and again on a demo sign-in
 if it is missing, so a fresh database already has it. The address on it is
 `demo@example.com`, on the reserved documentation domain, and creating an ordinary
 account with that address is refused, so nobody can take it over.
