@@ -22,6 +22,10 @@ landed on `main`.
 
 ### Changed
 
+- The sign-in card no longer says a file has to be uploaded before there is anything to
+  compare against. That stopped being true when guild codes arrived: a code opens its
+  guild's items to the account, with no addon, no file and no membership in the guild, so
+  the line was telling invited guildmates to do a step they do not need.
 - The **Add or remove ESO accounts** dialog only reports until a file has been uploaded.
   Attaching a name by hand, removing one, and the platform and server choices wait for the
   first `ItemShareSavedVars.lua`: a name typed by hand carries a platform and a world nobody
