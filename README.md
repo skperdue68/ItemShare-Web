@@ -461,7 +461,9 @@ so both survive a reload without ever appearing in the URL.
 Under the tabs and above the table, **Search this list** narrows what is already on the
 page, and a cross at the end of the box empties it and puts the list back. It applies about
 a second after the last keystroke rather than on every letter, so a word is finished before
-the table redraws around it. Matching is partial and ignores case, and looks at everything a row says:
+the table redraws around it. Request and Offering each keep their own word: the box shows
+the term for the tab in front of you, a word narrows only that tab's table, and switching
+tabs switches both. Matching is partial and ignores case, and looks at everything a row says:
 the name, its type and trait, its enchantment, style and set, the storage place, and who
 offers it. The type headings are labels for the rows rather than entries of their own, so
 they take no part in the matching: a heading stays while any row under it matches and goes

@@ -316,6 +316,11 @@ if (listRegion) {
   // Discard list responses that started before a successful bag mutation.
   let basketRevision = 0;
   let activeTab = 'request';
+  // Each list has its own search: a word typed while reading Offering says nothing about
+  // Request, and emptying one must leave the other as it was. Your requests has no box, so
+  // it is not in here and is never narrowed.
+  let listSearchByTab = { request: '', offer: '' };
+  let listSearchTimer = null;
 
   // Which page of Already sent is on screen. It is kept here rather than in the address
   // bar: paging is a view of the same page, so it must not rewrite the URL, count as a
@@ -380,7 +385,13 @@ if (listRegion) {
       // Tab choice is a convenience; failing to remember it changes nothing.
     }
 
+    // The box shows this tab's own word, and the list under it is narrowed by that word: a
+    // tab switch is a switch of both, not a carry-over. A keystroke still inside the
+    // second-long wait belongs to the tab being left, so it is dropped rather than fired
+    // against the tab that replaced it.
+    window.clearTimeout(listSearchTimer);
     showSearchBox();
+    applyListSearch();
   }
 
   listRegion.addEventListener('click', (event) => {
@@ -425,7 +436,7 @@ if (listRegion) {
 
     if (clearSearch) {
       event.preventDefault();
-      listSearch = '';
+      listSearchByTab[activeTab] = '';
       window.clearTimeout(listSearchTimer);
       applyListSearch();
 
@@ -509,26 +520,32 @@ if (listRegion) {
   });
 
   // -------------------------------------------------------------------- the search
-  // The box above the tabs narrows the rows already on the page as it is typed - no
-  // request and no delay, so it answers before a round trip could. Group headings take no
-  // part in the matching: a heading is a label for the rows under it, so it stays while
-  // any of them match and goes when none do, rather than disappearing because the word
-  // typed is not the type's own name. The filter card above keeps its search, which is a
-  // name filter the server applies and the address bar carries.
-  let listSearch = '';
-  let listSearchTimer = null;
-
+  // The box under the tabs narrows the rows already on the page - no request, so it
+  // answers before a round trip could. Each tab carries its own word, and a word only ever
+  // narrows the list it was typed over. Group headings take no part in the matching: a
+  // heading is a label for the rows under it, so it stays while any of them match and goes
+  // when none do, rather than disappearing because the word typed is not the type's own
+  // name. The filter card above keeps its search, which is a name filter the server applies
+  // and the address bar carries.
   function applyListSearch() {
-    const term = listSearch.trim().toLowerCase();
+    // Your requests is a log of what was asked for, not a list to search: no box, no word,
+    // nothing of its own to narrow.
+    if (activeTab !== 'request' && activeTab !== 'offer') return;
+
+    const typed = listSearchByTab[activeTab];
+    const term = typed.trim().toLowerCase();
     const input = listRegion.querySelector('[data-list-search]');
     const clear = listRegion.querySelector('[data-list-search-clear]');
+    // Each tab draws its own table, so the narrowing stops at the panel on screen. The
+    // other tab keeps every row it had, and its own word, for when it comes back.
+    const panel = listRegion.querySelector(`[data-panel="${activeTab}"]`);
 
     // A refresh can put a fresh box in place. It is given the text that is filtering the
     // list rather than left empty while the rows below stay narrowed for no visible reason.
-    if (input && input.value !== listSearch) input.value = listSearch;
-    if (clear) clear.hidden = listSearch === '';
+    if (input && input.value !== typed) input.value = typed;
+    if (clear) clear.hidden = typed === '';
 
-    for (const body of listRegion.querySelectorAll('table tbody')) {
+    for (const body of (panel || listRegion).querySelectorAll('table tbody')) {
       const groups = [];
       let group = null;
 
@@ -573,7 +590,7 @@ if (listRegion) {
   function updateSearchClear() {
     const clear = listRegion.querySelector('[data-list-search-clear]');
 
-    if (clear) clear.hidden = listSearch === '';
+    if (clear) clear.hidden = (listSearchByTab[activeTab] || '') === '';
   }
 
   // The search belongs to the lists of things on offer, not to the log of what was asked
@@ -591,7 +608,9 @@ if (listRegion) {
 
     // The field keeps up with every keystroke; the list waits for the word. Narrowing on
     // the first letter would hide rows and move the table on the way to the right four.
-    listSearch = event.target.value;
+    if (activeTab !== 'request' && activeTab !== 'offer') return;
+
+    listSearchByTab[activeTab] = event.target.value;
     updateSearchClear();
 
     window.clearTimeout(listSearchTimer);
