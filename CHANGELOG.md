@@ -56,6 +56,9 @@ landed on `main`.
 
 ### Changed
 
+- **Browsing as** is a rounded dark menu now, matching the **Added** menu above the lists
+  instead of looking like a form control borrowed from the browser: the same height, card
+  colour and small caret, and a dark option list.
 - **An upload no longer fails because one ESO account in the file belongs to somebody
   else.** That account is left exactly as it was and the rest of the file is stored, so a
   file copied from another player, or a file on a shared computer, still updates the
