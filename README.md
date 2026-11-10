@@ -1,5 +1,10 @@
 # ItemShare web application
 
+Experimental Discord integration is available on the development branch. The standalone
+client lives in `discord-bot/`; full setup, command and interaction documentation is in
+[Discord Bot Guide](docs/Discord-Bot-Guide.md). The API is disabled by default and optional
+GuildSync access performs only reads, using separately configured credentials.
+
 The website half of ItemShare: members of a guild upload the file the in-game addon
 writes, and the site publishes what each of them is willing to share. Anyone who
 shares a guild with an owner can browse those items, ask for some of a stack, and
@@ -1466,4 +1471,3 @@ depends on it.
 **Surfacing stored detail.** The `eso_data` column holds getters the site does not render
 yet (required level, champion points, style among them). They are captured and stored,
 and nothing shows them.
-
