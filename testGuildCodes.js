@@ -12,6 +12,7 @@
 
 import assert from 'node:assert/strict';
 
+import { normalizeEsoAccountName } from './lib/accountNames.js';
 import {
   formatGuildCode,
   isGuildCode,
@@ -167,7 +168,7 @@ t('a code that was just made is shown in full, above everything else', () => {
   assert.match(justMade, /K7QM-3XPD/, 'the code is what somebody needs to copy');
   assert.match(justMade, /Share this code/);
   assert.ok(
-    justMade.indexOf('Share this code') < justMade.indexOf('Invite someone to a guild'),
+    justMade.indexOf('Share this code') < justMade.indexOf("Invite to shop my guild's items"),
     'the new code comes before the form that makes another'
   );
 });
@@ -198,7 +199,7 @@ const joinPage = renderJoinGuildPage({ user });
 t('the join page is one box, and it posts the code', () => {
   assert.match(joinPage, /method="post" action="\/guilds\/join"/);
   assert.match(joinPage, /<input id="guild-code" name="code"/);
-  assert.match(joinPage, /Join guild/);
+  assert.match(joinPage, /See guild items/);
   assert.equal(count(joinPage, 'type="password"'), 0, 'nothing here is a password');
   assert.doesNotMatch(joinPage, /src="\/app\.js"/, 'there is no item list to script');
 });
@@ -219,8 +220,59 @@ t('a refused code keeps what was typed and says why', () => {
 t('both ways to bring somebody in are in the avatar menu', () => {
   assert.match(codesPage, /<a class="account-menu-item" href="\/guilds\/codes" role="menuitem">/);
   assert.match(codesPage, /<a class="account-menu-item" href="\/guilds\/join" role="menuitem">/);
-  assert.match(codesPage, /Invite people to a guild/);
-  assert.match(codesPage, /Join a guild with a code/);
+  assert.match(codesPage, /Invite to Shop My Guilds Items/);
+  assert.match(codesPage, /See Guild Items From Code/);
+});
+
+// ------------------------------------------------------- the used code, in reach
+
+t('the code box is on the screen when signed in, not only in the menu', () => {
+  assert.match(
+    joinPage,
+    /<a class="code-link" href="\/guilds\/join">See Guild Items From Code<\/a>/,
+    'the person who was just given a code should not have to find the menu first'
+  );
+  assert.match(joinPage, /<div class="auth-area">/);
+
+  const signedOut = renderJoinGuildPage({});
+
+  assert.doesNotMatch(
+    signedOut,
+    /class="code-link"/,
+    'a code needs an account to open on, so there is nothing to offer before signing in'
+  );
+});
+
+// -------------------------------------------------------- whose account is it
+
+t('a code with no account on file asks for the account, over the page', () => {
+  const asks = renderJoinGuildPage({ needAccount: true, code: 'k7qm-3xpd', user });
+
+  assert.match(asks, /role="dialog" aria-modal="true"/, 'it is a box over the page');
+  assert.match(asks, /Which ESO account is yours\?/);
+  assert.match(
+    asks,
+    /<input type="hidden" name="code" value="K7QM3XPD">/,
+    'the code is carried into the answer, so it does not have to be typed again'
+  );
+  assert.match(asks, /name="accountName"/);
+  assert.match(asks, /<select name="platform" required>/);
+  assert.match(asks, /<select name="worldName" required>/);
+  assert.match(asks, /Use this code/);
+  assert.match(asks, /the site adds the @ if you leave it out/);
+  assert.match(asks, /method="post" action="\/guilds\/join"/);
+
+  assert.doesNotMatch(
+    joinPage,
+    /name="accountName"/,
+    'the box is not drawn when the site already knows an account'
+  );
+});
+
+t('an account name typed without the @ is given one', () => {
+  assert.equal(normalizeEsoAccountName('Some One'), '@someone');
+  assert.equal(normalizeEsoAccountName('@SomeOne'), '@someone');
+  assert.equal(normalizeEsoAccountName('  '), '', 'nothing usable is not a name');
 });
 
 console.log(`\n${total - failures}/${total} passed`);

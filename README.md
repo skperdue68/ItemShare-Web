@@ -261,9 +261,10 @@ session names its account; it is not something display can fix.
 ### Invitation codes
 
 Guild membership usually comes from the file, but somebody can also be invited. A member
-opens **Invite people to a guild** in the avatar menu, chooses one of their own guilds, and
-is given an eight character code. The person they hand it to enters it under **Join a guild
-with a code** and is given that guild, so what it shares is in their list.
+opens **Invite to Shop My Guilds Items** in the avatar menu, chooses one of their own guilds,
+and is given an eight character code. The person they hand it to pastes it into **See Guild
+Items From Code** - a button beside the avatar whenever they are signed in, and the same
+entry in the avatar menu - and that guild's items open to their account.
 
 - A code names one guild **and its server**, because a guild id on its own does not: the
   same number on NA and EU is a different guild.
@@ -277,8 +278,12 @@ with a code** and is given that guild, so what it shares is in their list.
 - Nothing is granted from the form. The guild is looked up among the person's own guilds
   and the code is looked up in `itemshare_guild_codes` before anything is written, so a
   hand-written form cannot make a code for somebody else's guild or guess one by id.
-- Somebody with no ESO account is told to attach one first: an invitation is written to an
-  account, and the site has nothing to write it to yet.
+- If the site knows no ESO account for them yet, the page asks for the account name in a
+  box over it - with the platform and server, the same three things the accounts dialog
+  asks for - and the `@` is added if they leave it off (`normalizeEsoAccountName`). The
+  account is linked first and the code used against it, so nothing typed is thrown away.
+- When a later upload reports that same guild on that same server, the granted mark is
+  cleared: the membership is the game's from then on, and the code's extra slot is gone.
 
 There is no way to withdraw a code once made. Each one is made for one invitation, and what
 it opens is what the guild's members can already see.

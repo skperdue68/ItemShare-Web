@@ -1483,10 +1483,13 @@ app.get('/guilds/join', async (req, res) => {
   }
 
   try {
-    const accounts = await withDatabase((connection) => getViewerAccounts(connection, user.id));
+    const data = await withDatabase(async (connection) => ({
+      accounts: await getViewerAccounts(connection, user.id),
+      servers: await listAccountServers(connection),
+    }));
 
     res.type('html').send(
-      renderJoinGuildPage({ user, providers: enabledProviders, accounts })
+      renderJoinGuildPage({ user, providers: enabledProviders, ...data })
     );
   } catch (error) {
     sendPage(req, res, 500, {
@@ -1524,19 +1527,48 @@ app.post('/guilds/join', async (req, res) => {
     return;
   }
 
+  // The account name is typed here only when the site does not know one yet. Asking at the
+  // moment the code is entered is better than a page that says "attach an account first":
+  // the code is already in hand, and what was typed is not thrown away.
+  const typedAccount = normalizeEsoAccountName(req.body && req.body.accountName);
+
   try {
     const outcome = await withDatabase(async (connection) => {
-      const accounts = await getViewerAccounts(connection, user.id);
+      const known = await getViewerAccounts(connection, user.id);
+      const accounts = known.map((row) => row.eso_account_name);
 
       if (accounts.length === 0) {
-        return { status: 'no-account' };
+        if (!typedAccount) {
+          return { status: 'need-account', servers: await listAccountServers(connection) };
+        }
+
+        const where = readAccountServer(req.body);
+
+        if (!where) {
+          return { status: 'need-server', servers: await listAccountServers(connection) };
+        }
+
+        // Linking is what an upload does too, and it refuses an account already attached to
+        // somebody else rather than moving it - the same answer the accounts dialog gives.
+        const linked = await linkAccountToUser(connection, {
+          accountName: typedAccount,
+          userId: user.id,
+          ...where,
+        });
+
+        if (linked === 'conflict') {
+          return { status: 'conflict', accountName: typedAccount };
+        }
+
+        req.session.accountNames = null;
+        accounts.push(typedAccount);
       }
 
       return redeemGuildCode(connection, {
         userId: user.id,
         code: typed,
-        accounts: accounts.map((row) => row.eso_account_name),
-        accountName: await getBrowsingAccount(connection, user.id),
+        accounts,
+        accountName: typedAccount || (await getBrowsingAccount(connection, user.id)),
       });
     });
 
@@ -1565,12 +1597,32 @@ app.post('/guilds/join', async (req, res) => {
       return;
     }
 
-    if (outcome.status === 'no-account') {
+    // No account on file: the code is kept and the page asks whose account it is, in a box
+    // over the top of it, rather than sending the person away to find one.
+    if (outcome.status === 'need-account' || outcome.status === 'need-server') {
+      res.status(400).type('html').send(
+        renderJoinGuildPage({
+          needAccount: true,
+          servers: outcome.servers,
+          code: typed,
+          user,
+          providers: enabledProviders,
+          notice:
+            outcome.status === 'need-server'
+              ? 'Choose the platform and server that account plays on.'
+              : '',
+        })
+      );
+      return;
+    }
+
+    if (outcome.status === 'conflict') {
       sendPage(req, res, 409, {
-        heading: 'Attach an ESO account first',
-        message: 'An invitation is written to an ESO account, and the site does not know any of yours yet.',
-        details: 'Add your @account under Add or remove ESO accounts in the avatar menu, or upload a saved variables file, then enter the code again.',
-        tone: 'notice',
+        heading: 'That ESO account is already taken',
+        message: `${outcome.accountName} is attached to another sign-in.`,
+        details:
+          'If it is yours and you cannot get into that sign-in, the site owner can move it for you. Nothing was changed.',
+        tone: 'error',
       });
       return;
     }
