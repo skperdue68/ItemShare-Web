@@ -283,10 +283,11 @@ avatar menu - and that guild's items open to their account.
   reported for the person's accounts, excluding any that came from a code, and the code is
   looked up in `itemshare_guild_codes` before anything is written, so a hand-written form
   can neither make a code for somebody else's guild nor reuse an invitation as a slot.
-- If the site knows no ESO account for them yet, the page asks for the account name in a
-  box over it - with the platform and server, the same three things the accounts dialog
-  asks for - and the `@` is added if they leave it off (`normalizeEsoAccountName`). The
-  account is linked first and the code used against it, so nothing typed is thrown away.
+- If the site knows no ESO account for them yet, the page asks for the account name only,
+  in a box over it: the code already names the platform and the server, so the account is
+  attached to the one the code is for and there is nothing else to pick. The `@` is added
+  if they leave it off (`normalizeEsoAccountName`), and the account is linked first and the
+  code used against it, so nothing typed is thrown away.
 - When a later upload reports that same guild on that same server, the granted mark is
   cleared: the membership is the game's from then on, and the code's extra slot is gone.
 
