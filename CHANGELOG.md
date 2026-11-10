@@ -24,6 +24,13 @@ landed on `main`.
   demo visit has both states at once: the oldest rows carry the pill and the newest do not,
   and *Added → LAST CHANCE* has rows to show.
 
+- **The demo's gear says what it is.** Every weapon, armour piece and piece of jewellery in
+  the demo catalogue now carries the level, the champion point requirement and the glyph it
+  is enchanted with - `Level CP160`, *Glyph of Increase Physical Harm* and so on - instead of
+  reading as a level 0 item with no enchantment. The simulator's three people share the same
+  gear, so they carry it too. Materials, consumables and furnishings have no level to report
+  and are unchanged.
+
 ### Changed
 
 - The sign-in card no longer says a file has to be uploaded before there is anything to
