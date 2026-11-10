@@ -528,7 +528,7 @@ if (listRegion) {
 
       for (const row of Array.from(body.rows)) {
         if (row.classList.contains('type-row')) {
-          group = { row, shown: 0 };
+          group = { row, total: 0, shown: 0 };
           groups.push(group);
           continue;
         }
@@ -540,11 +540,27 @@ if (listRegion) {
 
         row.hidden = !matches;
 
-        if (matches && group) group.shown += 1;
+        if (!group) continue;
+
+        group.total += 1;
+        if (matches) group.shown += 1;
       }
 
       // Decided after the rows are counted, because a heading is drawn before them.
-      for (const entry of groups) entry.row.hidden = entry.shown === 0;
+      for (const entry of groups) {
+        entry.row.hidden = entry.shown === 0;
+
+        // The number beside a type is the server's count of the whole group, and while a
+        // search is narrowing the rows under it that number is a lie. It becomes the two
+        // numbers that are true instead - how many matched, and how many there are - and
+        // goes back to the plain total once the search is cleared.
+        const count = entry.row.querySelector('.type-count');
+
+        if (count) {
+          count.textContent =
+            term === '' ? `(${entry.total})` : `(${entry.shown} of ${entry.total})`;
+        }
+      }
     }
   }
 

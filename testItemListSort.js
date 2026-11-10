@@ -6,6 +6,7 @@
 //   npm run test:item-sort
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import { SORT_FIELDS, parseSortOrder, queuePlace } from './lib/sortQueue.js';
 import { orderFor } from './lib/store.js';
@@ -263,6 +264,128 @@ t('the cross starts out of the way, and is a button rather than a glyph', () => 
 t('the search box is not part of any form, so it cannot be submitted', () => {
   assert.doesNotMatch(listSearchBox(), /<form/);
   assert.doesNotMatch(listSearchBox(), /name="/, 'nothing to post');
+});
+
+// ------------------------------------------------- the count while searching
+// A heading's number is the server's count of the whole group. app.js narrows the rows
+// when a term is typed, so it has to narrow the number with them - read out of the real
+// source here, so the two cannot drift apart.
+
+const appSource = fs.readFileSync(new URL('./public/app.js', import.meta.url), 'utf8');
+
+function appBetween(start, end) {
+  const from = appSource.indexOf(start);
+  const to = appSource.indexOf(end, from);
+
+  assert.ok(from >= 0 && to > from, `Missing source anchors: ${start}`);
+  return appSource.slice(from, to);
+}
+
+const searchSource = appBetween('  function applyListSearch()', '  // The search belongs');
+
+function headingRow(count) {
+  const countElement = { textContent: `(${count})` };
+
+  return {
+    classList: { contains: (name) => name === 'type-row' },
+    hidden: false,
+    querySelector: (selector) => (selector === '.type-count' ? countElement : null),
+    count: countElement,
+  };
+}
+
+function itemRow(text) {
+  return {
+    classList: { contains: () => false },
+    hidden: false,
+    hasAttribute: (name) => name === 'data-search',
+    getAttribute: (name) => (name === 'data-search' ? text : null),
+  };
+}
+
+// Runs app.js's own applyListSearch against the smallest page it can see: one table body,
+// the rows in it, and nothing else.
+function runSearch(term, rows) {
+  const region = {
+    querySelectorAll: (selector) => (selector === 'table tbody' ? [{ rows }] : []),
+    querySelector: () => null,
+  };
+  const apply = new Function('listRegion', 'listSearch', `${searchSource}; return applyListSearch;`)(
+    region,
+    term
+  );
+
+  apply();
+
+  return rows;
+}
+
+t('each heading counts its own group when nothing is being searched', () => {
+  const apparel = headingRow(2);
+  const weapons = headingRow(1);
+
+  runSearch('', [
+    apparel,
+    itemRow('Ancient Silk Apparel Impenetrable'),
+    itemRow('Cuirass Apparel Reinforced'),
+    weapons,
+    itemRow('Briarheart Dagger Weapons Sharpened'),
+  ]);
+
+  assert.equal(apparel.count.textContent, '(2)');
+  assert.equal(weapons.count.textContent, '(1)');
+});
+
+t('a search makes the heading count what matched, out of the whole group', () => {
+  const weapons = headingRow(2);
+  const dagger = itemRow('Briarheart Dagger Weapons Sharpened');
+  const ring = itemRow('Amber Ring Weapons Robust');
+
+  runSearch('dagger', [weapons, dagger, ring]);
+
+  assert.equal(dagger.hidden, false, 'the row that matches stays');
+  assert.equal(ring.hidden, true, 'the row that does not is hidden');
+  assert.equal(weapons.count.textContent, '(1 of 2)', 'one of the two in the group');
+});
+
+t('a group with nothing to show loses its heading', () => {
+  const apparel = headingRow(2);
+  const weapons = headingRow(1);
+
+  runSearch('dagger', [
+    apparel,
+    itemRow('Ancient Silk Apparel Impenetrable'),
+    itemRow('Cuirass Apparel Reinforced'),
+    weapons,
+    itemRow('Briarheart Dagger Weapons Sharpened'),
+  ]);
+
+  assert.equal(apparel.hidden, true, 'no Apparel row matches, so the heading goes');
+  assert.equal(weapons.hidden, false);
+  assert.equal(weapons.count.textContent, '(1 of 1)');
+});
+
+t('clearing the search puts the plain totals back', () => {
+  const weapons = headingRow(2);
+  const dagger = itemRow('Briarheart Dagger Weapons Sharpened');
+  const ring = itemRow('Amber Ring Weapons Robust');
+
+  runSearch('dagger', [weapons, dagger, ring]);
+  runSearch('', [weapons, dagger, ring]);
+
+  assert.equal(weapons.count.textContent, '(2)');
+  assert.equal(dagger.hidden, false);
+  assert.equal(ring.hidden, false);
+});
+
+t('a term matches a row the heading does not name', () => {
+  const weapons = headingRow(2);
+  const row = itemRow('Briarheart Dagger Weapons Sharpened');
+
+  runSearch('sharpened', [weapons, row, itemRow('Amber Ring Weapons Robust')]);
+
+  assert.equal(row.hidden, false, 'the trait is in the row text, the heading is not searched');
+  assert.equal(weapons.count.textContent, '(1 of 2)');
 });
 
 console.log(`\n${total - failures}/${total} passed`);

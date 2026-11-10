@@ -464,7 +464,9 @@ the list back. Matching is partial and ignores case, and looks at everything a r
 the name, its type and trait, its enchantment, style and set, the storage place, and who
 offers it. The type headings are labels for the rows rather than entries of their own, so
 they take no part in the matching: a heading stays while any row under it matches and goes
-when none do, until the search is cleared. The search belongs to the lists of things on
+when none do, until the search is cleared. Its count follows the search too, reading
+`(4 of 12)` while a term is narrowing the group and `(12)` again once it is cleared, so a
+heading never claims twelve rows above the four that are on screen. The search belongs to the lists of things on
 offer, so the box is not drawn while **Your requests** is open.
 
 `Added` is the day an item first entered its owner's shared list - the day they offered
