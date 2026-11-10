@@ -261,10 +261,10 @@ session names its account; it is not something display can fix.
 ### Invitation codes
 
 Guild membership usually comes from the file, but somebody can also be invited. A member
-opens **Invite to Shop My Guilds Items** in the avatar menu, chooses one of their own guilds,
-and is given an eight character code. The person they hand it to pastes it into **Use Code**
-- a button beside the avatar whenever they are signed in, and the same entry in the avatar
-menu - and that guild's items open to their account.
+opens **Create Guild Code** in the avatar menu, chooses one of their own guilds,
+and is given an eight character code. The person they hand it to pastes it into **Use Guild
+Code** - a button beside the avatar whenever they are signed in, and the same entry in the
+avatar menu - and that guild's items open to their account.
 
 - A code names one guild **and its server**, because a guild id on its own does not: the
   same number on NA and EU is a different guild.
@@ -293,7 +293,10 @@ menu - and that guild's items open to their account.
 A code lasts until it is revoked. **Revoke** beside it on the same page deletes the code, the
 record of who used it, and every membership it wrote: only rows carrying that code's id in
 `granted_code_id` go, so a member whose own upload has since reported the guild keeps the
-membership the game gave them. Revoking cannot be undone, which is why a code that leaked is
+membership the game gave them. Everybody else loses the guild and the extra slot with it,
+which is what makes a leaked code worth withdrawing. The list is the person's own:
+`listGuildCodes` filters on `created_by_user_id`, so nobody else sees a code somebody
+else made. Revoking cannot be undone, which is why a code that leaked is
 replaced rather than repaired. Making or revoking one answers on the page it was pressed on,
 so a code never appears in the address bar.
 
