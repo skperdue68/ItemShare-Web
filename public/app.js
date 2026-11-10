@@ -138,6 +138,11 @@ async function uploadFile(file) {
           (item) =>
             `Pending requests for ${item.itemName} (${item.requests}), so its inventory was not refreshed.`
         ),
+        // An account in the file that belongs to somebody else was left out, so say which
+        // ones were not touched rather than letting the upload look complete.
+        ...(result.skippedAccounts || []).map(
+          (account) => `${account.accountName}: not updated - ${account.reason}.`
+        ),
         icons,
       ]
         .filter(Boolean)

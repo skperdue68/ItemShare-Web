@@ -7,6 +7,15 @@ landed on `main`.
 
 ### Added
 
+- **`npm run delete:user`** removes a person by the name they sign in with, with everything
+  attached to them: their ESO accounts and the items, offers, guild memberships and uploads
+  on them, their baskets and requests, the guild codes they made and the redemptions of
+  them, and their sign-in rows and sessions. It all happens in one transaction, and it
+  counts every known reference afterwards, rolling back rather than committing a
+  half-removed person. `--list` prints the email and password logins it can remove, with
+  their id and how many ESO accounts each has, and `--dry-run` shows what removal would
+  take. Both listing and removing work on logins made on the site with an address and a
+  password, not on Discord or Google sign-ins.
 - **The guild slot a code opened** is listed on its own under the guilds the game reported,
   labelled *Guild slot from a code*: it is an invitation that was accepted, not a membership
   the character has in game, and mixing the two made the list read as if the game had
@@ -47,6 +56,15 @@ landed on `main`.
 
 ### Changed
 
+- **An upload no longer fails because one ESO account in the file belongs to somebody
+  else.** That account is left exactly as it was and the rest of the file is stored, so a
+  file copied from another player, or a file on a shared computer, still updates the
+  accounts that are yours. The upload message names what was updated and what was not, and
+  why. A file holding nothing but somebody else's account stores nothing and says so.
+- **The two how-to screenshots** are shown at the size they were captured at, centred in the
+  column, rather than stretched to its full width: the narrow right-click menu stays as sharp
+  as it was captured instead of being blown up, and a picture wider than the column is still
+  held to it rather than making the page scroll sideways.
 - **How to use ItemShare** is two sections now: *Been given a guild code?* for anybody who
   was handed one - sign in, choose **Use Guild Code** at the top of the next screen, and that
   guild's offerings are there, with no addon and no file - and *Adding your own items* for

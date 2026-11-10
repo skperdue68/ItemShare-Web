@@ -3125,12 +3125,16 @@ a.history-page:hover, .history-page.is-current {
   margin: 14px 0 0;
 }
 
-/* The picture itself. It is as wide as the column and keeps its own shape, so a 4:3 game
-   window is not cropped into the 16:9 frame the placeholder uses. */
+/* The picture itself. It is shown at the size it was captured at and centred, so a small
+   capture stays sharp instead of being stretched to the column, while a wide one is held to
+   the column rather than making the page scroll sideways. It keeps its own shape, so a 4:3
+   game window is not cropped into the 16:9 frame the placeholder uses. */
 .guide-shot-image {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
+  margin: 0 auto;
   border: 1px solid var(--panel-border);
   border-radius: 12px;
   background: rgba(7, 16, 38, 0.5);
