@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { filterList } from './lib/filters.js';
+import { SORT_FIELDS, parseSortOrder } from './lib/sortQueue.js';
 import { readCookie, readGrouping } from './lib/preferences.js';
 import { groupToggle, inventoryTable } from './lib/views.js';
 
@@ -80,7 +81,7 @@ t('turning grouping off leaves one list with no headings', () => {
 });
 
 t('grouping off keeps the order it was given', () => {
-  const html = render({ sort: 'name', group: false });
+  const html = render({ order: [{ field: 'name', dir: 'asc' }], group: false });
   const order = ['Briarheart Dagger', 'Ancient Silk', 'Cuirass', 'Hunting Bow'].map((name) =>
     html.indexOf(name)
   );
@@ -90,15 +91,15 @@ t('grouping off keeps the order it was given', () => {
 });
 
 t('sorting alphabetically no longer turns grouping off', () => {
-  assert.equal(headingCount(render({ sort: 'name', group: true })), 2);
+  assert.equal(headingCount(render({ order: [{ field: 'name', dir: 'asc' }], group: true })), 2);
 });
 
 t('sorting by date no longer turns grouping off', () => {
-  assert.equal(headingCount(render({ sort: 'added', group: true })), 2);
+  assert.equal(headingCount(render({ order: [{ field: 'added', dir: 'asc' }], group: true })), 2);
 });
 
 t('the headings still go when grouping is off and the sort is by type', () => {
-  assert.equal(headingCount(render({ sort: 'type', group: false })), 0);
+  assert.equal(headingCount(render({ order: [{ field: 'type', dir: 'asc' }], group: false })), 0);
 });
 
 t('there is one switch, and it is a button', () => {
@@ -166,7 +167,10 @@ const sorted = [
 ];
 
 t('a chosen order is kept inside each group, and the groups stay', () => {
-  const html = inventoryTable(sorted, { mine: false, filters: { sort: 'name', group: true } });
+  const html = inventoryTable(sorted, {
+    mine: false,
+    filters: { order: [{ field: 'name', dir: 'asc' }], group: true },
+  });
 
   assert.equal(headingCount(html), 2, 'the headings are still drawn');
   assert.ok(
@@ -180,7 +184,10 @@ t('a chosen order is kept inside each group, and the groups stay', () => {
 });
 
 t('the same order runs straight through when the groups are off', () => {
-  const html = inventoryTable(sorted, { mine: false, filters: { sort: 'name', group: false } });
+  const html = inventoryTable(sorted, {
+    mine: false,
+    filters: { order: [{ field: 'name', dir: 'asc' }], group: false },
+  });
   const positions = ['Amber Ring', 'Birch Cup', 'Zephyr Bow', 'Yew Log'].map((name) =>
     html.indexOf(name)
   );
@@ -190,7 +197,10 @@ t('the same order runs straight through when the groups are off', () => {
 });
 
 t('a date order is kept inside each group too', () => {
-  const html = inventoryTable(sorted, { mine: false, filters: { sort: 'added', group: true } });
+  const html = inventoryTable(sorted, {
+    mine: false,
+    filters: { order: [{ field: 'added', dir: 'asc' }], group: true },
+  });
 
   assert.equal(headingCount(html), 2);
   assert.ok(html.indexOf('Amber Ring') < html.indexOf('Zephyr Bow'));
@@ -198,7 +208,7 @@ t('a date order is kept inside each group too', () => {
 });
 
 t('the sort heading still reports which way it is', () => {
-  const html = render({ sort: 'name', dir: 'desc', group: true });
+  const html = render({ order: [{ field: 'name', dir: 'desc' }], group: true });
 
   assert.match(html, /data-sort="name" data-dir="desc"/, 'the arrow and the aria-sort follow');
   assert.equal(headingCount(html), 2, 'and sorting does not take the groups away');
@@ -230,38 +240,56 @@ function sourceOf(name) {
   throw new Error('unbalanced function ' + name);
 }
 
-const consts = serverSource.match(/const (SORT_FIELDS|ADDED_WINDOWS) = new Set\(\[[^\]]*\]\);/g) || [];
+// The columns the item list sorts by live in lib/sortQueue.js now, so the harness hands
+// readFilters the same parser the server imports instead of the constant it used to hold.
+const consts = serverSource.match(/const ADDED_WINDOWS = new Set\(\[[^\]]*\]\);/g) || [];
 
-if (consts.length !== 2) {
-  throw new Error('MISSING ANCHOR: SORT_FIELDS / ADDED_WINDOWS in server.js');
+if (consts.length !== 1) {
+  throw new Error('MISSING ANCHOR: ADDED_WINDOWS in server.js');
 }
 
 const readFilters = new Function(
   'readGrouping',
   'filterList',
-  [consts.join('\n'), sourceOf('readParam'), sourceOf('readFilters'), 'return readFilters;'].join('\n')
-)(readGrouping, filterList);
+  'parseSortOrder',
+  'SORT_FIELDS',
+  [consts[0], sourceOf('readParam'), sourceOf('readFilters'), 'return readFilters;'].join('\n')
+)(readGrouping, filterList, parseSortOrder, SORT_FIELDS);
 
 t('choosing a sort leaves grouping alone', () => {
   const filters = readFilters({}, 'name:asc', '');
 
-  assert.equal(filters.sort, 'name', 'the order is the one asked for');
+  assert.deepEqual(filters.order, [{ field: 'name', dir: 'asc' }], 'the queue is what was asked for');
   assert.equal(filters.group, true, 'and the headings stay on');
 });
 
 t('grouping off survives a sort being chosen', () => {
   const filters = readFilters({}, 'added:desc', '0');
 
-  assert.equal(filters.sort, 'added');
-  assert.equal(filters.dir, 'desc');
+  assert.deepEqual(filters.order, [{ field: 'added', dir: 'desc' }]);
   assert.equal(filters.group, false, 'off stays off');
 });
 
 t('with neither chosen the list is grouped and ordered by type', () => {
   const filters = readFilters({}, '', '');
 
-  assert.equal(filters.sort, 'type');
+  assert.deepEqual(filters.order, [], 'no heading carries a badge until one is pressed');
   assert.equal(filters.group, true);
+});
+
+t('a second heading joins the end of the queue', () => {
+  const filters = readFilters({}, 'name:asc,type:desc', '');
+
+  assert.deepEqual(filters.order, [
+    { field: 'name', dir: 'asc' },
+    { field: 'type', dir: 'desc' },
+  ]);
+});
+
+t('a ?sort= bookmark is still a queue of one', () => {
+  const filters = readFilters({ sort: 'added', dir: 'desc' }, 'name:asc', '');
+
+  assert.deepEqual(filters.order, [{ field: 'added', dir: 'desc' }], 'the address bar wins');
 });
 
 t('a nonsense grouping cookie does not ungroup the list', () => {
@@ -277,7 +305,7 @@ t('both list routes read the grouping cookie', () => {
 // ------------------------------------------------ the headings keep their own order
 
 t('the types always run A-Z, whatever the sort did to the rows', () => {
-  const html = render({ sort: 'added', dir: 'desc' });
+  const html = render({ order: [{ field: 'added', dir: 'desc' }] });
   const order = ['Apparel', 'Weapons'].map((name) =>
     html.indexOf(name + ' <span class="type-count">')
   );
@@ -315,7 +343,10 @@ t('the order inside a type is still the one that was chosen', () => {
     item(32, 'Amber Ring', 'Apparel', 1),
     item(33, 'Yew Staff', 'Weapons', 1),
   ];
-  const html = inventoryTable(rows, { mine: false, filters: { group: true, sort: 'name' } });
+  const html = inventoryTable(rows, {
+    mine: false,
+    filters: { group: true, order: [{ field: 'name', dir: 'asc' }] },
+  });
 
   assert.ok(
     html.indexOf('Zeta Blade') < html.indexOf('Yew Staff'),

@@ -445,10 +445,27 @@ always run A-Z and the chosen order applies only inside each type; with it off, 
 to the whole list. A sort never moves a heading: **Added** newest-first puts the newest
 weapon first under Weapons, and Weapons is still where W falls in the alphabet.
 
-The **Item** and **Added** headings sort, cycling through three states on repeated
-clicks: ascending, descending, then back to the default. The chosen order is remembered
-in the `itemshare_sort` cookie and the grouping in `itemshare_group`, so both survive a
-reload without ever appearing in the URL.
+Every heading that has something to order by sorts: **Item**, **Added**, **Type**,
+**Trait**, **Location** (on **Offering**, where the column is drawn) and **Offered by**.
+Each cycles through three states on repeated clicks: ascending, descending, then off. As
+on the owner's requests page, several can be on at once. A press joins that column to the
+end of a queue, and each active heading carries its place as a small superscript before
+the arrow - a raised `2` then `\u25bc` reads as "the second sort, biggest first" - so a
+column that only breaks ties shows that it is doing something. The numbers are read from
+the queue each time the table is drawn, so switching off a column in front renumbers the
+ones behind it instead of leaving a `2` with nothing above it. Rows with nothing in the
+column - no trait, no recorded location - sink to the bottom whichever way it runs. The
+queue is remembered in the `itemshare_sort` cookie and the grouping in `itemshare_group`,
+so both survive a reload without ever appearing in the URL.
+
+Above the tabs, **Search this list** narrows what is already on the page as it is typed,
+so it answers before a request could, and a cross at the end of the box empties it and puts
+the list back. Matching is partial and ignores case, and looks at everything a row says:
+the name, its type and trait, its enchantment, style and set, the storage place, and who
+offers it. The type headings are labels for the rows rather than entries of their own, so
+they take no part in the matching: a heading stays while any row under it matches and goes
+when none do, until the search is cleared. The search belongs to the lists of things on
+offer, so the box is not drawn while **Your requests** is open.
 
 `Added` is the day an item first entered its owner's shared list - the day they offered
 it - not the day of their latest upload, so re-uploading a long-held item does not make

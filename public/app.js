@@ -375,6 +375,8 @@ if (listRegion) {
     } catch (error) {
       // Tab choice is a convenience; failing to remember it changes nothing.
     }
+
+    showSearchBox();
   }
 
   listRegion.addEventListener('click', (event) => {
@@ -401,20 +403,29 @@ if (listRegion) {
       return;
     }
 
-    // A column heading is the sort control and it cycles: ascending, descending, then
-    // back to the type groups. The order is remembered in a cookie instead of the
-    // address bar, so a shared link never carries somebody else's sorting.
+    // A column heading is one place in the sort queue and a press moves it: a column that
+    // is off joins the end ascending, one already there reverses where it stands, and a
+    // third press takes it out. The queue is remembered in a cookie instead of the address
+    // bar, so a shared link never carries somebody else's sorting.
     const sortButton = closest('[data-sort]');
 
     if (sortButton) {
       event.preventDefault();
-
-      const field = sortButton.dataset.sort;
-      const current = sortButton.dataset.dir;
-      const next = current === 'asc' ? 'desc' : current === 'desc' ? '' : 'asc';
-
-      writeSortCookie(next ? `${field}:${next}` : 'type:asc');
+      cycleSort(sortButton.dataset.sort);
       scheduleRefresh(0);
+      return;
+    }
+
+    // The little cross at the end of the search box empties it and puts the list back.
+    const clearSearch = closest('[data-list-search-clear]');
+
+    if (clearSearch) {
+      event.preventDefault();
+      listSearch = '';
+      applyListSearch();
+
+      const input = listRegion.querySelector('[data-list-search]');
+      if (input) input.focus();
       return;
     }
 
@@ -492,14 +503,76 @@ if (listRegion) {
     scheduleRefresh(0);
   });
 
+  // -------------------------------------------------------------------- the search
+  // The box above the tabs narrows the rows already on the page as it is typed - no
+  // request and no delay, so it answers before a round trip could. Group headings take no
+  // part in the matching: a heading is a label for the rows under it, so it stays while
+  // any of them match and goes when none do, rather than disappearing because the word
+  // typed is not the type's own name. The filter card above keeps its search, which is a
+  // name filter the server applies and the address bar carries.
+  let listSearch = '';
+
+  function applyListSearch() {
+    const term = listSearch.trim().toLowerCase();
+    const input = listRegion.querySelector('[data-list-search]');
+    const clear = listRegion.querySelector('[data-list-search-clear]');
+
+    // A refresh can put a fresh box in place. It is given the text that is filtering the
+    // list rather than left empty while the rows below stay narrowed for no visible reason.
+    if (input && input.value !== listSearch) input.value = listSearch;
+    if (clear) clear.hidden = listSearch === '';
+
+    for (const body of listRegion.querySelectorAll('table tbody')) {
+      const groups = [];
+      let group = null;
+
+      for (const row of Array.from(body.rows)) {
+        if (row.classList.contains('type-row')) {
+          group = { row, shown: 0 };
+          groups.push(group);
+          continue;
+        }
+
+        if (!row.hasAttribute('data-search')) continue;
+
+        const matches =
+          term === '' || row.getAttribute('data-search').toLowerCase().includes(term);
+
+        row.hidden = !matches;
+
+        if (matches && group) group.shown += 1;
+      }
+
+      // Decided after the rows are counted, because a heading is drawn before them.
+      for (const entry of groups) entry.row.hidden = entry.shown === 0;
+    }
+  }
+
+  // The search belongs to the lists of things on offer, not to the log of what was asked
+  // for, so the box goes while Your requests is open.
+  function showSearchBox() {
+    const box = listRegion.querySelector('.list-search');
+
+    if (box) box.hidden = activeTab === 'mine';
+  }
+
+  listRegion.addEventListener('input', (event) => {
+    if (!event.target.matches || !event.target.matches('[data-list-search]')) {
+      return;
+    }
+
+    listSearch = event.target.value;
+    applyListSearch();
+  });
+
   // ------------------------------------------------------------------- filters
   // Filters apply as soon as they change - there is no button to forget - and the
   // address bar keeps up, so a reload or a live refresh uses the same filters.
   const filterForm = document.querySelector('[data-filters]');
 
   // The sort order is a reading preference, so it is remembered in a cookie and never
-  // written into the address bar. `type:asc` means "no choice": the plain type grouping
-  // the server sends anyway, which also clears a choice made on an earlier visit.
+  // written into the address bar. An empty queue means "no choice": the plain type
+  // grouping the server sends anyway, which also clears a choice made on an earlier visit.
   // Its own cookie, for the same reason: a display choice should not be in the URL, and
   // the two choices are independent, so one must not overwrite the other.
   function writeGroupCookie(value) {
@@ -512,6 +585,52 @@ if (listRegion) {
     document.cookie = `itemshare_sort=${encodeURIComponent(
       value
     )}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  }
+
+  // The order is a queue of columns, written as `name:asc,type:desc`: the first decides,
+  // the next only breaks its ties, and so on in the order they were pressed. Only the
+  // cycling happens here - the server reads the queue back (lib/sortQueue.js) and draws
+  // the rows already sorted, so a refresh never leaves the table half ordered.
+  const SORT_FIELDS = ['name', 'added', 'type', 'trait', 'location', 'owner'];
+
+  function readCookieValue(name) {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function readSortQueue() {
+    const order = [];
+
+    for (const part of readCookieValue('itemshare_sort').split(',')) {
+      const [field, dir] = part.split(':').map((piece) => piece.trim());
+
+      if (!SORT_FIELDS.includes(field) || (dir !== 'asc' && dir !== 'desc')) continue;
+      if (order.some((entry) => entry.field === field)) continue;
+
+      order.push({ field, dir });
+    }
+
+    return order;
+  }
+
+  // One press: off joins the end ascending, ascending reverses in place, descending takes
+  // the column out and everything behind it moves up a place.
+  function cycleSort(field) {
+    if (!SORT_FIELDS.includes(field)) return;
+
+    const order = readSortQueue();
+    const at = order.findIndex((entry) => entry.field === field);
+    let next;
+
+    if (at === -1) {
+      next = [...order, { field, dir: 'asc' }];
+    } else if (order[at].dir === 'asc') {
+      next = order.map((entry, index) => (index === at ? { field, dir: 'desc' } : entry));
+    } else {
+      next = order.filter((entry, index) => index !== at);
+    }
+
+    writeSortCookie(next.map((entry) => `${entry.field}:${entry.dir}`).join(','));
   }
 
   // A filter can hold several values, and what is switched on is shown as chips
@@ -914,6 +1033,8 @@ if (listRegion) {
     relativeTick(listRegion);
     noteClosedRequests();
     syncRequestDialog();
+    applyListSearch();
+    showSearchBox();
   }
 
   /**
