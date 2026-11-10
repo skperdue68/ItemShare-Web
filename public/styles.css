@@ -1928,6 +1928,7 @@ tr.row-fading td {
 }
 
 .filter-option {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1948,6 +1949,33 @@ tr.row-fading td {
   color: #fca5a5;
   font-weight: 600;
   letter-spacing: 0.04em;
+}
+
+/* Added is one window at a time, so its menu is a list of words: a radio dot in front of
+   each one reads as "pick one of these", which is not what the other menus do. The input
+   is still a real radio - labels, arrow keys and the form post all keep working - it is
+   only the dot that is taken out of the picture. */
+.filter-option input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* What replaces the dot: the chosen window is the one sitting in a filled row. */
+.filter-option:has(input[type='radio']:checked) {
+  background: rgba(96, 165, 250, 0.2);
+}
+
+/* Taking the dot away must not take the keyboard's place in the menu with it. */
+.filter-option:focus-within {
+  outline: 1px solid rgba(96, 165, 250, 0.6);
+  outline-offset: -1px;
 }
 
 /* One long row of chips: everything that is narrowing the list, each one a click
@@ -3123,7 +3151,12 @@ a.history-page:hover, .history-page.is-current {
 /* An item shared past its owner's expireDays: still fully claimable, so the row is not
    dimmed and nothing else about it changes. This pill is the whole warning. */
 .last-chance-pill {
+  /* A flex item in the column beside the icon, so without this it stretches to the width
+     of the name and reads as a bar rather than a pill around two words. */
+  align-self: flex-start;
   display: inline-block;
+  width: fit-content;
+  white-space: nowrap;
   margin-left: 8px;
   padding: 1px 7px 2px;
   border: 1px solid rgba(248, 113, 113, 0.42);

@@ -32,6 +32,9 @@ landed on `main`.
 - The **Added** filter is a single-choice menu now - Any time, the last day, the last 7
   days, the last 30 days, LAST CHANCE - with the same look and behaviour as Type and
   Offered by instead of a native dropdown.
+- **LAST CHANCE** is a pill around those two words rather than a bar as wide as the item
+  name under it, and the **Added** menu lists its windows as words alone: one choice at a
+  time means no radio dots, with the chosen row filled instead.
 - The filter card no longer has its own *Item name* box. Each list's **Search this list**
   field does that job, so the address bar carries no `q` parameter any more.
 - **Clear filters** is now **Reset**.
