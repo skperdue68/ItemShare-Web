@@ -7,6 +7,12 @@ landed on `main`.
 
 ### Added
 
+- **`npm run delete:user`** removes a person by the name they sign in with, with everything
+  attached to them: their ESO accounts and the items, offers, guild memberships and uploads
+  on them, their baskets and requests, the guild codes they made and the redemptions of
+  them, and their sign-in rows and sessions. It all happens in one transaction, and it
+  counts every known reference afterwards, rolling back rather than committing a
+  half-removed person. `--dry-run` shows what would go.
 - **The guild slot a code opened** is listed on its own under the guilds the game reported,
   labelled *Guild slot from a code*: it is an invitation that was accepted, not a membership
   the character has in game, and mixing the two made the list read as if the game had

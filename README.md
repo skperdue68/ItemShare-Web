@@ -945,6 +945,7 @@ npm run simulate -- --rounds 12
 | `npm run backfill` | `backfillIcons.js` | yes | no |
 | `npm run seed:demo` | `seedDemo.js` | yes | no |
 | `npm run requests:reopen` | `reopenRequests.js` | yes | no |
+| `npm run delete:user` | `deleteUser.js` | yes | no |
 | `npm run simulate` | `simulate.js` | yes | only for live pushes |
 | `npm run email:test` | `testEmail.js` | no | no |
 
@@ -1061,6 +1062,42 @@ something), `1` nothing matched or everything was skipped, `2` usage.
 
 The command pushes nothing, so an open page shows the new hold on its next refresh - the
 basket and the "already asked for" counts are read from the tables each time.
+
+### npm run delete:user
+
+Removes one person and everything attached to them. This is the only command that destroys
+data, so it prints what it found, asks for the login name again before it starts, and runs
+as one transaction.
+
+| Flag | Meaning |
+| --- | --- |
+| `<login>` | The name they sign in with: the address of an email and password sign-in, a Discord or Google address, a provider username, or the display name the provider gave them |
+| `--id <n>` | The person id, for when two people answer to the same name |
+| `--dry-run` | Run the same statements, print the counts, then roll back |
+| `--yes` | Skip the confirmation. Required when nothing can be typed, as in a script |
+| `--help`, `-h` | Print usage and exit |
+
+```bash
+npm run delete:user -- someone@example.com --dry-run   # what would go, changes nothing
+npm run delete:user -- someone@example.com             # asks for the name again first
+npm run delete:user -- --id 12 --yes                   # in a script, no prompt
+```
+
+Everything the person owns goes in one transaction: their ESO accounts with the shared
+items, standing offers, guild memberships and uploads on them, their baskets, and the
+requests asked for or owed on those accounts; the guild codes they created and the
+redemptions of them; and their sessions, identities, password, password reset rows, account
+links and the person row itself. Guilds and the item icon and tip caches are shared by
+everybody and are kept. A membership another person was granted with one of this person's
+codes keeps the guild and loses only the provenance - `granted_code_id` becomes `NULL` - so
+deleting a person never takes somebody else's invitation away.
+
+After the deletes the command counts every known reference again. Anything still attached
+is treated as a mistake in its list rather than something to live with: the transaction is
+rolled back and the leftovers are printed, so a half-removed person is never committed.
+`--dry-run` goes through the same statements and rolls back, so its counts are the real
+ones. Exit codes: `0` removed (or a dry run that found them), `1` nothing matched or
+something was left behind, `2` usage.
 
 ### npm run simulate
 
