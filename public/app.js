@@ -301,6 +301,10 @@ if (listRegion) {
   const ANCHOR_LINE_MAX = 280;
   const CHANGE_DELAY_MS = 120;
   const SEARCH_DELAY_MS = 250;
+  // The list's own search waits longer than the filter card's: it is typed into while
+  // reading, and a word is usually several keystrokes, so a second lets the word finish
+  // before the table redraws underneath it.
+  const LIST_SEARCH_DELAY_MS = 1000;
   const RELOAD_ANCHOR_KEY = 'itemshare:scroll-anchor';
   const TAB_KEY = 'itemshare:tab';
 
@@ -422,6 +426,7 @@ if (listRegion) {
     if (clearSearch) {
       event.preventDefault();
       listSearch = '';
+      window.clearTimeout(listSearchTimer);
       applyListSearch();
 
       const input = listRegion.querySelector('[data-list-search]');
@@ -511,6 +516,7 @@ if (listRegion) {
   // typed is not the type's own name. The filter card above keeps its search, which is a
   // name filter the server applies and the address bar carries.
   let listSearch = '';
+  let listSearchTimer = null;
 
   function applyListSearch() {
     const term = listSearch.trim().toLowerCase();
@@ -564,6 +570,12 @@ if (listRegion) {
     }
   }
 
+  function updateSearchClear() {
+    const clear = listRegion.querySelector('[data-list-search-clear]');
+
+    if (clear) clear.hidden = listSearch === '';
+  }
+
   // The search belongs to the lists of things on offer, not to the log of what was asked
   // for, so the box goes while Your requests is open.
   function showSearchBox() {
@@ -577,8 +589,13 @@ if (listRegion) {
       return;
     }
 
+    // The field keeps up with every keystroke; the list waits for the word. Narrowing on
+    // the first letter would hide rows and move the table on the way to the right four.
     listSearch = event.target.value;
-    applyListSearch();
+    updateSearchClear();
+
+    window.clearTimeout(listSearchTimer);
+    listSearchTimer = window.setTimeout(applyListSearch, LIST_SEARCH_DELAY_MS);
   });
 
   // ------------------------------------------------------------------- filters

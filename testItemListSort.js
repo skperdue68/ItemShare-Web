@@ -10,7 +10,7 @@ import fs from 'node:fs';
 
 import { SORT_FIELDS, parseSortOrder, queuePlace } from './lib/sortQueue.js';
 import { orderFor } from './lib/store.js';
-import { inventoryTable, listSearchBox, offerTable } from './lib/views.js';
+import { inventoryTable, listSearchBox, offerTable, renderListRegion } from './lib/views.js';
 
 let total = 0;
 let failures = 0;
@@ -264,6 +264,29 @@ t('the cross starts out of the way, and is a button rather than a glyph', () => 
 t('the search box is not part of any form, so it cannot be submitted', () => {
   assert.doesNotMatch(listSearchBox(), /<form/);
   assert.doesNotMatch(listSearchBox(), /name="/, 'nothing to post');
+});
+
+t('the search sits under the tabs and above the table it narrows', () => {
+  const region = renderListRegion({
+    user: { id: 1, username: 'eva', provider: 'password' },
+    accounts: [{ accountName: '@eva', guildCount: 1, guilds: [{}] }],
+    sharedItems: [],
+    requestItems: [],
+    alwaysShare: [],
+    requestOffers: [],
+    facets: { types: [], owners: [] },
+    filters: {},
+    requests: [],
+    basketRows: [],
+  });
+
+  const tabs = region.indexOf('class="tabs"');
+  const search = region.indexOf('class="list-search"');
+  const table = region.indexOf('id="panelRequest"');
+
+  assert.ok(tabs > -1 && search > -1 && table > -1, 'the tabs, the box and the table are all drawn');
+  assert.ok(tabs < search, 'the box is no longer up beside the tabs');
+  assert.ok(search < table, 'it is the last thing before the list');
 });
 
 // ------------------------------------------------- the count while searching
