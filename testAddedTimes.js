@@ -71,6 +71,15 @@ t('both lists ask for the instant, and neither formats the column', () => {
   );
 });
 
+t('the driver reads a date column as UTC, not as the server clock', () => {
+  // The comma keeps the doc comment above the helper out of the count.
+  assert.equal(
+    (database.match(/timezone: '\+00:00',/g) || []).length,
+    2,
+    'both the migrating and the per-request connection'
+  );
+});
+
 t('every connection the site opens is in UTC', () => {
   assert.match(database, /SET time_zone = '\+00:00'/);
   assert.equal(

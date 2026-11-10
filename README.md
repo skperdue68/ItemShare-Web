@@ -530,7 +530,9 @@ over - is dropped when that upload arrives, so if the owner offers it again late
 comes back with the day they offered it again rather than the day it first appeared.
 
 The age beside it is counted from a real UTC instant. Every connection is put in UTC
-(`useUtcSession` in `lib/database.js`), and the lists ask for `UNIX_TIMESTAMP(first_seen_at)`
+(`useUtcSession` in `lib/database.js`, and `timezone: '+00:00'` so the driver reads a date
+column as the same instant rather than as the server's own clock), and the lists ask for
+`UNIX_TIMESTAMP(first_seen_at)`
 rather than formatting the column, so an item offered a minute ago reads as a minute
 wherever the database host's own clock is set - and each reader still sees the count run
 in their own time zone. Request times, `LAST CHANCE` and the *Added* windows measure from
