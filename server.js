@@ -1374,14 +1374,15 @@ function readGuildChoice(value) {
 }
 
 /** The accounts and the guilds they belong to, which is what both pages are built from. */
-async function guildsOf(connection, userId) {
+async function guildsOf(connection, userId, { grantableOnly = false } = {}) {
   const accounts = await getViewerAccounts(connection, userId);
 
   return {
     accounts,
     guilds: await getViewerGuilds(
       connection,
-      accounts.map((row) => row.eso_account_name)
+      accounts.map((row) => row.eso_account_name),
+      { grantableOnly }
     ),
   };
 }
@@ -1471,7 +1472,9 @@ app.post('/guilds/codes', async (req, res) => {
  * have made. The page and every answer that redraws it read exactly this.
  */
 async function codesPageData(connection, userId) {
-  const { accounts, guilds } = await guildsOf(connection, userId);
+  // Only the guilds the file reported: a guild a code opened is the account's extra slot,
+  // and the person it was opened for cannot make a code from it for somebody else.
+  const { accounts, guilds } = await guildsOf(connection, userId, { grantableOnly: true });
 
   return { accounts, guilds, codes: await listGuildCodes(connection, userId) };
 }

@@ -268,6 +268,10 @@ menu - and that guild's items open to their account.
 
 - A code names one guild **and its server**, because a guild id on its own does not: the
   same number on NA and EU is a different guild.
+- A code can only be made for a guild the game itself reported in a saved variables file.
+  The guild a code opened for somebody is that account's extra slot rather than a real
+  membership, so it is shown in their list but never offered: with no file-reported guild
+  the page draws no form at all, only the codes already made.
 - It is made of characters that survive being read out loud - no `I`, `L`, `O`, `0` or `1` -
   and shown as `K7QM-3XPD`. Case, spaces and dashes are forgiven when it is entered;
   nothing else is guessed at, so a mistyped character is refused rather than mapped.
@@ -275,9 +279,10 @@ menu - and that guild's items open to their account.
   the code in `granted_code_id`. An upload replaces only the memberships the game
   reported, so an invitation survives every later file - and leaving the guild in game
   does not take it away either.
-- Nothing is granted from the form. The guild is looked up among the person's own guilds
-  and the code is looked up in `itemshare_guild_codes` before anything is written, so a
-  hand-written form cannot make a code for somebody else's guild or guess one by id.
+- Nothing is granted from the form. The guild is looked up among the guilds the file
+  reported for the person's accounts, excluding any that came from a code, and the code is
+  looked up in `itemshare_guild_codes` before anything is written, so a hand-written form
+  can neither make a code for somebody else's guild nor reuse an invitation as a slot.
 - If the site knows no ESO account for them yet, the page asks for the account name in a
   box over it - with the platform and server, the same three things the accounts dialog
   asks for - and the `@` is added if they leave it off (`normalizeEsoAccountName`). The

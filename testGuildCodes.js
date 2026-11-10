@@ -20,7 +20,7 @@ import {
   newGuildCode,
   normalizeGuildCode,
 } from './lib/guildCodes.js';
-import { revokeGuildCode } from './lib/store.js';
+import { findOwnGuild, getViewerGuilds, revokeGuildCode } from './lib/store.js';
 import { renderGuildCodesPage, renderJoinGuildPage } from './lib/views.js';
 
 let total = 0;
@@ -184,8 +184,9 @@ await t('codes already made are listed with how many people used them', () => {
 await t('a page with no guilds says what to do first', () => {
   const none = renderGuildCodesPage({ guilds: [], codes: [], user });
 
-  assert.match(none, /No guilds yet/);
-  assert.match(none, /upload a saved variables file/i);
+  assert.match(none, /No guilds to invite from/);
+  assert.match(none, /saved variables file/i);
+  assert.match(none, /not one you can hand on/, 'the extra slot is named as not grantable');
   assert.equal(
     count(none, 'action="/guilds/codes"'),
     0,
@@ -370,6 +371,46 @@ await t('a code made by somebody else is not revoked by knowing it', async () =>
     0,
     'nothing is deleted when the code is not theirs'
   );
+});
+
+// ----------------------------------------------------- who may invite, and from what
+
+await t('only the guilds the game reported can be made into codes', async () => {
+  const connection = writtenDown();
+
+  await getViewerGuilds(connection, ['@ada'], { grantableOnly: true });
+
+  assert.match(
+    connection.calls[0].sql,
+    /ag\.granted_code_id IS NULL/,
+    'a guild a code opened is not offered'
+  );
+});
+
+await t('the guild list the site browses by still shows a guild a code opened', async () => {
+  const connection = writtenDown();
+
+  await getViewerGuilds(connection, ['@ada']);
+
+  assert.doesNotMatch(
+    connection.calls[0].sql,
+    /granted_code_id IS NULL/,
+    'the ordinary list is not narrowed'
+  );
+  assert.match(connection.calls[0].sql, /granted_code_id IS NOT NULL/, 'and it is still visible');
+});
+
+await t('a guild a code opened cannot be made into a code of its own', async () => {
+  const connection = writtenDown();
+
+  await findOwnGuild(connection, 3, { guildId: 1001, platform: 2, worldName: 'NA Megaserver' });
+
+  assert.match(
+    connection.calls[0].sql,
+    /ag\.granted_code_id IS NULL/,
+    'a hand-written form cannot reach the extra slot either'
+  );
+  assert.deepEqual(connection.calls[0].params, [3, 1001, 2, 'NA Megaserver']);
 });
 
 console.log(`\n${total - failures}/${total} passed`);
