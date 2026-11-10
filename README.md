@@ -1065,19 +1065,26 @@ basket and the "already asked for" counts are read from the tables each time.
 
 ### npm run delete:user
 
-Removes one person and everything attached to them. This is the only command that destroys
-data, so it prints what it found, asks for the login name again before it starts, and runs
-as one transaction.
+Removes one email and password login and everything attached to it. This is the only
+command that destroys data, so it prints what it found, asks for the login name again
+before it starts, and runs as one transaction.
+
+Both `--list` and the removal work on the logins people make here with an address and a
+password. A Discord or Google sign-in is the provider's account, so it is neither listed
+nor removed by this command, and an ESO account name is an item holder rather than a
+login.
 
 | Flag | Meaning |
 | --- | --- |
-| `<login>` | The name they sign in with: the address of an email and password sign-in, a Discord or Google address, a provider username, or the display name the provider gave them |
+| `--list` | Print the email and password logins, with their id and how many ESO accounts each has |
+| `<login>` | The address an email and password login was made with |
 | `--id <n>` | The person id, for when two people answer to the same name |
 | `--dry-run` | Run the same statements, print the counts, then roll back |
 | `--yes` | Skip the confirmation. Required when nothing can be typed, as in a script |
 | `--help`, `-h` | Print usage and exit |
 
 ```bash
+npm run delete:user -- --list                          # the logins this command can remove
 npm run delete:user -- someone@example.com --dry-run   # what would go, changes nothing
 npm run delete:user -- someone@example.com             # asks for the name again first
 npm run delete:user -- --id 12 --yes                   # in a script, no prompt

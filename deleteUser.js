@@ -7,9 +7,11 @@
 //   ./deleteUser.js someone@example.com --yes
 //   ./deleteUser.js --id 12 --yes
 //
-// The name is the login: the address of an email and password sign-in, a Discord or Google
-// address, the provider's username, or the display name it gave them. `--id` is there for
-// the case where two people answer to the same name.
+// What it lists and removes is an email and password login - an account somebody made on
+// this site - not a Discord or Google sign-in, whose account belongs to the provider and
+// whose people are named by it. `--list` prints the logins it can remove; the name to give
+// is the address that login was made with, and `--id` is there for the case where two
+// people answer to the same name.
 //
 // Everything the person owns goes with them, in one transaction, so no row is left pointing
 // at a person or an ESO account that is gone: their shared items, their standing offers,
@@ -49,14 +51,18 @@ const hasEnvFile = existsSync(envPath);
 dotenv.config({ path: envPath });
 
 export const USAGE = `Usage: node deleteUser.js <login> [options]
+       node deleteUser.js --list
 
-Removes one person and everything attached to them: their ESO accounts with the items
-and offers on them, their requests, guild codes and redemptions, sign-in rows and
-sessions. It runs as one transaction, and refuses to commit if anything still points
-at the person afterwards.
+Removes one email and password login and everything attached to it: its ESO accounts
+with the items and offers on them, its requests, guild codes and redemptions, sign-in
+rows and sessions. It runs as one transaction, and refuses to commit if anything still
+points at the person afterwards.
 
-  <login>        The name they sign in with: an email address, a provider username, or
-                 the display name the provider gave them
+This command works on the logins people make here with an address and a password.
+Discord and Google sign-ins belong to the provider and are not listed or removed.
+
+  --list         Print the email and password logins, with their id and ESO accounts
+  <login>        The address an email and password login was made with
   --id <n>       The person id, for when two people answer to the same name
   --dry-run      Run the same statements, print the counts, then roll back
   --yes          Skip the confirmation. Required when nothing can be typed
@@ -278,7 +284,7 @@ export function leftoverChecks({ userId, accountNames = [] }) {
  *   problems: string[]}}
  */
 export function parseArguments(argv) {
-  const options = { login: '', id: 0, dryRun: false, yes: false };
+  const options = { login: '', id: 0, dryRun: false, yes: false, list: false };
   const problems = [];
   const words = [];
 
@@ -297,6 +303,11 @@ export function parseArguments(argv) {
 
     if (arg === '--yes') {
       options.yes = true;
+      continue;
+    }
+
+    if (arg === '--list') {
+      options.list = true;
       continue;
     }
 
@@ -325,44 +336,81 @@ export function parseArguments(argv) {
     problems.push('Give a login name or --id, not both.');
   }
 
+  if (options.list && (options.login || options.id)) {
+    problems.push('--list shows the logins on its own; drop the name or --id.');
+  }
+
   return { options, problems };
 }
 
-/** The people one login or id names. More than one means the caller has to pick. */
+/**
+ * The email and password login an address or id names. More than one means the caller has
+ * to pick.
+ *
+ * Only that kind of login is handled: an account made on this site, whose subject in
+ * `itemshare_user_identities` is the address itself. A Discord or Google sign-in is the
+ * provider's account and is deliberately not matched, so an ESO account name, a provider
+ * username or a display name can never remove a person this command was not asked about.
+ *
+ * @returns {Promise<Array<{id: number, login: string, displayName: string, email: string,
+ *   isDemo: boolean}>>}
+ */
 export async function resolvePeople(connection, { login = '', id = 0 } = {}) {
   const shape = (row) => ({
     id: Number(row.id),
+    login: String(row.login || ''),
     displayName: String(row.display_name || ''),
     email: String(row.email || ''),
     isDemo: Number(row.is_demo) > 0,
   });
 
+  const sql = `SELECT u.id, u.display_name, u.email, u.is_demo,
+                      i.provider_user_id AS login
+                 FROM itemshare_user_identities i
+                 JOIN itemshare_users u ON u.id = i.user_id
+                WHERE i.provider = 'password'`;
+
   if (id) {
-    const [rows] = await connection.execute(
-      'SELECT id, display_name, email, is_demo FROM itemshare_users WHERE id = ?',
-      [Number(id)]
-    );
+    const [rows] = await connection.execute(`${sql} AND u.id = ?`, [Number(id)]);
 
     return rows.map(shape);
   }
 
-  const needle = String(login || '').trim();
-  const address = normalizeEmail(needle);
-
-  // The password identity stores the address as its subject and Discord or Google keeps the
-  // username they were given, so all three are matched. The collation is case-insensitive,
-  // so an address typed in another case still finds its row.
+  // The identity stores the address as its subject, and the collation is case-insensitive,
+  // so an address typed in another case still finds its login.
   const [rows] = await connection.execute(
-    `SELECT DISTINCT u.id, u.display_name, u.email, u.is_demo
-       FROM itemshare_users u
-       LEFT JOIN itemshare_user_identities i ON i.user_id = u.id
-      WHERE u.email = ? OR i.provider_user_id = ? OR i.provider_email = ?
-         OR i.provider_username = ?
-      ORDER BY u.id ASC`,
-    [address, needle, address, needle]
+    `${sql} AND i.provider_user_id = ? ORDER BY u.id ASC`,
+    [normalizeEmail(login)]
   );
 
   return rows.map(shape);
+}
+
+/**
+ * Every email and password login, oldest first, with how many ESO accounts each has.
+ *
+ * Nothing secret is read - the address, the display name, the id and a count - because this
+ * is the list somebody picks a name from before removing it.
+ */
+export async function listPasswordLogins(connection) {
+  const [rows] = await connection.execute(
+    `SELECT u.id, u.display_name, u.email, u.is_demo,
+            i.provider_user_id AS login,
+            (SELECT COUNT(*) FROM itemshare_accounts a WHERE a.user_id = u.id) AS account_count
+       FROM itemshare_user_identities i
+       JOIN itemshare_users u ON u.id = i.user_id
+      WHERE i.provider = 'password'
+      ORDER BY i.provider_user_id ASC, u.id ASC`
+  );
+
+  return rows.map((row) => ({
+    id: Number(row.id),
+    login: String(row.login || ''),
+    displayName: String(row.display_name || ''),
+    email: String(row.email || ''),
+    isDemo: Number(row.is_demo) > 0,
+    accountCount: Number(row.account_count) || 0,
+  }));
 }
 
 /** The ESO accounts linked to one person. */
@@ -405,8 +453,8 @@ async function main() {
 
   const { options, problems } = parseArguments(argv);
 
-  if (problems.length === 0 && !options.login && !options.id) {
-    problems.push('Name the person to remove, or give --id.');
+  if (problems.length === 0 && !options.list && !options.login && !options.id) {
+    problems.push('Name the login to remove, or give --id or --list.');
   }
 
   if (problems.length > 0) {
@@ -432,11 +480,36 @@ async function main() {
   }
 
   try {
+    if (options.list) {
+      const logins = await listPasswordLogins(connection);
+
+      if (logins.length === 0) {
+        console.log('No email and password login exists yet.');
+        return 0;
+      }
+
+      console.log(`\n${logins.length} email and password login${logins.length === 1 ? '' : 's'}:`);
+      console.log(`  ${'ID'.padEnd(6)}  ${'LOGIN'.padEnd(36)}  ${'NAME'.padEnd(24)}  ACCOUNTS`);
+
+      for (const entry of logins) {
+        console.log(
+          `  ${`#${entry.id}`.padEnd(6)}  ${entry.login.padEnd(36)}  ${(
+            entry.displayName || '(no display name)'
+          ).padEnd(24)}  ${entry.accountCount}${entry.isDemo ? '  (demo)' : ''}`
+        );
+      }
+
+      return 0;
+    }
+
     const people = await resolvePeople(connection, options);
 
     if (people.length === 0) {
-      console.error(`Nobody signs in as "${options.login || `#${options.id}`}".`);
-      console.error('Check the spelling, or pass --id with the person id shown on the site.');
+      console.error(`No email and password login for "${options.login || `#${options.id}`}".`);
+      console.error(
+        'This command handles logins made here with an address and a password; a Discord'
+      );
+      console.error('or Google sign-in belongs to the provider. --list shows the logins here.');
       return 1;
     }
 
@@ -458,7 +531,7 @@ async function main() {
     const name = options.login || `#${person.id}`;
 
     console.log(`Person:   ${person.displayName || '(no display name)'} (#${person.id})`);
-    console.log(`Sign-in:  ${person.email || name}`);
+    console.log(`Login:    ${person.login || person.email || name}`);
     console.log(`Accounts: ${accountNames.join(', ') || '(no ESO account linked)'}`);
 
     if (person.isDemo) {

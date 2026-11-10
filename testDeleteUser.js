@@ -187,6 +187,26 @@ t('a half-typed command line is refused rather than guessed at', () => {
   assert.deepEqual(parseArguments([]).problems, [], 'no arguments is handled by the usage text');
 });
 
+t('--list shows the email and password logins on its own', () => {
+  const { options, problems } = parseArguments(['--list']);
+
+  assert.deepEqual(problems, []);
+  assert.equal(options.list, true);
+  assert.equal(options.login, '');
+  assert.equal(options.id, 0, 'it does not fall back to a person id');
+
+  assert.equal(
+    parseArguments(['--list', 'someone@example.com']).problems.length,
+    1,
+    'a name beside --list is refused'
+  );
+  assert.equal(
+    parseArguments(['--list', '--id', '4']).problems.length,
+    1,
+    'so is an id beside it'
+  );
+});
+
 t('--dry-run changes nothing on its own', () => {
   const { options, problems } = parseArguments(['--dry-run', 'someone@example.com']);
 

@@ -12,7 +12,10 @@ landed on `main`.
   on them, their baskets and requests, the guild codes they made and the redemptions of
   them, and their sign-in rows and sessions. It all happens in one transaction, and it
   counts every known reference afterwards, rolling back rather than committing a
-  half-removed person. `--dry-run` shows what would go.
+  half-removed person. `--list` prints the email and password logins it can remove, with
+  their id and how many ESO accounts each has, and `--dry-run` shows what removal would
+  take. Both listing and removing work on logins made on the site with an address and a
+  password, not on Discord or Google sign-ins.
 - **The guild slot a code opened** is listed on its own under the guilds the game reported,
   labelled *Guild slot from a code*: it is an invitation that was accepted, not a membership
   the character has in game, and mixing the two made the list read as if the game had
