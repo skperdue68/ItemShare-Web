@@ -477,6 +477,26 @@ t('a term matches a row the heading does not name', () => {
   assert.equal(weapons.count.textContent, '(1 of 2)');
 });
 
+// The addon writes a level of 1 for everything without a requirement - food, soul gems,
+// materials, furnishings - so those rows read "Level 1". Nothing needs a level 1, on gear or
+// off it, so it is not printed at all.
+t('a requirement of 1 is never printed', () => {
+  const html = inventoryTable(
+    [
+      item(10, 'Revelry Pie', 'Food', { required_level: 1 }),
+      item(11, 'Harvested Soul Fragment', 'Soul Gem', { required_level: 1 }),
+      item(12, 'Mosaic Skill Shred', 'Furnishing', { required_level: 1 }),
+      item(13, 'Briarheart Dagger', 'Weapons', { required_level: 50, required_cp: 160 }),
+      item(14, "Companion's Restoration Staff", 'Weapons', { required_level: 1 }),
+    ],
+    { mine: false, filters: {} }
+  );
+
+  assert.match(html, /Level CP160/, 'gear still says what it requires');
+  assert.doesNotMatch(html, /Level 1(?![0-9])/, 'nothing claims a requirement of 1');
+  assert.match(html, /Revelry Pie/, 'the rows are all still drawn');
+});
+
 console.log(`\n${total - failures}/${total} passed`);
 
 process.exit(failures ? 1 : 0);

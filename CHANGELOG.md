@@ -33,6 +33,10 @@ landed on `main`.
 
 ### Changed
 
+- **A level of 1 is not printed.** The addon writes a 1 for anything with no level
+  requirement - food, potions, materials, soul gems, furnishings, motifs - so those rows read
+  *Level 1* beside the trait. Nothing gates at level 1, on gear or off it, so the piece is
+  left out; a real requirement still shows, as `Level 50` or `Level CP160`.
 - **How to use ItemShare** is two sections now: *Been given a guild code?* for anybody who
   was handed one - sign in, choose **Use Guild Code** at the top of the next screen, and that
   guild's offerings are there, with no addon and no file - and *Adding your own items* for

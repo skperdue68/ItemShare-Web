@@ -456,7 +456,10 @@ is labelled - `Level 50 · Precise · Breton · Absorb Stamina` - because `50`, 
 `1` on its own reads as one more name in the list rather than a requirement; the word
 says which piece decides whether the item can be worn at all. A piece the item does not
 have is skipped rather than shown blank. A champion-point item shows its CP as that
-level - `Level CP160`, not the 50 every character has long passed. Two Briarheart daggers share a name, a
+level - `Level CP160`, not the 50 every character has long passed. A level of 1 prints
+nothing: the addon writes a 1 for everything with no requirement - food, a potion, materials,
+a soul gem, furniture, a motif - and a 1 gates nothing on gear either, so the piece said
+"Level 1" beside a pie while meaning nothing. Two Briarheart daggers share a name, a
 set and a colour, so seeing that one is level 50 and *Precise* and the other level 10 and
 *Sharpened* should not mean scanning across to a column: the pieces sit where the name
 is, on **Request**, on **Offering** and on the owner's *Requests for your items* page.
@@ -1470,7 +1473,7 @@ only useful thing is the file that supplies them.
 `lib/demoItems.js` shared with it. The catalogue carries the fields an upload carries, not
 just names: its weapons, armour and jewellery are level 50, CP 160 and enchanted, so the
 requirement and enchantment columns have something to read. Materials, consumables,
-furnishings and motifs have no level or glyph, which is also what a real file reports. It is created at startup, and again on a demo sign-in
+furnishings and motifs have no level or glyph, which is also what a real file reports. The demo person is created at startup, and again on a demo sign-in
 if it is missing, so a fresh database already has it. The address on it is
 `demo@example.com`, on the reserved documentation domain, and creating an ordinary
 account with that address is refused, so nobody can take it over.
