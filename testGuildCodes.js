@@ -169,7 +169,7 @@ await t('a code that was just made is shown in full, above everything else', () 
   assert.match(justMade, /K7QM-3XPD/, 'the code is what somebody needs to copy');
   assert.match(justMade, /Share this code/);
   assert.ok(
-    justMade.indexOf('Share this code') < justMade.indexOf("Invite to shop my guild's items"),
+    justMade.indexOf('Share this code') < justMade.indexOf('<h2>Create Guild Code</h2>'),
     'the new code comes before the form that makes another'
   );
 });
@@ -201,7 +201,7 @@ const joinPage = renderJoinGuildPage({ user });
 await t('the join page is one box, and it posts the code', () => {
   assert.match(joinPage, /method="post" action="\/guilds\/join"/);
   assert.match(joinPage, /<input id="guild-code" name="code"/);
-  assert.match(joinPage, /Use code/);
+  assert.match(joinPage, /Use Guild Code/);
   assert.equal(count(joinPage, 'type="password"'), 0, 'nothing here is a password');
   assert.doesNotMatch(joinPage, /src="\/app\.js"/, 'there is no item list to script');
 });
@@ -222,8 +222,8 @@ await t('a refused code keeps what was typed and says why', () => {
 await t('both ways to bring somebody in are in the avatar menu', () => {
   assert.match(codesPage, /<a class="account-menu-item" href="\/guilds\/codes" role="menuitem">/);
   assert.match(codesPage, /<a class="account-menu-item" href="\/guilds\/join" role="menuitem">/);
-  assert.match(codesPage, /Invite to Shop My Guilds Items/);
-  assert.match(codesPage, /Use Code/);
+  assert.match(codesPage, /Create Guild Code/);
+  assert.match(codesPage, /Use Guild Code/);
 });
 
 // ------------------------------------------------------- the used code, in reach
@@ -231,7 +231,7 @@ await t('both ways to bring somebody in are in the avatar menu', () => {
 await t('the code box is on the screen when signed in, not only in the menu', () => {
   assert.match(
     joinPage,
-    /<a class="code-link" href="\/guilds\/join">Use Code<\/a>/,
+    /<a class="code-link" href="\/guilds\/join">Use Guild Code<\/a>/,
     'the person who was just given a code should not have to find the menu first'
   );
   assert.match(joinPage, /<div class="auth-area">/);
@@ -281,8 +281,8 @@ await t('an account name typed without the @ is given one', () => {
 
 await t('every page has a way back to the item list, and the codes page is no exception', () => {
   assert.match(codesPage, /<a class="brand" href="\/" aria-label="ItemShare home">/);
-  assert.match(codesPage, /<p class="guild-back"><a href="\/">Back to ItemShare<\/a><\/p>/);
-  assert.match(joinPage, /<p class="guild-back"><a href="\/">Back to ItemShare<\/a><\/p>/);
+  assert.match(codesPage, /<p class="guild-back"><a class="primary-button" href="\/">Back to ItemShare<\/a><\/p>/);
+  assert.match(joinPage, /<p class="guild-back"><a class="primary-button" href="\/">Back to ItemShare<\/a><\/p>/);
 });
 
 await t('the avatar menu works on the pages that have no item list', () => {
@@ -411,6 +411,18 @@ await t('a guild a code opened cannot be made into a code of its own', async () 
     'a hand-written form cannot reach the extra slot either'
   );
   assert.deepEqual(connection.calls[0].params, [3, 1001, 2, 'NA Megaserver']);
+});
+
+await t('the way back is a button, not a line of text', () => {
+  const button = /<p class="guild-back"><a class="primary-button" href="\/">Back to ItemShare<\/a><\/p>/;
+
+  assert.match(codesPage, button);
+  assert.match(joinPage, button);
+});
+
+await t('the joining page says what revoking does to the slot it gave', () => {
+  assert.match(joinPage, /the extra slot goes with it/, 'the note warns that revocation is real');
+  assert.match(codesPage, /Only you can see the codes you have made/, 'and who can see the list');
 });
 
 console.log(`\n${total - failures}/${total} passed`);

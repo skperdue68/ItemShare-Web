@@ -2234,7 +2234,11 @@ th .sort-link {
   color: #fecaca;
 }
 
+/* The way out of a guild page is a button, centred under the card: it is the only thing
+   below the content, so it reads as an ending rather than as one more thing in the form. */
 .guild-back {
+  display: flex;
+  justify-content: center;
   margin: 18px 0 0;
   font-size: 13px;
 }
