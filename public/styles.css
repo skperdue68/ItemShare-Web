@@ -1128,15 +1128,35 @@ a.primary-button {
   font-weight: 700;
 }
 
+/* The account picker is the one control here that is a real <select>, so its closed state
+   copies the filter menus above the lists - same height, same rounded dark card, same small
+   caret - rather than looking like a form control borrowed from the browser. It stays a
+   select on purpose: choosing an account submits the form, and a native list is what a
+   keyboard and a phone expect. `color-scheme` is what makes the popup itself dark. */
 .browsing-picker select {
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--panel-border);
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: dark;
+  min-width: 158px;
+  max-width: 100%;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
   border-radius: 8px;
-  background: rgba(6, 14, 32, 0.55);
-  color: inherit;
+  background-color: rgba(7, 16, 38, 0.72);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2394a3b8'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  color: var(--text);
   font: inherit;
   font-size: 13px;
+  cursor: pointer;
+}
+
+.browsing-picker select:hover,
+.browsing-picker select:focus-visible {
+  border-color: rgba(96, 165, 250, 0.6);
+  outline: none;
 }
 
 .browsing-go {
