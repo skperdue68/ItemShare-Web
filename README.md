@@ -167,9 +167,13 @@ without completing a real OAuth round trip.
 **Which ESO account is yours.** Signing in is not the same as saying which ESO account is
 theirs, and the site needs the second answer: a request has to name the character to mail.
 The first time somebody signs in with no ESO account attached, the *ESO accounts* dialog
-opens by itself and asks for the name. It is also where the list lives - every attached
-account with its items, guilds and last upload, a **Remove** button at the bottom of each
-row, and the box that attaches another under the list. The profile menu reopens it at any
+opens by itself and says where accounts come from: an upload attaches every account in the
+file, and an invitation code adds the guild it opens. It is also where the list lives -
+every attached account with its items, guilds and last upload, the guilds the game reported
+drawn apart from the slot a code opened, and a red **Remove** at the bottom of each row.
+The box that attaches a name by hand, with its platform and server, appears once a file has
+been uploaded for the sign-in: until then the dialog only reports what is recorded, because
+the platform and the world are things the file answers. The profile menu reopens it at any
 time.
 
 Names typed by hand are normalised the way the addon writes them (`lib/accountNames.js`):
@@ -257,6 +261,11 @@ platform and world - and so the browsing picker - cannot yet say which one is me
 Telling them apart needs the account key to be `(handle, platform, world)` through
 uploads, linking and the browsing choice, which is a migration and a change to how a
 session names its account; it is not something display can fix.
+
+A code redeemed on another server shows the same split in miniature: the membership row is
+written with the code's own platform and world, while the account itself still carries the
+world of its last upload. The slot shows up because an invited membership does not need the
+account row to match it, but which world the browsing picker offers never changes.
 
 ### Invitation codes
 
@@ -564,9 +573,12 @@ guilds that name is in, and with those known the list narrows to the guilds the 
 account belongs to.
 
 Adding and removing attached names lives in the **Add or remove ESO accounts** dialog: the
-avatar menu opens it, every account there has its own **Remove** button, and the box under
-the list attaches another. The **Your ESO accounts** card on the page is a summary of the
-same list.
+avatar menu opens it, every account there has its own red **Remove** button, and the box
+under the list attaches another - both once a file has been uploaded, since a name typed by
+hand has no platform or server behind it. Guilds the game reported are listed on the
+account; a guild that came from an invitation code is shown as its own item underneath,
+labelled as the code's slot, because it is not a membership the character has in game. The
+**Your ESO accounts** card on the page is a summary of the same list.
 
 A visitor who is not signed in at all sees the same list, under the same hero, and can
 ask for any of it. **The first request asks for three things** - the ESO account name it

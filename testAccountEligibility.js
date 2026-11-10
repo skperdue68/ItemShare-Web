@@ -12,7 +12,9 @@ let total=0,failed=0;
 async function test(name,run){total++;try{await run();console.log(`ok   ${name}`);}catch(e){failed++;console.error(`FAIL ${name}\n${e.stack}`);}}
 
 await test('account form defaults to PC and NA without placeholder options',()=>{
-  const page=renderPage(base);
+  // The form only exists once a file has been uploaded - until then there is no platform or
+  // server to record, and the dialog is read-only.
+  const page=renderPage({...base,accounts:[{...base.accounts[0],lastUpload:{uploaded_at:'2026-11-01 10:00:00'}}]});
   assert(!page.includes('Choose one'));
   assert.match(page,/<option value="2" selected>PC<\/option>/);
   assert.match(page,/<option value="NA Megaserver" selected>NA Megaserver<\/option>/);

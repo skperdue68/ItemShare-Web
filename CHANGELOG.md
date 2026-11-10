@@ -7,6 +7,10 @@ landed on `main`.
 
 ### Added
 
+- **The guild slot a code opened** is listed on its own under the guilds the game reported,
+  labelled *Guild slot from a code*: it is an invitation that was accepted, not a membership
+  the character has in game, and mixing the two made the list read as if the game had
+  reported it.
 - **LAST CHANCE.** An item an owner keeps shared for a fixed number of days is flagged once
   that window has run out. The window is the file's `expireDays` (14 in a typical file),
   measured from the day the item was first shared. The row is only flagged: it is not
@@ -18,6 +22,13 @@ landed on `main`.
 
 ### Changed
 
+- The **Add or remove ESO accounts** dialog only reports until a file has been uploaded.
+  Attaching a name by hand, removing one, and the platform and server choices wait for the
+  first `ItemShareSavedVars.lua`: a name typed by hand carries a platform and a world nobody
+  has confirmed, and a sign-in with nothing uploaded has no account to record them against.
+  Until then the dialog lists the accounts, their guilds and any code-opened slot, and says
+  that an upload is what attaches them.
+- **Remove** in that dialog is a red destructive button rather than a quiet one.
 - The **Added** filter is a single-choice menu now - Any time, the last day, the last 7
   days, the last 30 days, LAST CHANCE - with the same look and behaviour as Type and
   Offered by instead of a native dropdown.
