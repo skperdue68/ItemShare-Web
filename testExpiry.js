@@ -6,6 +6,7 @@
 //   npm run test:expiry
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { extractShareData } from './lib/savedVars.js';
 import { filterBar, inventoryTable } from './lib/views.js';
@@ -163,6 +164,24 @@ t('a chosen window is reported by its own label', () => {
 
   assert.match(chosen, /filter-select-label">LAST CHANCE</, 'not the raw last-chance value');
   assert.match(chosen, /value="last-chance" checked/);
+});
+
+// The markup was right both times and the stylesheet was not: a pill stretched into a bar,
+// and a radio dot drawn in a menu that only takes one choice. Neither shows up in rendered
+// HTML, so the two rules are read out of the stylesheet itself.
+t('the pill fits its words and the Added menu draws no radio dots', () => {
+  const css = readFileSync(new URL('./public/styles.css', import.meta.url), 'utf8');
+
+  const start = css.indexOf('.last-chance-pill {');
+  assert(start > -1, 'the pill has a rule of its own');
+  const pill = css.slice(start, css.indexOf('}', start));
+  assert(/align-self:\s*flex-start/.test(pill), 'a flex column stretches it into a bar');
+  assert(/white-space:\s*nowrap/.test(pill), 'the two words stay on one line');
+
+  assert(
+    /\.filter-option input\[type=['"]radio['"]\]\s*\{/.test(css),
+    'the Added menu takes one choice, so its radios are not drawn'
+  );
 });
 
 console.log(`\n${total - failures}/${total} passed`);
