@@ -529,6 +529,15 @@ it look new. An item that leaves the file altogether - unshared, or every copy h
 over - is dropped when that upload arrives, so if the owner offers it again later it
 comes back with the day they offered it again rather than the day it first appeared.
 
+The age beside it is counted from a real UTC instant. Every connection is put in UTC
+(`useUtcSession` in `lib/database.js`, and `timezone: '+00:00'` so the driver reads a date
+column as the same instant rather than as the server's own clock), and the lists ask for
+`UNIX_TIMESTAMP(first_seen_at)`
+rather than formatting the column, so an item offered a minute ago reads as a minute
+wherever the database host's own clock is set - and each reader still sees the count run
+in their own time zone. Request times, `LAST CHANCE` and the *Added* windows measure from
+the same instant, as they always did.
+
 On **Offering**, `Location` is where the owner's copy was the last time they saved: `Bank`,
 `Inventory (Character Name)`, `Furnishing Vault (...)`. An upload rewrites it, so moving
 something in game and saving again updates it without anyone touching the site.
