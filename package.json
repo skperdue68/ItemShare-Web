@@ -23,7 +23,8 @@
     "test:requests-sort": "node testRequestsSort.js",
     "requests:reopen": "node reopenRequests.js",
     "seed:demo": "node seedDemo.js",
-    "simulate": "node simulate.js"
+    "simulate": "node simulate.js",
+    "test:expiry": "node testExpiry.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

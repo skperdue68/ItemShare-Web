@@ -497,12 +497,24 @@ On **Offering**, `Location` is where the owner's copy was the last time they sav
 `Inventory (Character Name)`, `Furnishing Vault (...)`. An upload rewrites it, so moving
 something in game and saving again updates it without anyone touching the site.
 
-A filter bar narrows the list by item type, owner account, how recently it was added
-(day / 7 days / 30 days) and item name. Type and owner accept several values at once,
-each ticked value becoming a chip on a row underneath; clicking a chip removes just that
-value. Filters are ordinary query parameters, repeated once per value
-(`/?type=Weapon&type=Armor&owner=@Name&added=7&q=sword`), so a filtered view can be
-bookmarked and works with scripts off. The sort order is deliberately not among them:
+A filter bar narrows the list by item type, owner account and how recently it was added.
+Type and owner are menus that accept several values at once, each ticked value becoming a
+chip on a row underneath; clicking a chip removes just that value. **Added** is one choice
+at a time - the last day, the last 7 days, the last 30 days, or **LAST CHANCE** - and it is
+the same menu as the other two rather than a dropdown. Filters are ordinary query
+parameters, repeated once per value (`/?type=Weapon&type=Armor&owner=@Name&added=7`), so a
+filtered view can be bookmarked and works with scripts off. **Reset** takes all of them
+off.
+
+Expiry belongs to the owner's file. `expireDays` in the account scope - `["expireDays"] =
+14` in a typical file - is how many days the addon keeps an item shared after it was first
+offered. An item shared longer ago than that is still listed and still claimable, so its
+row keeps its colour and its counts; it simply carries a red **LAST CHANCE** pill, whose
+tooltip names the owner's window, and *Added → LAST CHANCE* narrows the list to those rows.
+A file with no `expireDays` never flags anything: no pill appears anywhere, and the filter
+has nothing to show. The item name is not in the filter bar any more: each list carries its own *Search
+this list* field above the table, which narrows the rows already on the page and leaves the
+address bar alone. The sort order is deliberately not among them:
 it is a reading preference kept in a cookie, which keeps links clean and stops one
 person's sorting being handed to whoever opens their link.
 

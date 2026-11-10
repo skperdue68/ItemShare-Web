@@ -690,7 +690,8 @@ if (listRegion) {
     const values = [];
 
     filterForm.querySelectorAll(`[data-filter][name="${name}"]`).forEach((field) => {
-      if (field.type === 'checkbox') {
+      // Radios carry Added's single window; an unchecked one is simply not part of it.
+      if (field.type === 'checkbox' || field.type === 'radio') {
         if (field.checked && field.value) {
           values.push(field.value);
         }
@@ -740,19 +741,22 @@ if (listRegion) {
   // whether it is doing anything.
   function renderFilterMenus() {
     filterForm.querySelectorAll('[data-filter-menu]').forEach((menu) => {
-      const checked = Array.from(
-        menu.querySelectorAll('input[type="checkbox"][data-filter]')
-      ).filter((box) => box.checked);
+      const checked = Array.from(menu.querySelectorAll('input[data-filter]')).filter(
+        (box) => box.checked
+      );
       const label = menu.querySelector('.filter-select-label');
       const badge = menu.querySelector('.filter-count');
       const allLabel = menu.dataset.allLabel || 'All';
 
       if (label) {
+        // The word on the summary is the option's own label, not its value: LAST CHANCE
+        // is stored as `last-chance` and would otherwise be read back in lower case.
         label.textContent =
           checked.length === 0
             ? allLabel
             : checked.length === 1
-              ? checked[0].value
+              ? checked[0].closest('.filter-option')?.querySelector('span')?.textContent ||
+                checked[0].value
               : `${checked.length} chosen`;
       }
       if (badge) {
@@ -769,7 +773,9 @@ if (listRegion) {
 
     const params = new URLSearchParams();
 
-    ['type', 'owner', 'added', 'q'].forEach((name) => {
+    // The item name is not here any more: the list's own search box narrows the rows on
+    // the page, so nothing about it belongs in the address bar.
+    ['type', 'owner', 'added'].forEach((name) => {
       chosenValues(name).forEach((value) => params.append(name, value));
     });
 
@@ -800,7 +806,7 @@ if (listRegion) {
       // Picking something in a menu closes it; the chip below shows the result.
       const menu = event.target.closest('details');
 
-      if (menu && event.target.type === 'checkbox') {
+      if (menu && (event.target.type === 'checkbox' || event.target.type === 'radio')) {
         menu.open = false;
       }
 
@@ -850,7 +856,7 @@ if (listRegion) {
     if (clearButton) {
       clearButton.addEventListener('click', () => {
         filterForm.querySelectorAll('[data-filter]').forEach((field) => {
-          if (field.type === 'checkbox') {
+          if (field.type === 'checkbox' || field.type === 'radio') {
             field.checked = false;
           } else {
             field.value = '';
