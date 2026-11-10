@@ -35,6 +35,16 @@ landed on `main`.
   style, because they have none: the row reads *Level 1* and stops there, rather than
   looking as though its level were simply unknown.
 
+### Fixed
+
+- **An item's age is counted from a real UTC instant.** The elapsed time in **Added** came
+  from a timestamp MariaDB had already converted into the database host's own time zone,
+  which the query then labelled `Z`; on a host six hours behind UTC an item offered a
+  minute ago read as six hours old. Connections are now put in UTC and the lists ask for
+  `UNIX_TIMESTAMP(first_seen_at)`, so the count starts from the moment itself and each
+  reader sees it run in their own clock. Request times, LAST CHANCE and the *Added* windows
+  measure from the same instant, exactly as before.
+
 ### Changed
 
 - **How to use ItemShare** is two sections now: *Been given a guild code?* for anybody who

@@ -25,7 +25,8 @@
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js",
     "test:expiry": "node testExpiry.js",
-    "test:accounts-modal": "node testAccountsModal.js"
+    "test:accounts-modal": "node testAccountsModal.js",
+    "test:added-times": "node testAddedTimes.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
