@@ -25,10 +25,12 @@ import {
 } from './lib/demo.js';
 import {
   DEMO_CAST,
+  castAccount,
   castCatalogue,
   castEmail,
   ensureDemoCast,
 } from './lib/demoCast.js';
+import { DEMO_EXPIRE_DAYS, ITEMS } from './lib/demoItems.js';
 import {
   DEMO_ACTIVITY_SCENARIOS,
   demoActivityPause,
@@ -496,6 +498,32 @@ check('a fresh shelf is dated across a spread rather than all today', () => {
   assert(
     many.every((hours) => AGE_HOURS.includes(hours)),
     'every age is one the ladder knows, so a fresh database always looks the same'
+  );
+});
+
+// LAST CHANCE only exists on a shelf whose owner carries expireDays, so a demo without one
+// can never show the pill however old its rows are. The window is also what decides how
+// many rows carry it: a window of nothing flags none, one shorter than every age flags all
+// of them, and neither shows the difference the pill is supposed to make.
+check('the demo shelf carries a window, so LAST CHANCE has something to flag', () => {
+  assert(DEMO_EXPIRE_DAYS > 0, 'a window of 0 would never flag a row');
+
+  const agesInDays = planAges(ITEMS.length).map((hours) => hours / 24);
+
+  assert(
+    agesInDays.some((days) => days >= DEMO_EXPIRE_DAYS),
+    'at least one demo row is past the window, or no pill is ever drawn'
+  );
+  assert(
+    agesInDays.some((days) => days < DEMO_EXPIRE_DAYS),
+    'and at least one is inside it, or the pill would be on every row'
+  );
+
+  const guilds = new Map([[DEMO_GUILD.id, DEMO_GUILD.name]]);
+
+  assert(
+    castAccount(DEMO_CAST[0], guilds).expireDays === DEMO_EXPIRE_DAYS,
+    'the guildmates share under the same window, so the pill is not only on the visitor\u2019s own rows'
   );
 });
 
