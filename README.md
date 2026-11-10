@@ -1508,6 +1508,15 @@ followed through on after two minutes (`lib/demoShelf.js`). A visitor's own requ
 never released; the guildmates answer those. Item rows, request history and the date each
 offer was first made all survive a top-up.
 
+**LAST CHANCE.** The demo's own account and its three guildmates all keep an item for 30
+days (`DEMO_EXPIRE_DAYS` in `lib/demoItems.js`), while the starter dates in
+`lib/itemAges.js` run from about three months old down to a few hours. The two meet in the
+middle on purpose: the oldest rows are past the window and carry the red pill, the newest
+are inside it and do not, so one visit shows what the flag means rather than a list that is
+all pills or none. It also gives *Added → LAST CHANCE* rows to show, which on a shelf of undated
+rows would be an empty list. `expireDays` is a property of the owner's account, not of an
+item, so every row of an owner shares the one window - the same rule a real upload follows.
+
 **Other people.** A visitor who owned every row in the copy would have nothing to ask
 for: the Request tab would mirror their own bag. `lib/demoCast.js` writes three
 guildmates into the demo's own guild - `@NightMarket`, `@QuietSmith` and

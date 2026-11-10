@@ -19,6 +19,10 @@ landed on `main`.
   being removed from sharing, act quickly!* Files without `expireDays` never show it.
 - **Added → LAST CHANCE**, the last choice in the Added menu, which shows only the rows
   past their owner's window.
+- **The demo shows LAST CHANCE too.** Its own account and the three demo guildmates keep
+  items for 30 days, and the shelves are dated from months old down to a few hours, so a
+  demo visit has both states at once: the oldest rows carry the pill and the newest do not,
+  and *Added → LAST CHANCE* has rows to show.
 
 ### Changed
 
@@ -29,6 +33,10 @@ landed on `main`.
   sections open from the sign-in card and the upload box. Step 3 of the addon path carries
   the two game screenshots: the item's right-click menu, then the Shared Items window it
   fills.
+- The sign-in card no longer says a file has to be uploaded before there is anything to
+  compare against. That stopped being true when guild codes arrived: a code opens its
+  guild's items to the account, with no addon, no file and no membership in the guild, so
+  the line was telling invited guildmates to do a step they do not need.
 - The **Add or remove ESO accounts** dialog only reports until a file has been uploaded.
   Attaching a name by hand, removing one, and the platform and server choices wait for the
   first `ItemShareSavedVars.lua`: a name typed by hand carries a platform and a world nobody
