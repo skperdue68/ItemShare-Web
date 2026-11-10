@@ -48,6 +48,7 @@ import {
   getViewerGuilds,
   createGuildCode,
   findOwnGuild,
+  revokeGuildCode,
   listGuildCodes,
   redeemGuildCode,
   getBrowsingAccount,
@@ -1394,22 +1395,9 @@ app.get('/guilds/codes', async (req, res) => {
   }
 
   try {
-    const data = await withDatabase(async (connection) => {
-      const { accounts, guilds } = await guildsOf(connection, user.id);
+    const data = await withDatabase((connection) => codesPageData(connection, user.id));
 
-      return { accounts, guilds, codes: await listGuildCodes(connection, user.id) };
-    });
-
-    const justMade = normalizeGuildCode(req.query && req.query.made);
-
-    res.type('html').send(
-      renderGuildCodesPage({
-        ...data,
-        made: isGuildCode(justMade) ? justMade : '',
-        user,
-        providers: enabledProviders,
-      })
-    );
+    sendCodesPage(res, { user, data });
   } catch (error) {
     sendPage(req, res, 500, {
       heading: 'Your codes could not be loaded',
@@ -1448,10 +1436,12 @@ app.post('/guilds/codes', async (req, res) => {
         return null;
       }
 
-      return createGuildCode(connection, { userId: user.id, guild: mine });
+      const code = await createGuildCode(connection, { userId: user.id, guild: mine });
+
+      return { code, data: await codesPageData(connection, user.id) };
     });
 
-    if (!made) {
+    if (!made.code) {
       sendPage(req, res, 403, {
         heading: 'That guild is not one of yours',
         message: 'A code can only be made for a guild one of your ESO accounts belongs to.',
@@ -1461,9 +1451,11 @@ app.post('/guilds/codes', async (req, res) => {
       return;
     }
 
-    // Redirected rather than answered directly, so a refresh of the page does not make a
-    // second code. The code is carried in the address only long enough to be shown once.
-    res.redirect(303, `/guilds/codes?made=${encodeURIComponent(made.code)}`);
+    // Answered directly rather than redirected, so the address stays the page the person
+    // is already on: a code has no address of its own, and nothing to bookmark by mistake.
+    // A reload therefore asks the browser to send the form again, which is a question the
+    // person answers rather than a second code made behind their back.
+    sendCodesPage(res, { user, data: made.data, made: made.code });
   } catch (error) {
     sendPage(req, res, 500, {
       heading: 'That code could not be made',
@@ -1473,6 +1465,24 @@ app.post('/guilds/codes', async (req, res) => {
     });
   }
 });
+
+/**
+ * The data behind the codes page: the guilds the person can invite to, and the codes they
+ * have made. The page and every answer that redraws it read exactly this.
+ */
+async function codesPageData(connection, userId) {
+  const { accounts, guilds } = await guildsOf(connection, userId);
+
+  return { accounts, guilds, codes: await listGuildCodes(connection, userId) };
+}
+
+/** The codes page, drawn from data this request has already read. */
+function sendCodesPage(res, { user, data, made = '', done = '', notice = '', status = 200 }) {
+  res
+    .status(status)
+    .type('html')
+    .send(renderGuildCodesPage({ ...data, made, done, notice, user, providers: enabledProviders }));
+}
 
 app.get('/guilds/join', async (req, res) => {
   const user = req.session ? req.session.user || null : null;
