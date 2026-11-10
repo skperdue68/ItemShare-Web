@@ -266,8 +266,9 @@ and is given an eight character code. The person they hand it to pastes it into 
 Code** - a button beside the avatar whenever they are signed in, and the same entry in the
 avatar menu - and that guild's items open to their account.
 
-- A code names one guild **and its server**, because a guild id on its own does not: the
-  same number on NA and EU is a different guild.
+- A code names one guild, **its platform and its server**, because a guild id on its own
+  does not: the same number on NA and EU, or on a PC and a console account, is a different
+  guild. The list of codes you have made says all three.
 - A code can only be made for a guild the game itself reported in a saved variables file.
   The guild a code opened for somebody is that account's extra slot rather than a real
   membership, so it is shown in their list but never offered: with no file-reported guild
