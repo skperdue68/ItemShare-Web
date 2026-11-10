@@ -84,6 +84,7 @@ const PEOPLE = [
         level: 50,
         cp: 160,
         enchant: 'Glyph of Increase Physical Harm',
+        style: 'Breton',
         count: 1,
       },
       {
@@ -99,6 +100,7 @@ const PEOPLE = [
         level: 50,
         cp: 160,
         enchant: 'Glyph of Increase Magical Harm',
+        style: 'Dunmer',
         count: 1,
       },
       {
@@ -133,6 +135,7 @@ const PEOPLE = [
         level: 50,
         cp: 160,
         enchant: 'Glyph of Increase Physical Harm',
+        style: 'Breton',
       },
     ],
   },
@@ -154,6 +157,7 @@ const PEOPLE = [
         level: 50,
         cp: 160,
         enchant: 'Glyph of Magicka Recovery',
+        style: 'Altmer',
         count: 1,
       },
       {
@@ -169,6 +173,7 @@ const PEOPLE = [
         level: 50,
         cp: 160,
         enchant: 'Glyph of Increase Magical Harm',
+        style: 'Redguard',
         count: 2,
       },
       {
@@ -210,6 +215,7 @@ const PEOPLE = [
         level: 50,
         cp: 160,
         enchant: 'Glyph of Prismatic Defense',
+        style: 'Nord',
         count: 1,
       },
       {
@@ -287,7 +293,7 @@ function buildItem(person, spec, index, guildIds) {
     weaponHandedness: '',
     setName: spec.set || '',
     enchantName: spec.enchant || '',
-    styleName: '',
+    styleName: spec.style || '',
     requiredLevel: spec.level || 0,
     requiredCp: spec.cp || 0,
     flavorText: null,
@@ -328,7 +334,7 @@ function buildOffer(person, spec, index, guildIds) {
     weaponHandedness: '',
     setName: spec.set || '',
     enchantName: spec.enchant || '',
-    styleName: '',
+    styleName: spec.style || '',
     requiredLevel: spec.level || 0,
     requiredCp: spec.cp || 0,
     flavorText: null,

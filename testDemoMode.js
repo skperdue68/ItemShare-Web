@@ -162,6 +162,10 @@ check('the demo gear carries its level, its champion points and its enchantment'
     'every gear row names the glyph it carries'
   );
   assert(
+    gear.every((spec) => typeof spec.style === 'string' && spec.style.length > 2),
+    'and the crafting style it was made in'
+  );
+  assert(
     ITEMS.find((spec) => spec.name === 'Dwemer Frame').cp === undefined,
     'a material has no level or champion points to report'
   );
@@ -170,6 +174,7 @@ check('the demo gear carries its level, its champion points and its enchantment'
 
   assert(built.requiredCp === 160 && built.requiredLevel === 50, 'both reach the row');
   assert(built.enchantName === gear[0].enchant, 'and so does the glyph');
+  assert(built.styleName === gear[0].style, 'and its crafting style');
 
   // The catalogue is camelCase, the way an upload hands a row to the store; the list reads
   // the row the query returns, which is snake_case. Both ends are covered here: the fields
@@ -185,6 +190,7 @@ check('the demo gear carries its level, its champion points and its enchantment'
         required_level: staffRow.requiredLevel,
         required_cp: staffRow.requiredCp,
         enchant_name: staffRow.enchantName,
+        style_name: staffRow.styleName,
       },
     ],
     { mine: false, filters: {} }
@@ -192,6 +198,52 @@ check('the demo gear carries its level, its champion points and its enchantment'
 
   assertMatch(html, /Level CP160/, 'the row says what it requires');
   assertMatch(html, /Glyph of Increase Magical Harm/, 'and what it is enchanted with');
+  assertMatch(html, /Dunmer/, 'and the style it was made in');
+});
+
+// The demo shelf is not all gear: it has materials, food, a furnishing and a motif, and none
+// of those has a level, a glyph or a style. Their specs leave the fields out rather than
+// filling them in, so the rows must not invent them either - the pie said "Level 1" once
+// because a zero was printed, and a made-up value here would be the same mistake.
+check('the demo items that are not gear claim no level, glyph or style', () => {
+  const plain = ITEMS.filter((spec) => ![1, 2, 3].includes(spec.type));
+
+  assert(plain.length >= 3, `expected some non-gear on the demo shelf, got ${plain.length}`);
+
+  for (const spec of plain) {
+    assert(spec.level === undefined && spec.cp === undefined, `${spec.name} carries no level`);
+    assert(spec.enchant === undefined, `${spec.name} carries no glyph`);
+    assert(spec.style === undefined, `${spec.name} carries no style`);
+
+    const row = buildItem(spec, 0, [DEMO_GUILD.id]);
+
+    assert(row.requiredLevel === 0 && row.requiredCp === 0, `${spec.name} reports no requirement`);
+    assert(row.enchantName === '' && row.styleName === '', `${spec.name} is bare, not invented`);
+  }
+
+  const html = inventoryTable(
+    plain.map((spec, index) => {
+      const row = buildItem(spec, index, [DEMO_GUILD.id]);
+
+      return {
+        ...row,
+        // The list reads the row a query returns, which is snake_case; the catalogue is the
+        // camelCase an upload hands the store.
+        item_name: row.itemName,
+        item_count: row.itemCount,
+        item_key_hash: `plain-${index}`,
+        guild_names: DEMO_GUILD.name,
+        required_level: 0,
+        required_cp: 0,
+        enchant_name: '',
+        style_name: '',
+      };
+    }),
+    { mine: false, filters: {} }
+  );
+
+  assert(!/Level [0-9]/.test(html), 'no non-gear row claims a level');
+  assert(/Dwemer Frame/.test(html), 'the rows are still drawn');
 });
 
 // ------------------------------------------------------------------ what is refused

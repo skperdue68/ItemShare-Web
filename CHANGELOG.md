@@ -27,9 +27,11 @@ landed on `main`.
 - **The demo's gear says what it is.** Every weapon, armour piece and piece of jewellery in
   the demo catalogue now carries the level, the champion point requirement and the glyph it
   is enchanted with - `Level CP160`, *Glyph of Increase Physical Harm* and so on - instead of
-  reading as a level 0 item with no enchantment. The simulator's three people share the same
-  gear, so they carry it too. Materials, consumables and furnishings have no level to report
-  and are unchanged.
+  reading as a level 0 item with no enchantment, and every piece names its crafting style
+  (*Breton*, *Dunmer*, *Nord*, *Redguard*, *Altmer*). The simulator's three people share the
+  same gear, so they carry it too. Materials, consumables, furnishings and the motif are left
+  bare on purpose - no level, no glyph, no style - because a file reports none for them and
+  the list prints only what is there.
 
 ### Changed
 
