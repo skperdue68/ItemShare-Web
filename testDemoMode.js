@@ -520,7 +520,16 @@ check('attaching an ESO account asks for its platform and server, both required'
   const page = renderPage({
     ...emptyData,
     user: { id: 5, username: 'someone', provider: 'password' },
-    accounts: [{ accountName: '@someone', itemCount: 1, guildCount: 1, guilds: [] }],
+    accounts: [
+      {
+        accountName: '@someone',
+        itemCount: 1,
+        guildCount: 1,
+        guilds: [],
+        // A file has arrived, so the dialog lets this person attach another name by hand.
+        lastUpload: { uploaded_at: '2026-11-01 10:00:00', source_file: 'ItemShareSavedVars.lua' },
+      },
+    ],
     accountServers: [
       { platform: 2, worldName: 'EU Megaserver' },
       { platform: 2, worldName: 'PTS' },

@@ -3136,3 +3136,39 @@ a.history-page:hover, .history-page.is-current {
   text-transform: uppercase;
   vertical-align: 1px;
 }
+
+/* A destructive control says so in colour, in the same red the reserved rows use. */
+.danger-button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.danger-button:hover,
+.danger-button:focus-visible {
+  border-color: rgba(248, 113, 113, 0.85);
+  background: rgba(153, 27, 27, 0.55);
+  color: #fff;
+}
+
+/* The slot a code opened is its own item, under the guilds the game reported. */
+.account-slot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--panel-border);
+}
+
+.account-slot-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
