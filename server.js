@@ -2819,26 +2819,53 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
     warnLine(`Could not look up icon paths on UESP: ${error.message}`);
   }
 
+  // ESO accounts in the file that belong to somebody else, so they are not part of this
+  // upload. Filled in while the accounts are checked.
+  const skippedAccounts = [];
+
   const outcome = await withDatabase(async (connection) => {
+    let usableAccounts = parsed.accounts;
+
     if (user) {
-      // Every ESO account in the file belongs to the signed-in person. An
-      // account claimed by somebody else stops the whole upload.
+      // An ESO account already linked to somebody else is left alone rather than failing
+      // the whole file: a shared computer, or a saved variables file copied from another
+      // player, usually still holds the uploader's own account, and refusing the lot threw
+      // that away over an account they were never going to get. The rest is stored, and the
+      // answer says which names were skipped and why.
+      usableAccounts = [];
+
       for (const accountName of parsed.accounts) {
         const link = await linkAccountToUser(connection, { accountName, userId: user.id });
 
         if (link === 'conflict') {
-          const conflict = new Error(
-            `The ESO account ${accountName} is already linked to a different person.`
-          );
-          conflict.statusCode = 409;
-          throw conflict;
+          skippedAccounts.push({
+            accountName,
+            reason: 'already linked to a different person',
+          });
+          continue;
         }
+
+        usableAccounts.push(accountName);
+      }
+
+      if (usableAccounts.length === 0) {
+        // Nothing is left to store, so say that plainly instead of reporting a successful
+        // upload that changed nothing.
+        const refused = new Error(
+          parsed.accounts.length === 1
+            ? `The ESO account ${parsed.accounts[0]} is already linked to a different person, so that file could not be used. Nothing was stored.`
+            : `Every ESO account in that file (${parsed.accounts.join(
+                ', '
+              )}) is already linked to a different person, so nothing was stored.`
+        );
+        refused.statusCode = 409;
+        throw refused;
       }
     }
 
     const summary = await replaceAccounts(
       connection,
-      parsed.accounts.map((accountName) => {
+      usableAccounts.map((accountName) => {
         // The server the file was written on travels with the account, and with every
         // guild row it touches: a guild id means nothing without it.
         const world = parsed.accountWorlds.get(accountName) || {};
@@ -2867,6 +2894,14 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
   const uploaded = (Array.isArray(outcome) ? outcome : [outcome]).filter(Boolean);
   const uploadedItems = uploaded.reduce((sum, entry) => sum + (Number(entry.itemCount) || 0), 0);
   const uploadedAccounts = uploaded.map((entry) => entry.accountName).filter(Boolean);
+
+  if (skippedAccounts.length > 0) {
+    warnLine(
+      `Upload: left ${skippedAccounts
+        .map((entry) => entry.accountName)
+        .join(', ')} alone - already linked to a different person`
+    );
+  }
 
   // Rows an upload deliberately left alone, because somebody is still waiting on them.
   const heldBack = uploaded.flatMap((entry) =>
@@ -2924,6 +2959,8 @@ async function applySavedVariablesUpload({ fileText, sourceFile, user }) {
     guildCount: parsed.guilds.size,
     iconLookup,
     icons,
+    // What the browser needs to say which accounts were not touched.
+    skippedAccounts,
     link: user ? 'linked' : 'skipped',
   };
 }

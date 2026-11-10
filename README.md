@@ -208,8 +208,12 @@ Guild membership is replaced in full as well (`itemshare_account_guilds`), so le
 guild in game removes that guild's visibility after the next upload.
 
 The first upload from a signed-in person links their identity to the ESO account in
-`itemshare_accounts`. If that ESO account is already linked to a different person the
-upload is refused rather than silently reassigned.
+`itemshare_accounts`. An ESO account that is already linked to a different person is never
+silently reassigned: that account is left exactly as it was and the rest of the file is
+stored, so a file copied from another player still updates the accounts that are yours. The
+upload's answer names the accounts it stored and the ones it skipped, with the reason. A
+file holding nothing but somebody else's account stores nothing and says so, rather than
+reporting an upload that changed nothing.
 
 Item rows keep the account they came from (`itemshare_shared_items.account_name`), so
 someone who plays several ESO accounts can see which account holds each item. Which
