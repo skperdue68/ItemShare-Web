@@ -20,7 +20,7 @@ import {
   newGuildCode,
   normalizeGuildCode,
 } from './lib/guildCodes.js';
-import { findOwnGuild, getViewerGuilds, revokeGuildCode } from './lib/store.js';
+import { findGuildCode, findOwnGuild, getViewerGuilds, revokeGuildCode } from './lib/store.js';
 import { renderGuildCodesPage, renderJoinGuildPage } from './lib/views.js';
 
 let total = 0;
@@ -258,8 +258,13 @@ await t('a code with no account on file asks for the account, over the page', ()
     'the code is carried into the answer, so it does not have to be typed again'
   );
   assert.match(asks, /name="accountName"/);
-  assert.match(asks, /<select name="platform" required>/);
-  assert.match(asks, /<select name="worldName" required>/);
+  assert.doesNotMatch(asks, /name="platform"/, 'the code says which platform it is for');
+  assert.doesNotMatch(asks, /name="worldName"/, 'and which server');
+  assert.match(
+    asks,
+    /The code says which platform and server it belongs to/,
+    'so the box explains why there is nothing to pick'
+  );
   assert.match(asks, /Use this code/);
   assert.match(asks, /the site adds the @ if you leave it out/);
   assert.match(asks, /method="post" action="\/guilds\/join"/);
@@ -325,9 +330,7 @@ function writtenDown({ code = null, affectedRows = 0 } = {}) {
       const flat = String(sql).replace(/\s+/g, ' ').trim();
       calls.push({ sql: flat, params });
 
-      return flat.startsWith('SELECT id, code, guild_name')
-        ? [code ? [code] : []]
-        : [{ affectedRows }];
+      return /FROM itemshare_guild_codes/.test(flat) ? [code ? [code] : []] : [{ affectedRows }];
     },
   };
 }
@@ -458,6 +461,26 @@ await t('a platform the site does not name is shown as its number, not guessed a
   });
 
   assert.match(other, /Console Guild &middot; platform 1 \u00b7 NA Megaserver/);
+});
+
+await t('the account is added on the platform and server the code names', async () => {
+  const connection = writtenDown({
+    code: {
+      id: 7,
+      code: 'K7QM3XPD',
+      guild_id: 1001,
+      guild_name: 'Alphabet Mafia',
+      platform: 2,
+      world_name: 'NA Megaserver',
+    },
+  });
+
+  const row = await findGuildCode(connection, 'k7qm-3xpd');
+
+  assert.equal(row.world_name, 'NA Megaserver');
+  assert.equal(row.platform, 2);
+  assert.deepEqual(connection.calls[0].params, ['K7QM3XPD'], 'what was typed is normalised');
+  assert.match(connection.calls[0].sql, /FROM itemshare_guild_codes WHERE code = \?/);
 });
 
 console.log(`\n${total - failures}/${total} passed`);

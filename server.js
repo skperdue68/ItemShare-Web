@@ -47,6 +47,7 @@ import {
   getViewerFacets,
   getViewerGuilds,
   createGuildCode,
+  findGuildCode,
   findOwnGuild,
   revokeGuildCode,
   listGuildCodes,
@@ -1496,14 +1497,9 @@ app.get('/guilds/join', async (req, res) => {
   }
 
   try {
-    const data = await withDatabase(async (connection) => ({
-      accounts: await getViewerAccounts(connection, user.id),
-      servers: await listAccountServers(connection),
-    }));
+    const accounts = await withDatabase((connection) => getViewerAccounts(connection, user.id));
 
-    res.type('html').send(
-      renderJoinGuildPage({ user, providers: enabledProviders, ...data })
-    );
+    res.type('html').send(renderJoinGuildPage({ user, providers: enabledProviders, accounts }));
   } catch (error) {
     sendPage(req, res, 500, {
       heading: 'That page could not be loaded',
@@ -1552,29 +1548,32 @@ app.post('/guilds/join', async (req, res) => {
 
       if (accounts.length === 0) {
         if (!typedAccount) {
-          return { status: 'need-account', servers: await listAccountServers(connection) };
+          return { status: 'need-account' };
         }
 
-        const where = readAccountServer(req.body);
+        // The code carries the platform and the server, so only the name is typed here.
+        // Asking for the other two would be asking somebody to retype what the code in
+        // their hand already says, and a wrong pair would attach the account to a guild it
+        // can never see. An unknown code links nothing and is refused below.
+        const codeRow = await findGuildCode(connection, typed);
 
-        if (!where) {
-          return { status: 'need-server', servers: await listAccountServers(connection) };
+        if (codeRow) {
+          // Linking is what an upload does too, and it refuses an account already attached
+          // to somebody else rather than moving it - the answer the accounts dialog gives.
+          const linked = await linkAccountToUser(connection, {
+            accountName: typedAccount,
+            userId: user.id,
+            platform: Number(codeRow.platform) || 0,
+            worldName: String(codeRow.world_name || ''),
+          });
+
+          if (linked === 'conflict') {
+            return { status: 'conflict', accountName: typedAccount };
+          }
+
+          req.session.accountNames = null;
+          accounts.push(typedAccount);
         }
-
-        // Linking is what an upload does too, and it refuses an account already attached to
-        // somebody else rather than moving it - the same answer the accounts dialog gives.
-        const linked = await linkAccountToUser(connection, {
-          accountName: typedAccount,
-          userId: user.id,
-          ...where,
-        });
-
-        if (linked === 'conflict') {
-          return { status: 'conflict', accountName: typedAccount };
-        }
-
-        req.session.accountNames = null;
-        accounts.push(typedAccount);
       }
 
       return redeemGuildCode(connection, {
@@ -1612,7 +1611,7 @@ app.post('/guilds/join', async (req, res) => {
 
     // No account on file: the code is kept and the page asks whose account it is, in a box
     // over the top of it, rather than sending the person away to find one.
-    if (outcome.status === 'need-account' || outcome.status === 'need-server') {
+    if (outcome.status === 'need-account') {
       res.status(400).type('html').send(
         renderJoinGuildPage({
           needAccount: true,
