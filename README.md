@@ -262,12 +262,16 @@ session names its account; it is not something display can fix.
 
 Guild membership usually comes from the file, but somebody can also be invited. A member
 opens **Invite to Shop My Guilds Items** in the avatar menu, chooses one of their own guilds,
-and is given an eight character code. The person they hand it to pastes it into **See Guild
-Items From Code** - a button beside the avatar whenever they are signed in, and the same
-entry in the avatar menu - and that guild's items open to their account.
+and is given an eight character code. The person they hand it to pastes it into **Use Code**
+- a button beside the avatar whenever they are signed in, and the same entry in the avatar
+menu - and that guild's items open to their account.
 
 - A code names one guild **and its server**, because a guild id on its own does not: the
   same number on NA and EU is a different guild.
+- A code can only be made for a guild the game itself reported in a saved variables file.
+  The guild a code opened for somebody is that account's extra slot rather than a real
+  membership, so it is shown in their list but never offered: with no file-reported guild
+  the page draws no form at all, only the codes already made.
 - It is made of characters that survive being read out loud - no `I`, `L`, `O`, `0` or `1` -
   and shown as `K7QM-3XPD`. Case, spaces and dashes are forgiven when it is entered;
   nothing else is guessed at, so a mistyped character is refused rather than mapped.
@@ -275,9 +279,10 @@ entry in the avatar menu - and that guild's items open to their account.
   the code in `granted_code_id`. An upload replaces only the memberships the game
   reported, so an invitation survives every later file - and leaving the guild in game
   does not take it away either.
-- Nothing is granted from the form. The guild is looked up among the person's own guilds
-  and the code is looked up in `itemshare_guild_codes` before anything is written, so a
-  hand-written form cannot make a code for somebody else's guild or guess one by id.
+- Nothing is granted from the form. The guild is looked up among the guilds the file
+  reported for the person's accounts, excluding any that came from a code, and the code is
+  looked up in `itemshare_guild_codes` before anything is written, so a hand-written form
+  can neither make a code for somebody else's guild nor reuse an invitation as a slot.
 - If the site knows no ESO account for them yet, the page asks for the account name in a
   box over it - with the platform and server, the same three things the accounts dialog
   asks for - and the `@` is added if they leave it off (`normalizeEsoAccountName`). The
@@ -285,8 +290,12 @@ entry in the avatar menu - and that guild's items open to their account.
 - When a later upload reports that same guild on that same server, the granted mark is
   cleared: the membership is the game's from then on, and the code's extra slot is gone.
 
-There is no way to withdraw a code once made. Each one is made for one invitation, and what
-it opens is what the guild's members can already see.
+A code lasts until it is revoked. **Revoke** beside it on the same page deletes the code, the
+record of who used it, and every membership it wrote: only rows carrying that code's id in
+`granted_code_id` go, so a member whose own upload has since reported the guild keeps the
+membership the game gave them. Revoking cannot be undone, which is why a code that leaked is
+replaced rather than repaired. Making or revoking one answers on the page it was pressed on,
+so a code never appears in the address bar.
 
 `0` / `''` mean **not known**, never a world of their own. An unknown world matches
 whatever it is compared with, the same way the guild rule itself is only applied when
@@ -376,6 +385,7 @@ token travels in a header and the file contents are plain text over the wire.
 | `POST` | `/auth/email/signup` | Make an account from an address and a password |
 | `GET` | `/guilds/codes` | Make a code for one of your guilds, and see the codes you have made |
 | `POST` | `/guilds/codes` | Make the code |
+| `POST` | `/guilds/codes/revoke` | Delete one of your codes and take back the guild access it gave |
 | `GET` | `/guilds/join` | The box for entering a code somebody gave you |
 | `POST` | `/guilds/join` | Redeem a code, joining its guild |
 | `POST` | `/accounts/add` | Attach an ESO account to the signed-in person: name, platform and server |
