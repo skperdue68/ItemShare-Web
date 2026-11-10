@@ -1183,6 +1183,96 @@ a.primary-button {
   margin-left: 0;
 }
 
+/* The search above the tabs narrows the rows already on the page instead of fetching a
+   new list, so it answers while it is being typed. It sits at the left of the centred
+   heading row, where the list's own controls live, and is one field plus one cross. */
+.list-search {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  width: 200px;
+}
+
+/* Your requests is a log rather than a list of things on offer, so the search - and the
+   space it takes beside the tabs - goes with it. */
+.list-search[hidden] {
+  display: none;
+}
+
+.list-search-input {
+  width: 100%;
+  padding: 6px 26px 6px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: rgba(6, 14, 32, 0.55);
+  color: #e5ecff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.list-search-input::placeholder {
+  color: var(--muted);
+}
+
+.list-search-input:focus-visible {
+  outline: 2px solid rgba(148, 197, 255, 0.85);
+  outline-offset: 2px;
+}
+
+/* The browser's own cross goes: the button beside it can be named for a screen reader and
+   reached from the keyboard like every other control on the page. */
+.list-search-input::-webkit-search-cancel-button,
+.list-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.list-search-clear {
+  position: absolute;
+  right: 6px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.list-search-clear:hover,
+.list-search-clear:focus-visible {
+  color: #f8fafc;
+}
+
+.list-search-clear[hidden] {
+  display: none;
+}
+
+/* A row the search has ruled out takes no space, heading or not. */
+.table-shell tr[hidden] {
+  display: none;
+}
+
+/* Narrow screens have no room beside the heading, so the field moves above the tabs and
+   takes the width instead of squeezing them. */
+@media (max-width: 760px) {
+  .list-head {
+    flex-wrap: wrap;
+  }
+
+  .list-search {
+    position: static;
+    order: 2;
+    transform: none;
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
 /* "12 different items shared by other members of your guilds": the answer to
    "how much is there for me here?", above the tabs and below the basket clock. */
 .offer-summary {

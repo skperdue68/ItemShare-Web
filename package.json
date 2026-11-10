@@ -14,6 +14,7 @@
     "test:basket-state": "node testBasketState.js",
     "test:account-eligibility": "node testAccountEligibility.js",
     "test:grouping": "node testGrouping.js",
+    "test:item-sort": "node testItemListSort.js",
     "test:password-forms": "node testPasswordForms.js",
     "test:reopen-requests": "node testReopenRequests.js",
     "test:server-identity": "node testServerIdentity.js",

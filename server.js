@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readCookie, readGrouping } from './lib/preferences.js';
+import { SORT_FIELDS, parseSortOrder } from './lib/sortQueue.js';
 import { keepDemoShelfFull } from './lib/demoShelf.js';
 import { errorLine, logLine, warnLine } from './lib/log.js';
 // ItemShare upload site: signs in with Discord or Google (both optional),
@@ -697,12 +698,13 @@ async function withDatabase(handler) {
   return withDatabaseOn(requestDatabase.getStore() || readConfig().database, handler);
 }
 
-const SORT_FIELDS = new Set(['type', 'name', 'added']);
 const ADDED_WINDOWS = new Set(['1', '7', '30']);
 
 // The sort order is a reading preference, not a filter: it is kept in a small cookie so
-// the address bar stays a plain link to the filters, safe to share or bookmark. A
-// ?sort= still wins when it is present, so an older bookmark keeps behaving.
+// the address bar stays a plain link to the filters, safe to share or bookmark. The
+// cookie holds a queue of columns - `name:asc,type:desc` - read back by lib/sortQueue.js,
+// so several headings can be on at once. A ?sort= still wins when it is present, so an
+// older bookmark, which only knows one column, keeps behaving.
 const SORT_COOKIE = 'itemshare_sort';
 
 // Grouping is its own preference, for the same reason: turning the type headings off
@@ -711,13 +713,16 @@ const GROUP_COOKIE = 'itemshare_group';
 
 
 function readFilters(query, sortCookie = '', groupCookie = '') {
-  const sort = readParam(query.sort);
-  const dir = readParam(query.dir);
   const added = readParam(query.added);
-  // "name:desc" - the field and the direction in one small value.
-  const remembered = String(sortCookie || '').split(':');
-  const chosenSort = sort || remembered[0];
-  const chosenDir = dir || remembered[1];
+  const asked = readParam(query.sort);
+  const askedDir = readParam(query.dir) === 'desc' ? 'desc' : 'asc';
+
+  // The order is a queue of columns, so a second heading can break the ties the first
+  // leaves. The address bar still wins when it names a column - an older bookmark knows
+  // only one, which is a queue of one - and the cookie answers otherwise.
+  const order = SORT_FIELDS.includes(asked)
+    ? [{ field: asked, dir: askedDir }]
+    : parseSortOrder(sortCookie);
 
   return {
     // Several types or owners at once arrive as repeated parameters, so they stay
@@ -728,8 +733,7 @@ function readFilters(query, sortCookie = '', groupCookie = '') {
     // Only the values the list actually offers get through, so a hand-typed ?sort=
     // or ?added= falls back to the default instead of reaching the query.
     added: ADDED_WINDOWS.has(added) ? added : '',
-    sort: SORT_FIELDS.has(chosenSort) && chosenSort !== 'type' ? chosenSort : 'type',
-    dir: chosenDir === 'desc' ? 'desc' : 'asc',
+    order,
     // Headings are drawn while this is true, whatever the order is.
     group: readGrouping(groupCookie),
   };

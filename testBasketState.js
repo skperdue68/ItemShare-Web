@@ -49,10 +49,10 @@ await test('live region updates exclude the cancelled rows from both header coun
   };
   let summary;
   const template = {content:{querySelector:()=>next}};
-  new Function('document','captureAnchor','syncHeaderBar','listRegion','rememberAcrossReload','window','captureRowTops','reconcileLiveNode','restoreAnchor','animatePanelHeights','animateRowsInto','localiseTimeLabels','relativeTick','noteClosedRequests','syncRequestDialog',`${code}; applyRegion('');`)(
+  new Function('document','captureAnchor','syncHeaderBar','listRegion','rememberAcrossReload','window','captureRowTops','reconcileLiveNode','restoreAnchor','animatePanelHeights','animateRowsInto','localiseTimeLabels','relativeTick','noteClosedRequests','syncRequestDialog','applyListSearch','showSearchBox',`${code}; applyRegion('');`)(
     {createElement:()=>template,getElementById:()=>null},()=>null,(_held,value)=>{summary=value;},
     {getAttribute:()=> 'old-signature',querySelectorAll:()=>[]},()=>{}, {location:{reload(){ throw new Error('Facet changes must not reload'); }}},
-    ()=>new Map(),()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{}
+    ()=>new Map(),()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{}
   );
   assert.equal(summary.unique,1);
   assert.equal(summary.copies,4);
