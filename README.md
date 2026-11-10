@@ -329,6 +329,28 @@ item, an `ItemShareExport.lua` compatibility copy - still parses, but its guilds
 read at all, so its items arrive with no guilds and nobody can see them. Re-export with
 the current addon instead.
 
+## The how-to page
+
+`/how-to` opens before signing in, and the same markup is the disclosure under the sign-in
+card and under the upload box, so the three cannot say different things. It is two sections:
+
+- **Been given a guild code?** - sign in, choose **Use Guild Code** at the top of the page,
+  enter the code and the ESO account it opens for. Nothing is installed and nothing is
+  uploaded: the code's guild appears in the list and its offerings can be asked for.
+- **Adding your own items** - the addon path, in the order somebody meets it: install,
+  upload, choose what to share in game, publish with `/reloadui`, answer requests.
+
+The code section comes first because it asks nothing of the reader - no game files, no
+upload, no membership in the guild in game - and an invited person should not have to read
+how to share their own items to find out what to do with their code.
+
+The two game screenshots in step 3 are files in `public/guide/`: `add-to-share.png` (the
+item's right-click menu, with Add to Share, Always Share This Item and Share Reserve) and
+`shared-items.png` (the Shared Items window, which is `/itemshare list`). `guideShot` asks
+`existsSync` on every render, so until a picture lands the step draws the frame that
+reserves its space rather than a broken image, and the page picks it up as soon as the file
+is in the folder - there is no build step and nothing to restart.
+
 ## Automatic uploads
 
 `POST /ingest` accepts the same file from a watcher instead of a browser, so the site
@@ -384,6 +406,7 @@ token travels in a header and the file contents are plain text over the wire.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | The page: tabs, filters, the item table |
+| `GET` | `/how-to` | The guide: a guild code, and adding your own items |
 | `GET` | `/items` | The item-list region only, as a fragment, for live refresh. `503` means "leave the screen alone" |
 | `POST` | `/upload` | Accept a `ItemShareSavedVars.lua` upload |
 | `POST` | `/ingest` | Accept the same file from a watcher, token-authenticated |

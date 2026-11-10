@@ -26,6 +26,13 @@ landed on `main`.
 
 ### Changed
 
+- **How to use ItemShare** is two sections now: *Been given a guild code?* for anybody who
+  was handed one - sign in, choose **Use Guild Code** at the top of the next screen, and that
+  guild's offerings are there, with no addon and no file - and *Adding your own items* for
+  people who want their own spares on the site, which is the guide as it was. The same two
+  sections open from the sign-in card and the upload box. Step 3 of the addon path carries
+  the two game screenshots: the item's right-click menu, then the Shared Items window it
+  fills.
 - The sign-in card no longer says a file has to be uploaded before there is anything to
   compare against. That stopped being true when guild codes arrived: a code opens its
   guild's items to the account, with no addon, no file and no membership in the guild, so

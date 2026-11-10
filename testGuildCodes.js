@@ -21,7 +21,12 @@ import {
   normalizeGuildCode,
 } from './lib/guildCodes.js';
 import { findGuildCode, findOwnGuild, getViewerGuilds, revokeGuildCode } from './lib/store.js';
-import { renderGuildCodesPage, renderJoinGuildPage } from './lib/views.js';
+import {
+  renderGuidePage,
+  renderGuildCodesPage,
+  renderJoinGuildPage,
+  renderSignInPage,
+} from './lib/views.js';
 
 let total = 0;
 let failures = 0;
@@ -481,6 +486,47 @@ await t('the account is added on the platform and server the code names', async 
   assert.equal(row.platform, 2);
   assert.deepEqual(connection.calls[0].params, ['K7QM3XPD'], 'what was typed is normalised');
   assert.match(connection.calls[0].sql, /FROM itemshare_guild_codes WHERE code = \?/);
+});
+
+// The guide used to open with the addon, which is the wrong first step for somebody who was
+// handed a code: that path needs nothing installed and nothing uploaded. Both ways in are on
+// the page now, and the shorter one is first - on the guide and in the disclosure the sign-in
+// card opens, because the two are the same markup.
+await t('the guide explains the code path before the addon path', async () => {
+  const page = renderGuidePage({});
+
+  assert.match(page, /<h3 class="guide-section-title">Been given a guild code\?<\/h3>/);
+  assert.match(page, /<h3 class="guide-section-title">Adding your own items<\/h3>/);
+  assert.ok(
+    page.indexOf('Been given a guild code?') < page.indexOf('Install the addon'),
+    'an invited person must not have to read the addon steps first'
+  );
+  assert.match(page, /Use Guild Code<\/strong> at the top/, 'the code is entered from the top of the page');
+  assert.match(page, /<code>\/itemshare list<\/code>/, 'the addon path is still the whole of the old guide');
+});
+
+await t('step 3 carries both game screenshots', async () => {
+  const page = renderGuidePage({});
+
+  assert.equal((page.match(/class="guide-shot"/g) || []).length, 2, 'two pictures, not one per step');
+  assert.match(
+    page,
+    /The right-click menu on an item, with Add to Share, Always Share This Item and Share Reserve\./,
+    'the menu picture comes first'
+  );
+  assert.match(page, /The Shared Items window/, 'and the shared items window second');
+  assert.ok(
+    page.indexOf('class="guide-shot"') < page.indexOf('The Shared Items window'),
+    'the menu is above the window it fills'
+  );
+  assert.doesNotMatch(page, /Add Item to Share/, 'the menu entry is called Add to Share');
+});
+
+await t('the sign-in card opens the same two sections', async () => {
+  const page = renderSignInPage({ providers: [] });
+
+  assert.match(page, /Been given a guild code\?/, 'the drawer covers the code path');
+  assert.match(page, /Adding your own items/, 'and the addon path');
 });
 
 console.log(`\n${total - failures}/${total} passed`);

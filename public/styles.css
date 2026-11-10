@@ -2979,6 +2979,28 @@ a.history-page:hover, .history-page.is-current {
   color: var(--muted-strong);
 }
 
+/* A section is one way in: the code somebody was given, or the addon and its upload. The
+   rule between them says the two are alternatives rather than eight steps in a row. */
+.guide-section + .guide-section {
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.guide-section-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.guide-section-lead {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted-strong);
+}
+
 .guide-steps {
   margin: 0;
   padding: 0;
@@ -3101,6 +3123,17 @@ a.history-page:hover, .history-page.is-current {
    so the page does not jump when it is dropped in. */
 .guide-shot {
   margin: 14px 0 0;
+}
+
+/* The picture itself. It is as wide as the column and keeps its own shape, so a 4:3 game
+   window is not cropped into the 16:9 frame the placeholder uses. */
+.guide-shot-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(7, 16, 38, 0.5);
 }
 
 .guide-shot-frame {
