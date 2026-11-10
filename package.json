@@ -18,6 +18,7 @@
     "test:reopen-requests": "node testReopenRequests.js",
     "test:server-identity": "node testServerIdentity.js",
     "test:demo-mode": "node testDemoMode.js",
+    "test:guild-codes": "node testGuildCodes.js",
     "requests:reopen": "node reopenRequests.js",
     "seed:demo": "node seedDemo.js",
     "simulate": "node simulate.js"

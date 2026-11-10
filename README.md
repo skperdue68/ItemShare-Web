@@ -258,6 +258,31 @@ Telling them apart needs the account key to be `(handle, platform, world)` throu
 uploads, linking and the browsing choice, which is a migration and a change to how a
 session names its account; it is not something display can fix.
 
+### Invitation codes
+
+Guild membership usually comes from the file, but somebody can also be invited. A member
+opens **Invite people to a guild** in the avatar menu, chooses one of their own guilds, and
+is given an eight character code. The person they hand it to enters it under **Join a guild
+with a code** and is given that guild, so what it shares is in their list.
+
+- A code names one guild **and its server**, because a guild id on its own does not: the
+  same number on NA and EU is a different guild.
+- It is made of characters that survive being read out loud - no `I`, `L`, `O`, `0` or `1` -
+  and shown as `K7QM-3XPD`. Case, spaces and dashes are forgiven when it is entered;
+  nothing else is guessed at, so a mistyped character is refused rather than mapped.
+- Redeeming one writes a membership row for the account the person browses as, marked with
+  the code in `granted_code_id`. An upload replaces only the memberships the game
+  reported, so an invitation survives every later file - and leaving the guild in game
+  does not take it away either.
+- Nothing is granted from the form. The guild is looked up among the person's own guilds
+  and the code is looked up in `itemshare_guild_codes` before anything is written, so a
+  hand-written form cannot make a code for somebody else's guild or guess one by id.
+- Somebody with no ESO account is told to attach one first: an invitation is written to an
+  account, and the site has nothing to write it to yet.
+
+There is no way to withdraw a code once made. Each one is made for one invitation, and what
+it opens is what the guild's members can already see.
+
 `0` / `''` mean **not known**, never a world of their own. An unknown world matches
 whatever it is compared with, the same way the guild rule itself is only applied when
 both sides know the answer, so everything recorded before this was captured stays
@@ -344,6 +369,10 @@ token travels in a header and the file contents are plain text over the wire.
 | `GET` | `/auth/:provider/callback` | Finish it |
 | `POST` | `/auth/email` | Sign in with an email address and password |
 | `POST` | `/auth/email/signup` | Make an account from an address and a password |
+| `GET` | `/guilds/codes` | Make a code for one of your guilds, and see the codes you have made |
+| `POST` | `/guilds/codes` | Make the code |
+| `GET` | `/guilds/join` | The box for entering a code somebody gave you |
+| `POST` | `/guilds/join` | Redeem a code, joining its guild |
 | `POST` | `/accounts/add` | Attach an ESO account to the signed-in person: name, platform and server |
 | `POST` | `/accounts/remove` | Unlink one of their ESO accounts, leaving what it shared |
 | `POST` | `/logout` | Delete the session row and clear the cookie |
@@ -748,7 +777,9 @@ handled by one process would otherwise never reach sockets held by another.
 | `itemshare_schema_migrations` | Which migration files have been applied |
 | `itemshare_uploads` | One row per import: account, file, item count, total quantity, person |
 | `itemshare_accounts` | ESO account → person link, with the platform and megaserver the file reported |
-| `itemshare_account_guilds` | Which guilds each ESO account belongs to, and on which world |
+| `itemshare_account_guilds` | Which guilds each ESO account belongs to, and on which world; `granted_code_id` marks one that came from a code rather than the file |
+| `itemshare_guild_codes` | Invitation codes, each naming one guild and its server |
+| `itemshare_guild_code_redemptions` | Who used which code, and on which account |
 | `itemshare_users` | One row per person: display name, email, verified flag, avatar, and the ESO account they browse as |
 | `itemshare_user_identities` | `(provider, provider_user_id)` → person, for Discord, Google and email |
 | `itemshare_passwords` | one scrypt hash per person, for email and password sign-in |
