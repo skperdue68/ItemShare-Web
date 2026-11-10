@@ -151,6 +151,18 @@ t('LAST CHANCE is the last choice', () => {
   assert.match(added, /filter-option-warn/, 'drawn as the warning it is');
 });
 
+t('a single choice has no count badge', () => {
+  const added = bar.slice(bar.indexOf('aria-label="Added"'));
+  const summary = added.slice(0, added.indexOf('</summary>'));
+
+  assert.doesNotMatch(summary, /filter-count/, 'one value is not a count');
+  assert.match(
+    bar.slice(0, bar.indexOf('aria-label="Added"')),
+    /filter-count/,
+    'Type still counts its several values'
+  );
+});
+
 t('the filter card has no item name box and says Reset', () => {
   assert.doesNotMatch(bar, /name="q"/);
   assert.doesNotMatch(bar, /Item name/);

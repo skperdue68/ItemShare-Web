@@ -1942,6 +1942,23 @@ tr.row-fading td {
   background: rgba(148, 163, 184, 0.14);
 }
 
+/* The single-choice menu is a list of words, not a stack of ticks: the radio still carries
+   the form value, the keyboard focus and the screen reader's "one of these", but the circle
+   is not drawn. Focus lands on the word instead, so the option stays reachable by Tab. */
+.filter-option input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.filter-option input[type="radio"]:focus-visible + span {
+  outline: 2px solid rgba(148, 197, 255, 0.85);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 /* LAST CHANCE is the one option that asks for action rather than naming another window,
    so it is the one row in a menu that carries a colour. */
 .filter-option-warn span {
@@ -3125,7 +3142,10 @@ a.history-page:hover, .history-page.is-current {
 .last-chance-pill {
   display: inline-block;
   margin-left: 8px;
-  padding: 1px 7px 2px;
+  /* Sized to the word: the border sits just outside the letters, so the flag reads as a
+     label rather than as a button beside the name. */
+  padding: 0 4px;
+  line-height: 1.6;
   border: 1px solid rgba(248, 113, 113, 0.42);
   border-radius: 999px;
   background: rgba(248, 113, 113, 0.13);
