@@ -631,10 +631,6 @@ code {
   font-size: 13px;
 }
 
-.filter-search input {
-  min-width: 200px;
-}
-
 .filter-button {
   height: 34px;
   padding: 0 18px;
@@ -1946,6 +1942,14 @@ tr.row-fading td {
   background: rgba(148, 163, 184, 0.14);
 }
 
+/* LAST CHANCE is the one option that asks for action rather than naming another window,
+   so it is the one row in a menu that carries a colour. */
+.filter-option-warn span {
+  color: #fca5a5;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 /* One long row of chips: everything that is narrowing the list, each one a click
    away from being taken off again. */
 .filter-chips {
@@ -3114,4 +3118,21 @@ a.history-page:hover, .history-page.is-current {
   z-index: 50;
   backdrop-filter: blur(10px);
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+}
+
+/* An item shared past its owner's expireDays: still fully claimable, so the row is not
+   dimmed and nothing else about it changes. This pill is the whole warning. */
+.last-chance-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px 2px;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.13);
+  color: #fca5a5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: 1px;
 }
