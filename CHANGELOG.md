@@ -19,6 +19,10 @@ landed on `main`.
   being removed from sharing, act quickly!* Files without `expireDays` never show it.
 - **Added → LAST CHANCE**, the last choice in the Added menu, which shows only the rows
   past their owner's window.
+- **The demo shows LAST CHANCE too.** Its own account and the three demo guildmates keep
+  items for 30 days, and the shelves are dated from months old down to a few hours, so a
+  demo visit has both states at once: the oldest rows carry the pill and the newest do not,
+  and *Added → LAST CHANCE* has rows to show.
 
 ### Changed
 
