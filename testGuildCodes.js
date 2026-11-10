@@ -428,6 +428,41 @@ await t('the joining page says what revoking does to the slot it gave', () => {
   assert.match(codesPage, /Only you can see the codes you have made/, 'and who can see the list');
 });
 
+// ----------------------------------------------------------- where the code points
+
+await t('a code says which platform and server it belongs to, not just the guild', () => {
+  const rows = [...codesPage.matchAll(/<span class="code-guild">([^<]*)<\/span>/g)].map(
+    (hit) => hit[1]
+  );
+
+  assert.deepEqual(rows, [
+    'Alphabet Mafia &middot; PC \u00b7 NA Megaserver',
+    'Ghosts &lt;of&gt; the Reach &middot; PC \u00b7 EU Megaserver',
+  ]);
+});
+
+await t('the guild choices carry the platform too', () => {
+  assert.match(codesPage, />Alphabet Mafia &middot; PC \u00b7 NA Megaserver<\/option>/);
+});
+
+await t('a platform the site does not name is shown as its number, not guessed at', () => {
+  const other = renderGuildCodesPage({
+    guilds: [],
+    codes: [
+      {
+        code: 'WXYZ2345',
+        guildName: 'Console Guild',
+        platform: 1,
+        worldName: 'NA Megaserver',
+        redemptions: 0,
+      },
+    ],
+    user,
+  });
+
+  assert.match(other, /Console Guild &middot; platform 1 \u00b7 NA Megaserver/);
+});
+
 await t('the account is added on the platform and server the code names', async () => {
   const connection = writtenDown({
     code: {

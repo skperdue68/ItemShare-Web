@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Added column - relative time, live</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .preview-wrap { padding: 18px 22px 42px; max-width: 1180px; }
+  .preview-note { color: var(--muted, #93a2bd); font-size: 12.5px; line-height: 1.5; margin: 0 0 14px; }
+  .preview-note strong { color: #d9e2f4; font-weight: 600; }
+  .preview-h { color: #d9e2f4; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; margin: 26px 0 8px; }
+  .preview-h span { color: var(--muted, #93a2bd); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .icon-ph { width: 30px; height: 30px; border-radius: 6px; border: 1px solid rgba(148,163,184,.35);
+    background: rgba(148,163,184,.12); display: inline-flex; align-items: center; justify-content: center;
+    color: #cbd5e1; font-size: 12px; flex: 0 0 auto; }
+  .seen-cell.rel { font-variant-numeric: tabular-nums; }
+  /* Right-aligned: units are added on the left, so the seconds keep to the right edge and
+     the eye can compare ages down the column instead of hunting for a moving start. */
+  th.seen-cell, td.seen-cell.rel { text-align: right; }
+  .seen-cell.rel .tick { display: inline-block; }
+  .seen-cell.rel .tick.live { color: #7dd3fc; }
+  .compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .compare .table-shell { margin: 0; }
+  .compare th, .compare td { font-size: 12.5px; }
+  .compare .col-h { padding: 6px 12px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #93a2bd; }
+  .compare .col-h b { color: #7dd3fc; font-weight: 600; }
+  .clockline { color: var(--muted, #93a2bd); font-size: 12px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="preview-wrap">
+  <p class="preview-note"><strong>Mock-up, not the live site.</strong> Real stylesheet, real table markup and the
+  rows from your screenshot. The Added cells tick once a second and are right-aligned, so the seconds stay put as units appear to the left.</p>
+
+  <h2 class="preview-h">Variant B &mdash; compact, zero units left out, live <span>(what I would pick for this column)</span></h2>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="seen-cell">Added</th>
+          <th class="num">OFFERED</th>
+          <th class="num">CLAIMED</th>
+          <th class="num">AVAILABLE</th>
+          <th>TYPE</th>
+          <th>TRAIT</th>
+          <th>LOCATION</th>
+          <th>OFFERED BY</th>
+        </tr>
+      </thead>
+      <tbody id="tableB">
+        <tr class="type-row"><td colspan="10">APPAREL <span class="type-count">(6)</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="preview-h">The same moments, three ways <span>&mdash; compare widths before you decide</span></h2>
+  <div class="compare">
+    <div>
+      <div class="col-h">A &mdash; prose, zero units left out</div>
+      <div class="table-shell"><table><thead><tr><th class="seen-cell">Added</th></tr></thead><tbody id="tableA"></tbody></table></div>
+    </div>
+    <div>
+      <div class="col-h"><b>B &mdash; compact, zero units left out</b></div>
+      <div class="table-shell"><table><thead><tr><th class="seen-cell">Added</th></tr></thead><tbody id="tableB2"></tbody></table></div>
+    </div>
+    <div>
+      <div class="col-h">C &mdash; largest unit only</div>
+      <div class="table-shell"><table><thead><tr><th class="seen-cell">Added</th></tr></thead><tbody id="tableC"></tbody></table></div>
+    </div>
+  </div>
+  <div class="clockline" id="clockline"></div>
+</div>
+
+<script>
+const MINUTE = 60e3, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
+const ago = (ms) => Date.now() - ms;
+
+// The rows from the screenshot, with plausible ages: one just added, one from this hour,
+// one from today, one from the day before, and older ones for the years/months units.
+const ITEMS = [
+  { name: 'Bracers of the Goretheif', meta: 'Enchant: Maximum Stamina Enchantment &middot; CP 160 &middot; Level 50', color: '#fbbf24', age: 12e3 },
+  { name: "Girdle of Cyrodiil's Crest", meta: 'Enchant: Maximum Health Enchantment &middot; CP 160 &middot; Level 50', color: '#fbbf24', age: 8 * MINUTE + 41e3 },
+  { name: "Robes of Cyrodiil's Light", meta: 'Enchant: Maximum Magicka Enchantment &middot; CP 160 &middot; Level 50', color: '#fbbf24', age: 3 * HOUR + 22 * MINUTE + 9e3 },
+  { name: 'Sabatons of Fury', meta: 'Enchant: Maximum Health Enchantment &middot; CP 160 &middot; Level 50', color: '#fbbf24', age: 6 * DAY + 4 * HOUR + 18 * MINUTE + 44e3 },
+  { name: 'Sash of the Desert Rose', meta: 'Enchant: Maximum Magicka Enchantment &middot; CP 160 &middot; Level 50', color: '#fbbf24', age: 3 * 30 * DAY + 12 * DAY + 2 * HOUR },
+  { name: 'Shoes of Critical Riposte', meta: 'CP 150 &middot; Level 50', color: '#a855f7', age: 1 * 365 * DAY + 141 * DAY + 7 * HOUR + 33 * MINUTE + 5e3 },
+];
+
+// Whole calendar units, counted the way a person counts: take the years and months off
+// first, anchored on the original date so a month-end does not skip a month, then read what
+// is left as days, hours, minutes and seconds. "1 year, 4 months, 21 days" rather than "487
+// days", and the seconds keep moving so the cell is alive.
+function units(from, to) {
+  const dayInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
+  const anchorFor = (y, m) => {
+    const target = new Date(from.getTime());
+    target.setDate(1);
+    target.setFullYear(from.getFullYear() + y);
+    target.setMonth(from.getMonth() + m);
+    target.setDate(Math.min(from.getDate(), dayInMonth(target.getFullYear(), target.getMonth())));
+    return target;
+  };
+
+  let years = to.getFullYear() - from.getFullYear();
+  let months = to.getMonth() - from.getMonth();
+  if (months < 0) { years -= 1; months += 12; }
+
+  let anchor = anchorFor(years, months);
+  while (anchor > to) {
+    months -= 1;
+    if (months < 0) { months += 12; years -= 1; }
+    anchor = anchorFor(years, months);
+  }
+
+  let rest = Math.max(0, to - anchor);
+  const d = Math.floor(rest / DAY); rest -= d * DAY;
+  const h = Math.floor(rest / HOUR); rest -= h * HOUR;
+  const mi = Math.floor(rest / MINUTE); rest -= mi * MINUTE;
+  const sec = Math.floor(rest / 1000);
+
+  return { years, months, d, h, mi, sec };
+}
+
+function prose(u) {
+  const bits = [];
+  const add = (n, one, many) => { if (n > 0) bits.push(`${n} ${n === 1 ? one : many}`); };
+  add(u.years, 'year', 'years'); add(u.months, 'month', 'months'); add(u.d, 'day', 'days');
+  add(u.h, 'hour', 'hours'); add(u.mi, 'minute', 'minutes'); add(u.sec, 'second', 'seconds');
+  if (bits.length === 0) return 'just now';
+  if (bits.length === 1) return bits[0];
+  return `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}`;
+}
+
+function compact(u) {
+  // Only the units that actually happened: "1y 4mo 19d 7h 33m 5s", and "12s" for something
+  // that turned up a moment ago. Zero is not information here.
+  const bits = [];
+  if (u.years) bits.push(`${u.years}y`);
+  if (u.months) bits.push(`${u.months}mo`);
+  if (u.d) bits.push(`${u.d}d`);
+  if (u.h) bits.push(`${u.h}h`);
+  if (u.mi) bits.push(`${u.mi}m`);
+  if (u.sec) bits.push(`${u.sec}s`);
+  return bits.length ? bits.join(' ') : 'just now';
+}
+
+function coarse(u) {
+  if (u.years > 0) return `${u.years} ${u.years === 1 ? 'year' : 'years'} ago`;
+  if (u.months > 0) return `${u.months} ${u.months === 1 ? 'month' : 'months'} ago`;
+  if (u.d > 0) return `${u.d} ${u.d === 1 ? 'day' : 'days'} ago`;
+  if (u.h > 0) return `${u.h} ${u.h === 1 ? 'hour' : 'hours'} ago`;
+  if (u.mi > 0) return `${u.mi} ${u.mi === 1 ? 'minute' : 'minutes'} ago`;
+  return `${u.sec} ${u.sec === 1 ? 'second' : 'seconds'} ago`;
+}
+
+const stamp = (when) => when.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+const rowB = (item, i) => `
+  <tr>
+    <td>
+      <div class="item-cell">
+        <span class="icon-ph">${item.name.slice(0, 1)}</span>
+        <div class="item-cell-text">
+          <span class="item-name" style="color:${item.color}">${item.name}</span>
+          <span class="item-meta">${item.meta}</span>
+        </div>
+      </div>
+    </td>
+    <td class="seen-cell rel" id="b-${i}"></td>
+    <td class="num">1</td>
+    <td class="num held-cell"></td>
+    <td class="num">1</td>
+    <td>Apparel</td>
+    <td>Divines</td>
+    <td class="location-cell">Inventory (Dies-To-Often)</td>
+    <td>@evainefaye</td>
+  </tr>`;
+
+const tableB = document.getElementById('tableB');
+tableB.insertAdjacentHTML('beforeend', ITEMS.map(rowB).join(''));
+
+const now = Date.now();
+const moments = ITEMS.map((item) => now - item.age);
+
+document.getElementById('tableA').innerHTML = moments.map((m, i) => `<tr><td class="seen-cell rel" id="a-${i}"></td></tr>`).join('');
+document.getElementById('tableB2').innerHTML = moments.map((m, i) => `<tr><td class="seen-cell rel" id="b2-${i}"></td></tr>`).join('');
+document.getElementById('tableC').innerHTML = moments.map((m, i) => `<tr><td class="seen-cell rel" id="c-${i}"></td></tr>`).join('');
+
+function paint() {
+  const to = new Date();
+  moments.forEach((m, i) => {
+    const from = new Date(m);
+    const u = units(from, to);
+    const title = `First shared ${stamp(from)}`;
+    const cell = (id, text) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = `<time datetime="${from.toISOString()}" title="${title}">${text}</time>`;
+      el.title = title;
+    };
+    cell(`b-${i}`, compact(u));
+    cell(`b2-${i}`, compact(u));
+    cell(`a-${i}`, prose(u));
+    cell(`c-${i}`, coarse(u));
+  });
+  document.getElementById('clockline').textContent =
+    `ticking now: ${to.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+}
+
+paint();
+setInterval(paint, 1000);
+</script>
+</body>
+</html>
