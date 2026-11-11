@@ -29,7 +29,8 @@
     "test:delete-user": "node testDeleteUser.js",
     "delete:user": "node deleteUser.js",
     "test:added-times": "node testAddedTimes.js",
-    "test:request-badge": "node testRequestBadge.js"
+    "test:request-badge": "node testRequestBadge.js",
+    "test:browsing-menu": "node testBrowsingMenu.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

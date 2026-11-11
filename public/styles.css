@@ -1156,27 +1156,24 @@ a.primary-button {
   font-weight: 700;
 }
 
-/* The account picker is the one control here that is a real <select>. Its box - the
-   height, the border, the rounded corners, the background and the text - is the filter menu
-   rule further up the file, so the two read as one set of controls; what is left here is
-   only what a select needs of its own. It stays a select on purpose: choosing an account
-   submits the form, and a native list is what a keyboard and a phone expect.
-   `color-scheme` is what makes the popup itself dark. */
-.browsing-picker select {
-  appearance: none;
-  -webkit-appearance: none;
-  color-scheme: dark;
-  min-width: 158px;
-  max-width: 100%;
-  padding: 0 30px 0 10px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2394a3b8'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
+/* The account picker is the filter menu, reused: the same `details` box and the same dark
+   card of choices, so the two cannot be styled apart. What is left here is only what the
+   picker adds - a wider box, because an account name is longer than a filter word, and a
+   name that shortens with an ellipsis instead of pushing the caret out of the row. */
+.browsing-dropdown {
+  position: relative;
 }
 
-.browsing-picker select:focus-visible {
-  border-color: rgba(96, 165, 250, 0.6);
-  outline: none;
+.browsing-dropdown .filter-select {
+  min-width: 220px;
+  max-width: 100%;
+}
+
+.browsing-dropdown .filter-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .browsing-go {
@@ -2134,19 +2131,16 @@ th .sort-link {
   white-space: nowrap;
 }
 
-/* The dropdown's list is drawn by the browser, not by this file: options took the select's
-   composited rgba() background and the inherited muted text, so an unselected option came
-   out grey on grey. The box itself now matches the filter menus, translucent and all, so
-   it is the options that carry an opaque light-on-dark pair of their own; the checked one
+/* The sign-up form's own account picker is still a native select, whose list is drawn by
+   the browser rather than by this file: options took the select's composited rgba()
+   background and the inherited muted text, so an unselected option came out grey on grey.
+   The options therefore carry an opaque light-on-dark pair of their own; the checked one
    keeps the accent blue. */
-
-.browsing-picker select option,
 .auth-field select option {
   background-color: #0e1a33;
   color: var(--text);
 }
 
-.browsing-picker select option:checked,
 .auth-field select option:checked {
   background-color: #2454bd;
   color: #ffffff;

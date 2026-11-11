@@ -73,6 +73,12 @@ landed on `main`.
 
 ### Changed
 
+- **The account picker is the filter menu now.** *Browsing as* was a native dropdown, and
+  the list a browser draws for one is not the site's to style: no dark card, no row that
+  lightens under the pointer, no rounded corners - which is why it never looked like the
+  **Added** menu it sits above. It is now the same control, down to the classes it is drawn
+  with, so the two are styled by one set of rules. Choosing an account still sends the form
+  at once, and without scripts the **Switch** button sends it.
 - **The account picker matches the other filters.** *Browsing as* was drawn a shade darker
   than the **Added** menu it sits above - one control in two colours. Its box, its hover and
   its caret now come from the same rule as the filter menus, so the two cannot drift apart

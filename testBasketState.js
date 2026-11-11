@@ -81,7 +81,7 @@ await test('browsing account changes bypass unload warnings but closing a held b
   handlers.beforeunload({preventDefault(){warned=true;}});
   assert.equal(warned,true,'closing a tab with drafts is still protected');
   assert.equal(typeof handlers.change,'function','account changes must mark their navigation as internal');
-  handlers.change({target:{matches:selector=>selector.includes('browsingAccount'),form:{getAttribute:()=>'/browsing-account'}}});
+  handlers.change({target:{matches:selector=>selector.includes('data-browsing-account'),form:{getAttribute:()=>'/browsing-account'}}});
   warned=false;
   handlers.beforeunload({preventDefault(){warned=true;}});
   assert.equal(warned,false,'the account switch preserves the basket');
