@@ -73,6 +73,10 @@ landed on `main`.
 
 ### Changed
 
+- **The account picker matches the other filters.** *Browsing as* was drawn a shade darker
+  than the **Added** menu it sits above - one control in two colours. Its box, its hover and
+  its caret now come from the same rule as the filter menus, so the two cannot drift apart
+  again, and the popup keeps its own opaque option colours.
 - **The tabs say whose list you are reading.** *Request* is **Others Inventory**, *Offering*
   is **My Inventory**, and *Your requests* is **My Requests**. Nothing else moved: the
   columns, the buttons and the counts are the ones each tab already had.

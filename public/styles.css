@@ -1156,32 +1156,24 @@ a.primary-button {
   font-weight: 700;
 }
 
-/* The account picker is the one control here that is a real <select>, so its closed state
-   copies the filter menus above the lists - same height, same rounded dark card, same small
-   caret - rather than looking like a form control borrowed from the browser. It stays a
-   select on purpose: choosing an account submits the form, and a native list is what a
-   keyboard and a phone expect. `color-scheme` is what makes the popup itself dark. */
+/* The account picker is the one control here that is a real <select>. Its box - the
+   height, the border, the rounded corners, the background and the text - is the filter menu
+   rule further up the file, so the two read as one set of controls; what is left here is
+   only what a select needs of its own. It stays a select on purpose: choosing an account
+   submits the form, and a native list is what a keyboard and a phone expect.
+   `color-scheme` is what makes the popup itself dark. */
 .browsing-picker select {
   appearance: none;
   -webkit-appearance: none;
   color-scheme: dark;
   min-width: 158px;
   max-width: 100%;
-  height: 34px;
   padding: 0 30px 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.32);
-  border-radius: 8px;
-  background-color: rgba(7, 16, 38, 0.72);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2394a3b8'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2394a3b8'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
 }
 
-.browsing-picker select:hover,
 .browsing-picker select:focus-visible {
   border-color: rgba(96, 165, 250, 0.6);
   outline: none;
@@ -1919,21 +1911,30 @@ tr.row-fading td {
 }
 
 /* A filter that holds several values: a menu of checkboxes, styled like the select
-   it replaced so the row still reads as one set of controls. */
+   it replaced so the row still reads as one set of controls.
+
+   The account picker above the tabs is the same control to a reader - one closed box with
+   a small caret in it - so its box is written here too rather than a second time further
+   down the file, where the two had drifted into different colours. */
+.filter-dropdown > summary,
+.browsing-picker select {
+  height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  background-color: rgba(7, 16, 38, 0.72);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .filter-dropdown > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-width: 158px;
-  height: 34px;
   padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.32);
-  border-radius: 8px;
-  background: rgba(7, 16, 38, 0.72);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
 }
 
 .filter-dropdown > summary::-webkit-details-marker {
@@ -1947,6 +1948,13 @@ tr.row-fading td {
 }
 
 .filter-dropdown[open] > summary {
+  border-color: rgba(96, 165, 250, 0.6);
+}
+
+/* A pointer over either closed box brightens the same edge, so the picker and the filter
+   menus answer a hover the same way instead of each doing its own thing. */
+.filter-dropdown > summary:hover,
+.browsing-picker select:hover {
   border-color: rgba(96, 165, 250, 0.6);
 }
 
@@ -2128,12 +2136,9 @@ th .sort-link {
 
 /* The dropdown's list is drawn by the browser, not by this file: options took the select's
    composited rgba() background and the inherited muted text, so an unselected option came
-   out grey on grey. The control gets an opaque colour and the options their own
-   light-on-dark pair; the checked one keeps the accent blue. */
-.browsing-picker select {
-  background-color: #0e1a33;
-  color: var(--text);
-}
+   out grey on grey. The box itself now matches the filter menus, translucent and all, so
+   it is the options that carry an opaque light-on-dark pair of their own; the checked one
+   keeps the accent blue. */
 
 .browsing-picker select option,
 .auth-field select option {
