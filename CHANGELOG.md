@@ -46,6 +46,13 @@ landed on `main`.
 
 ### Fixed
 
+- **A standing offer now offers what its owner actually has.** *Offered* is the copies they
+  hold less the amount they keep back, and *Available* is that less whatever a request is
+  already standing on. A request button only appears while both are above zero, so an offer
+  whose stock is all kept back, or whose copies are all spoken for, is not a row to ask from
+  at all. A file that reports neither count for its standing offers still means the one copy
+  it always did, rather than quietly losing the offer.
+
 - **An item's age is counted from a real UTC instant.** The elapsed time in **Added** came
   from a timestamp MariaDB had already converted into the database host's own time zone,
   which the query then labelled `Z`; on a host six hours behind UTC an item offered a
@@ -55,6 +62,10 @@ landed on `main`.
   measure from the same instant, exactly as before.
 
 ### Changed
+
+- **The tabs say whose list you are reading.** *Request* is **Others Inventory**, *Offering*
+  is **My Inventory**, and *Your requests* is **My Requests**. Nothing else moved: the
+  columns, the buttons and the counts are the ones each tab already had.
 
 - **Browsing as** is a rounded dark menu now, matching the **Added** menu above the lists
   instead of looking like a form control borrowed from the browser: the same height, card

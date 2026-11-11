@@ -321,8 +321,9 @@ if (listRegion) {
   // Discard list responses that started before a successful bag mutation.
   let basketRevision = 0;
   let activeTab = 'request';
-  // Each list has its own search: a word typed while reading Offering says nothing about
-  // Request, and emptying one must leave the other as it was. Your requests has no box, so
+  // Each list has its own search: a word typed while reading My Inventory says nothing
+  // about Others Inventory, and emptying one must leave the other as it was. My Requests
+  // has no box, so
   // it is not in here and is never narrowed.
   let listSearchByTab = { request: '', offer: '' };
   let listSearchTimer = null;
@@ -356,7 +357,7 @@ if (listRegion) {
   }
 
   // ---------------------------------------------------------------------- tabs
-  // Request and Offering are the same data cut two ways, so the tab is a display
+  // Others Inventory and My Inventory are the same data cut two ways, so the tab is a display
   // choice the server does not need to know about. It survives a live refresh (the
   // region is re-rendered from the Request tab) and a page rebuild.
   function setTab(name, { focus = false } = {}) {
@@ -534,7 +535,7 @@ if (listRegion) {
   // name. The filter card above keeps its search, which is a name filter the server applies
   // and the address bar carries.
   function applyListSearch(tab = activeTab) {
-    // Your requests is a log of what was asked for, not a list to search: no box, no word,
+    // My Requests is a log of what was asked for, not a list to search: no box, no word,
     // nothing of its own to narrow.
     if (tab !== 'request' && tab !== 'offer') return;
 
@@ -2071,7 +2072,7 @@ async function fetchOwnerRequests(url, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error('Your requests could not be loaded. Nothing was changed.');
+    throw new Error('My Requests could not be loaded. Nothing was changed.');
   }
 
   return response.text();
