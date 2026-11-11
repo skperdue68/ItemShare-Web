@@ -124,15 +124,14 @@ await test('an offer with nothing left to hand over is not a row to ask from',()
   }
 });
 
-await test('an offer whose file wrote no count means one copy, and a written zero means none',()=>{
-  for(const extra of [{held_quantity:null},{}]){
+await test('an offer is a row only when the file says what is held beyond the reserve',()=>{
+  // A file that wrote no count is not one copy: the row needs a number in the file that is
+  // above the reserve, so silence offers nothing instead of being guessed at.
+  for(const extra of [{held_quantity:null},{},{held_quantity:undefined},{held_quantity:0,reserve_quantity:0}]){
     const region=renderListRegion({...guildBase,requestOffers:[offerRow(extra)]});
-    assert.match(region,/data-request data-kind="offer" data-id="31"/,JSON.stringify(extra));
-    assert.match(region,/<td class="num">1<\/td>/);
+    assert(!region.includes('Perfect Roe'),JSON.stringify(extra));
+    assert(!region.includes('data-request data-kind="offer" data-id="31"'),JSON.stringify(extra));
   }
-  const none=renderListRegion({...guildBase,requestOffers:[offerRow({held_quantity:0,reserve_quantity:0})]});
-  assert(!none.includes('Perfect Roe'),'an owner holding none is offering none');
-  assert(!none.includes('data-kind="offer" data-id="31"'));
 });
 
 const offerTarget=(extra)=>({
@@ -156,14 +155,16 @@ await test('the server refuses an offer with nothing to hand over, before it wri
   }
 });
 
-await test('the server still takes one request for an offer whose file wrote no count',async()=>{
+await test('the server refuses an offer whose file wrote no count',async()=>{
   const queries=[];
   const connection={execute:async(sql)=>{queries.push(sql);
     if(/FROM itemshare_always_share a/.test(sql))return [[offerTarget({held_quantity:null,reserve_quantity:0})],[]];
-    if(/INSERT INTO itemshare_requests/.test(sql))return [{insertId:41},[]];
     return [[],[]];}};
-  await store.createRequest(connection,{userId:7,requesterAccounts:['@mine'],itemKind:'offer',itemId:34,quantity:1});
-  assert(queries.some((sql)=>sql.includes('INSERT INTO itemshare_requests')),'the request is written');
+  await assert.rejects(
+    store.createRequest(connection,{userId:7,requesterAccounts:['@mine'],itemKind:'offer',itemId:34,quantity:1}),
+    (error)=>error.statusCode===409
+  );
+  assert(!queries.some((sql)=>sql.includes('INSERT INTO itemshare_requests')),'nothing is written');
 });
 
 await test('the server refuses more requests than an offer has copies',async()=>{
