@@ -28,7 +28,8 @@
     "test:accounts-modal": "node testAccountsModal.js",
     "test:delete-user": "node testDeleteUser.js",
     "delete:user": "node deleteUser.js",
-    "test:added-times": "node testAddedTimes.js"
+    "test:added-times": "node testAddedTimes.js",
+    "test:request-badge": "node testRequestBadge.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

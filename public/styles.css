@@ -930,6 +930,34 @@ th.num {
   background: linear-gradient(180deg, #7b86ff 0%, #4c56d8 100%);
 }
 
+/* The avatar and its badge share one box, so the count can sit on the avatar's top right
+   corner and hang outside the circle instead of being clipped by it. The box is the same
+   size as the avatar, so nothing else in the header moves. */
+.avatar-slot {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The ring is the colour of the header, which is what makes the circle read as sitting on
+   top of the avatar rather than floating beside it. */
+.avatar-badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e02d1b;
+  box-shadow: 0 0 0 2px rgba(7, 12, 24, 0.92);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  letter-spacing: 0;
+  text-align: center;
+}
+
 .avatar-caret {
   width: 0;
   height: 0;
