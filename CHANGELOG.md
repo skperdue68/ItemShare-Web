@@ -85,10 +85,15 @@ landed on `main`.
   AVAILABLE and OFFERED BY, in the same order and at the same widths, so a column of offers
   lines up under the column above it. The addon that records an offer's count also records
   the place it was marked in (1.11.10); a file from an older build leaves that cell blank.
-- **The line of tabs pins to the top** once a list is long enough to scroll, so My
-  Inventory and Others Inventory stay reachable from anywhere down the page. Reaching the
-  standing offers hands the pinned row to that heading, and the tabs come back when the
-  section has passed.
+- **The line of tabs and the column headings pin to the top** once a list is long enough
+  to scroll: the tabs, then ITEM through OFFERED BY directly under them, as one block, so
+  My Inventory and Others Inventory stay reachable and the columns stay named from anywhere
+  down the page. Reaching the standing offers hands the pinned row to that heading, and the
+  tabs come back when the section has passed.
+- **The item column no longer eats the row.** Every column carries a share of the width
+  instead of the last one taking all that was left, which had put a wide empty gulf between
+  an item's name and ADDED and squeezed OFFERED, RESERVED and AVAILABLE until their own
+  headings were cut off. A name still gets the largest share.
 
 - **The account picker is the filter menu now.** *Browsing as* was a native dropdown, and
   the list a browser draws for one is not the site's to style: no dark card, no row that

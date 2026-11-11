@@ -725,44 +725,17 @@ code {
    never hold the same rows. */
 .list-table {
   table-layout: fixed;
-}
-
-.col-added {
-  width: 92px;
-}
-
-.col-num {
-  width: 58px;
-}
-
-.col-type {
-  width: 96px;
-}
-
-.col-trait {
-  width: 112px;
-}
-
-.col-location {
-  width: 150px;
-}
-
-.col-owner {
-  width: 132px;
-}
-
-.col-action {
-  width: 132px;
+  /* Ten columns carrying headings need the room; below this the shell scrolls sideways
+     again rather than squeezing words that no longer fit. */
+  min-width: 980px;
 }
 
 .table-shell {
-  /* Horizontal only. A table wider than the card still scrolls sideways, but these
-     tables have no height limit, so vertical overflow can only be momentary - a panel
-     being height-animated while the list is replaced - and `auto` turned that into a
-     scrollbar flashing beside the table until the animation settled. Clipping is
-     invisible, which is what a transient squeeze should be. */
-  overflow-x: auto;
-  overflow-y: clip;
+  /* Visible, not a scroll container: a sticky heading inside a scroll container pins to
+     that container, and this one never scrolls vertically, so the heading row would ride
+     away with the table instead of staying under the tabs. The wide-screen table fits at
+     its minimum width; the narrow-screen rule further down hands scrolling back. */
+  overflow: visible;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 12px;
   background: rgba(8, 18, 42, 0.44);
@@ -800,6 +773,14 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   box-shadow: 0 1px 0 rgba(148, 163, 184, 0.18);
+}
+
+/* The item tables pin their heading row under the line of tabs, so the columns stay named
+   while the rows scroll: one block from the tabs down to OFFERED BY. It sits a step below
+   the tab bar in the stack, and both offsets are measured in app.js. */
+.list-table thead th {
+  top: calc(var(--sticky-top, 0px) + var(--list-head-h, 0px));
+  z-index: 11;
 }
 
 tbody tr:hover {
@@ -1253,8 +1234,10 @@ a.primary-button {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-bottom: 14px;
-  padding: 10px 0;
+  /* The space below the tabs is padding rather than margin: the heading row pins directly
+     under this bar, and a margin would leave a strip of scrolling rows between them. */
+  margin-bottom: 0;
+  padding: 10px 0 14px;
   background: rgba(9, 20, 45, 0.92);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
@@ -1509,8 +1492,14 @@ a.primary-button {
   position: sticky;
   top: var(--sticky-top, 0px);
   z-index: 14;
-  margin: 20px -24px 6px;
-  padding: 12px 24px 10px;
+  /* As tall as the line of tabs it replaces, so the column headings below pin at the same
+     line either way and nothing shows between the two bars. The space under it is padding,
+     for the same reason the tab bar's is. */
+  display: flex;
+  align-items: center;
+  min-height: var(--list-head-h, 0px);
+  margin: 20px -24px 0;
+  padding: 0 24px;
   background: rgba(9, 20, 45, 0.95);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(148, 163, 184, 0.18);
@@ -3277,6 +3266,20 @@ a.history-page:hover, .history-page.is-current {
 
 /* Below the width the nine columns want, the table gives up its padding and a little of
    its type size rather than making the reader scroll sideways for the last column. */
+/* Below the width the ten columns want, the shell scrolls sideways again. A sticky heading
+   inside a scroll container pins to that container rather than to the window, and this one
+   never scrolls vertically, so the heading row steps back into the table with it. */
+@media (max-width: 1120px) {
+  .table-shell {
+    overflow-x: auto;
+    overflow-y: clip;
+  }
+
+  .list-table thead th {
+    position: static;
+  }
+}
+
 @media (max-width: 1240px) {
   th,
   td {
