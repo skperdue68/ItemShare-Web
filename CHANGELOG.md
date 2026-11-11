@@ -73,6 +73,10 @@ landed on `main`.
 
 ### Changed
 
+- **The Added count keeps its seconds.** They are written as `00s` on a whole minute
+  rather than being left out, so the last field no longer disappears for a moment and comes
+  back a second later - the count ticks instead of flickering.
+
 - **Answering a placed furnishing says to rescan the house.** A share that stands in a
   house - `Placed (Mournoth Keep)` - is invisible to every bag, so the site's count is only
   as good as the last `/ishare scan`. The first time in a session that somebody fulfils one,

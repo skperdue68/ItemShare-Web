@@ -89,6 +89,51 @@ t('every connection the site opens is in UTC', () => {
   );
 });
 
+// ------------------------------------------------------------ the age itself
+// The countdown is run out of public/app.js rather than copied, so what is checked is the
+// text the page really writes.
+const appSource = readFileSync(new URL('./public/app.js', import.meta.url), 'utf8');
+const relativeSource = appSource.slice(
+  appSource.indexOf('const RELATIVE_TICK_MS = 1000;'),
+  appSource.indexOf('// ------------------------------------------------------- end relative times')
+);
+
+if (!relativeSource.startsWith('const RELATIVE_TICK_MS')) {
+  throw new Error('MISSING ANCHOR in public/app.js: the relative-time block');
+}
+
+const { relativeText } = new Function(`${relativeSource}\nreturn { relativeText };`)();
+
+const born = new Date('2026-11-11T07:29:30Z');
+const after = (seconds) => new Date(born.getTime() + seconds * 1000);
+
+t('the seconds are written even when they are zero', () => {
+  assert.equal(relativeText(born, after(0)), 'just now');
+  assert.equal(relativeText(born, after(2)), '02s');
+  assert.equal(relativeText(born, after(52)), '52s');
+  assert.equal(relativeText(born, after(60)), '01m 00s');
+  assert.equal(relativeText(born, after(61)), '01m 01s');
+  assert.equal(relativeText(born, after(3600)), '01h 00s');
+  assert.equal(relativeText(born, after(86400)), '01d 00s');
+});
+
+t('a count never loses its last field, at any age', () => {
+  for (let seconds = 0; seconds <= 400000; seconds += 7) {
+    const text = relativeText(born, after(seconds));
+
+    if (seconds === 0) {
+      assert.equal(text, 'just now');
+      continue;
+    }
+
+    assert.match(text, /(^| )\d{2}s$/, `${seconds}s read as "${text}"`);
+
+    for (const part of text.split(' ')) {
+      assert.match(part, /^\d{2}(y|mo|d|h|m|s)$/, `"${part}" in "${text}" is not two digits`);
+    }
+  }
+});
+
 console.log(`\n${total - failures}/${total} passed`);
 
 if (failures > 0) {
