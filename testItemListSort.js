@@ -574,6 +574,49 @@ t('an empty My Requests tab says where to ask', () => {
   assert.doesNotMatch(region, /You have not asked for anything yet/, 'the old sentence is gone');
 });
 
+t('the line above the tabs names the browsed-as account and counts properly', () => {
+  const region = (items, accounts) =>
+    renderListRegion({
+      user: { id: 1, username: 'eva', provider: 'password' },
+      accounts,
+      sharedItems: [],
+      requestItems: items,
+      alwaysShare: [],
+      requestOffers: [],
+      facets: { types: [], owners: [] },
+      filters: {},
+      requests: [],
+      basketRows: [],
+    });
+
+  const sender = { account_name: '@sender2' };
+  const threeGuilds = [{ accountName: '@eva', guildCount: 3, guilds: [{}, {}, {}] }];
+  const oneGuild = [{ accountName: '@eva', guildCount: 1, guilds: [{}] }];
+
+  assert.match(
+    region([item(1, 'Briarheart Dagger', 'Weapons', sender)], threeGuilds),
+    />1 item shared by members of @eva&rsquo;s guilds</
+  );
+  assert.match(
+    region(
+      [
+        item(1, 'Briarheart Dagger', 'Weapons', sender),
+        item(2, 'Ancient Silk', 'Apparel', sender),
+      ],
+      oneGuild
+    ),
+    />2 items shared by members of @eva&rsquo;s guild</
+  );
+  // A visitor has no account to name, so the sentence falls back rather than leaving a gap.
+  assert.match(
+    region([item(1, 'Briarheart Dagger', 'Weapons', sender)], []),
+    />1 item shared by members of the guilds they share with</
+  );
+  // The wording this replaced: "different" before the count and "other members".
+  assert.doesNotMatch(region([item(1, 'Briarheart Dagger', 'Weapons', sender)], threeGuilds),
+    /different item|other members/);
+});
+
 console.log(`\n${total - failures}/${total} passed`);
 
 process.exit(failures ? 1 : 0);
