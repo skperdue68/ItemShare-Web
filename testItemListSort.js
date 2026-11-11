@@ -290,6 +290,22 @@ t('both tables are cut to the same widths', () => {
   assert.match(columns(offerTable(rows, { mine: true, filters: {} })), /col-location/);
 });
 
+t('the item column takes a share of the row, not the rest of it', () => {
+  for (const mine of [false, true]) {
+    const html = offerTable(rows, { mine, filters: {} });
+    const widths = [...html.matchAll(/style="width:([\d.]+)%"/g)].map((match) => Number(match[1]));
+
+    assert.equal(widths.length, mine ? 10 : 9, `one width per column, mine=${mine}`);
+    assert.equal(widths.reduce((sum, width) => sum + width, 0), 100, `fills the row, mine=${mine}`);
+    assert.ok(widths[0] <= 29, `ITEM keeps a share rather than the remainder, mine=${mine}`);
+    // Every heading has to fit its column: OFFERED, RESERVED and AVAILABLE are the longest
+    // words in the row and used to be squeezed into widths too small to draw them.
+    for (const width of widths.slice(2, 5)) {
+      assert.ok(width >= 8, `a quantity column holds its heading, mine=${mine}`);
+    }
+  }
+});
+
 t('a standing offer row fills every column its headings name', () => {
   for (const mine of [false, true]) {
     const html = offerTable([rows[0]], { mine, filters: {} });

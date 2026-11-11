@@ -22,25 +22,36 @@ function refreshAfterChange() {
 }
 
 // ------------------------------------------------------------------ sticky bars
-// The tab bar and the standing-offers heading pin themselves under the site header, and
-// the header is the one thing whose height is not known here: it grows when a basket bar
-// joins it and when the account line wraps. Measuring it is cheaper than a guessed offset
-// that leaves a gap on one page and hides the bar behind the header on another.
-const stickyHeader = document.querySelector('.top-bar');
+// The line of tabs and the column headings under it pin to the top of the window as one
+// block, so a long list keeps both which list it is and what each column is. Neither offset
+// can live in the stylesheet: the site header is as tall as the account line and the basket
+// bar make it, and the tab row is as tall as the tabs in it. Both are measured here and
+// published as custom properties for the stylesheet to add up.
+function measureStickyBars() {
+  const root = document.documentElement;
 
-if (stickyHeader) {
-  const setStickyTop = () => {
-    const height = Math.round(stickyHeader.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--sticky-top', `${height}px`);
+  const publish = (name, element) => {
+    if (!element) return;
+    const value = `${Math.round(element.getBoundingClientRect().height)}px`;
+    if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
   };
 
-  setStickyTop();
+  publish('--sticky-top', document.querySelector('.top-bar'));
+  publish('--list-head-h', document.querySelector('.list-head'));
+}
 
-  if (typeof ResizeObserver === 'function') {
-    new ResizeObserver(setStickyTop).observe(stickyHeader);
-  } else {
-    window.addEventListener('resize', setStickyTop);
-  }
+measureStickyBars();
+
+if (typeof ResizeObserver === 'function') {
+  const observer = new ResizeObserver(measureStickyBars);
+  const stickyHeader = document.querySelector('.top-bar');
+  if (stickyHeader) observer.observe(stickyHeader);
+  // The list region is replaced when it refreshes, so the body is watched for it: the tab
+  // row can come back at a different height, and a stale offset would leave the headings a
+  // few pixels away from the tabs pinned above them.
+  observer.observe(document.body);
+} else {
+  window.addEventListener('resize', measureStickyBars);
 }
 
 // ----------------------------------------------------------------- demo presence
