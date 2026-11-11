@@ -550,6 +550,30 @@ t('a term matches a row the heading does not name', () => {
   assert.equal(weapons.count.textContent, '(1 of 2)');
 });
 
+t('an empty My Requests tab says where to ask', () => {
+  const region = renderListRegion({
+    user: { id: 1, username: 'eva', provider: 'password' },
+    accounts: [{ accountName: '@eva', guildCount: 1, guilds: [{}] }],
+    sharedItems: [],
+    requestItems: [],
+    alwaysShare: [],
+    requestOffers: [],
+    facets: { types: [], owners: [] },
+    filters: {},
+    requests: [],
+    basketRows: [],
+  });
+
+  const panel = region.slice(region.indexOf('id=\"panelMine\"'));
+
+  assert.match(panel, /class="muted list-empty"/, 'centred like the other empty lists');
+  assert.match(
+    panel,
+    /You have no pending requests\. Use the &ldquo;Others Inventory&rdquo; tab to request items\./
+  );
+  assert.doesNotMatch(region, /You have not asked for anything yet/, 'the old sentence is gone');
+});
+
 console.log(`\n${total - failures}/${total} passed`);
 
 process.exit(failures ? 1 : 0);

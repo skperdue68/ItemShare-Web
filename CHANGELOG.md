@@ -73,6 +73,10 @@ landed on `main`.
 
 ### Changed
 
+- **The empty My Requests tab says where to ask.** It reads *You have no pending requests.
+  Use the "Others Inventory" tab to request items*, centred with a little air above it like
+  the other empty lists, instead of naming a tab that does not exist by that name.
+
 - **The upload box stands out.** The one place the file goes is tinted blue with a brighter
   dashed edge instead of being another dark panel, so the first step on the page is the
   thing the eye lands on.
