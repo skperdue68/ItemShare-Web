@@ -38,6 +38,7 @@ import {
   getDraftBasket,
   getFulfillForm,
   getOwnerContacts,
+  countOwnerRequests,
   getOwnerRequests,
   getRequesterNotifications,
   getRequesterHistory,
@@ -284,6 +285,40 @@ app.use((req, res, next) => {
     details: 'Sign in as a non-demo user to do that on the real site.',
     tone: 'notice',
   });
+});
+
+// The number on the avatar: how many asks are waiting on this person's own items.
+//
+// It is worked out here, once, for the full page loads that draw a header, and hung on the
+// session user for this request only. A nested write is not a session change, so nothing
+// is written back to the session store - and because every render already receives the
+// user, each page shows the count without a query of its own.
+app.use((req, res, next) => {
+  const user = req.session ? req.session.user : null;
+  const accept = req.get('accept') || '';
+
+  // A fragment or a JSON body is fetched by script on a page that already counted, so
+  // those are left alone: the badge belongs to a page, not to a live refresh of it.
+  if (!user || req.method !== 'GET' || !accept.includes('text/html')) {
+    next();
+    return;
+  }
+
+  withDatabase(async (connection) => {
+    const accounts = await getViewerAccounts(connection, user.id);
+
+    return countOwnerRequests(
+      connection,
+      accounts.map((row) => row.eso_account_name)
+    );
+  })
+    .then((waiting) => {
+      req.session.user.pendingRequests = waiting;
+      next();
+    })
+    // A count that could not be read must not cost somebody the page they asked for: the
+    // header is drawn without it and the next page tries again.
+    .catch(() => next());
 });
 
 // Socket.IO rides on the same HTTP server as Express, under /socket.io, so live

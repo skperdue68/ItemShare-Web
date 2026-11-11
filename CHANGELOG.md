@@ -7,6 +7,13 @@ landed on `main`.
 
 ### Added
 
+- **A count on the avatar** says how many requests are waiting to be processed: a small red
+  circle with the number in white, on the top right of the avatar and half outside it. It
+  counts what the requests list counts - one per item, however many people asked for it,
+  because one answer settles them all - and no circle is drawn when there is nothing to
+  answer. Past ninety-nine it reads **99+** rather than growing wider than the avatar. The
+  number is worked out before the page is drawn, so it is there on arrival and on every
+  page with a header, not only on the requests list.
 - **`npm run delete:user`** removes a person by the name they sign in with, with everything
   attached to them: their ESO accounts and the items, offers, guild memberships and uploads
   on them, their baskets and requests, the guild codes they made and the redemptions of

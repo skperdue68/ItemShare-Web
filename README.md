@@ -857,6 +857,16 @@ Discord's avatar hash turned into a CDN URL (animated avatars keep their GIF for
 https URLs are stored, and if a picture stops loading the initials underneath show
 instead, so the header never depends on a third party.
 
+**The red count on the avatar** says how many requests are waiting to be processed, in the
+top right corner of the circle and half outside it. It counts what the requests list
+groups: one per item, however many people asked for that item, because one answer settles
+them all. Nothing waiting means no badge at all, and past ninety-nine it reads **99+** so
+the circle never grows wider than the avatar. The number is worked out for the page before
+it is drawn - one small query on a full page load, skipped for the fragments a live refresh
+fetches - so it is already right when the page arrives rather than appearing a moment
+later. It is also what the button says to a screen reader: *Account menu for Develia, 3
+requests to process*.
+
 The only way out is the avatar menu in the header, which holds **Log out**. That posts to
 `/logout`, which deletes the session row and clears the cookie. Without JavaScript the
 form still submits.
