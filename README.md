@@ -667,8 +667,20 @@ place: a missing count used to read as one copy, which is how an emptied bag wen
 showing *Offered 1*. The count and the place come from the addon, so an upload from 1.11.10
 or later is what puts an offer on the list; a file from an older build carries no count for
 its offers, and they are not shown until the next upload. A file that writes 0 is an answer
-too: the owner holds none. The server refuses what the list will not draw, and reopening an
+too: the owner holds none, and that answer is shown: *My Inventory* keeps the owner's own
+offer listed with **0** offered while the file says the bag is empty, so an offer that has
+run dry is visible instead of gone, while *Others Inventory* leaves it out - a promise
+with nothing behind it is nothing to ask for. A count the file never wrote is not a row on
+either list. The server refuses what the list will not draw, and reopening an
 expired request follows the same rule, so two people cannot be promised the same handover.
+
+The standing-offers table is drawn with the inventory table's own columns, in the same
+order and at the same widths: **ADDED**, **OFFERED**, **RESERVED**, **AVAILABLE**,
+**TYPE**, **TRAIT**, **LOCATION** (on *My Inventory*, where the owner is the one opening
+the bag) and **OFFERED BY**. A column of offers therefore sits under the column of the same
+name above it rather than near it. **LOCATION** there is the place the owner marked the
+item in - the one place an offer's count belongs to - and it is what the request email
+names when a copy is handed over.
 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
@@ -677,7 +689,8 @@ The email that reaches the owner says which item, how many, and **where that cop
 believed to be** - the same `Location` the My Inventory list shows, taken from the owner's own saved
 file at the moment the request was made. It is a place to look rather than a promise: an
 owner who moves the stack and saves again does not rewrite requests that are already
-waiting, and a standing offer carries no location to name.
+waiting, and a standing offer names the place it was marked in when the addon recorded one
+(1.11.10 and later); a file from an older build leaves that cell a dash.
 
 A request is recorded against the account you are browsing as - that is the character
 the owner is told to mail - so the account picker changes where a handover happens, not
@@ -933,7 +946,9 @@ handled by one process would otherwise never reach sockets held by another.
 what is actually on offer, so every OFFERED/RESERVED/AVAILABLE calculation is unaffected by
 a reserve. On a standing offer `held_quantity` is nullable, and null means the upload never
 said how many are held in the place the offer was marked: it is not read as zero, and not
-read as one copy either - the offer is simply not offered.
+read as one copy either - the offer is simply not offered. A written 0 is an answer in its
+own right: the offer stays on *My Inventory* with 0 offered, where its owner can see it, and
+is left off *Others Inventory*.
 
 A guild id and its world are the stable identity; names are display only, because names
 are neither unique nor stable.

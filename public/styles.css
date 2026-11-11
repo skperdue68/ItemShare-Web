@@ -454,12 +454,15 @@ code {
   color: #dbeafe;
 }
 
+/* The one place on the page the file goes, so it is tinted rather than drawn as another
+   dark panel: the account has one job here and this is where it starts. */
 .drop-zone {
   margin-top: 16px;
   padding: 26px 20px;
-  border: 1px dashed var(--panel-border-strong);
+  border: 2px dashed rgba(96, 165, 250, 0.62);
   border-radius: 14px;
-  background: rgba(7, 16, 38, 0.55);
+  background: rgba(37, 99, 235, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(148, 197, 255, 0.08);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -471,14 +474,14 @@ code {
 
 .drop-zone:hover,
 .drop-zone.dragging {
-  border-color: rgba(96, 165, 250, 0.85);
-  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(147, 197, 253, 0.95);
+  background: rgba(59, 130, 246, 0.3);
 }
 
 .drop-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  color: #e5e7eb;
+  color: #f8fafc;
 }
 
 .drop-file {
@@ -713,6 +716,43 @@ code {
   margin-left: 8px;
   color: var(--muted);
   font-weight: 600;
+}
+
+/* The two item tables are cut to the same widths, so a column of standing offers sits
+   exactly under the inventory column of the same name rather than near it. The widths are
+   on the <colgroup> both are drawn with, which only means anything under fixed layout: an
+   auto-laid-out table sizes a column by whatever happens to be in it, and the two tables
+   never hold the same rows. */
+.list-table {
+  table-layout: fixed;
+}
+
+.col-added {
+  width: 92px;
+}
+
+.col-num {
+  width: 58px;
+}
+
+.col-type {
+  width: 96px;
+}
+
+.col-trait {
+  width: 112px;
+}
+
+.col-location {
+  width: 150px;
+}
+
+.col-owner {
+  width: 132px;
+}
+
+.col-action {
+  width: 132px;
 }
 
 .table-shell {
@@ -1199,13 +1239,25 @@ a.primary-button {
   color: var(--muted);
 }
 
+/* The tab bar pins under the site header while a long list scrolls beneath it, so an
+   account with hundreds of rows never loses the way to the other tab. --sticky-top is the
+   header's own height, measured in app.js: the header grows when a basket joins it, and a
+   number guessed here would either leave a gap under the bar or hide the bar behind it.
+   The blur is the header's own treatment, so rows passing underneath do not smear through
+   the line of tabs. */
 .list-head {
-  position: relative;
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  z-index: 12;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   margin-bottom: 14px;
+  padding: 10px 0;
+  background: rgba(9, 20, 45, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .list-head .live-pill {
@@ -1446,6 +1498,23 @@ a.primary-button {
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--muted-strong);
+}
+
+/* The standing-offers heading takes the pinned row over from the tabs once it reaches them:
+   it comes later in the page and one step higher in the stack, so a bar of its own colour
+   covers the tab bar for as long as its own table is being read, and the tabs come back
+   when this section has passed. It bleeds out over the card's side padding, or the rows
+   still scrolling behind it would show beside the bar. */
+.subhead.list-sticky {
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  z-index: 14;
+  margin: 20px -24px 6px;
+  padding: 12px 24px 10px;
+  background: rgba(9, 20, 45, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .filter-clear {

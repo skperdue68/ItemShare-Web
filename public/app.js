@@ -21,6 +21,28 @@ function refreshAfterChange() {
   window.location.reload();
 }
 
+// ------------------------------------------------------------------ sticky bars
+// The tab bar and the standing-offers heading pin themselves under the site header, and
+// the header is the one thing whose height is not known here: it grows when a basket bar
+// joins it and when the account line wraps. Measuring it is cheaper than a guessed offset
+// that leaves a gap on one page and hides the bar behind the header on another.
+const stickyHeader = document.querySelector('.top-bar');
+
+if (stickyHeader) {
+  const setStickyTop = () => {
+    const height = Math.round(stickyHeader.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--sticky-top', `${height}px`);
+  };
+
+  setStickyTop();
+
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(setStickyTop).observe(stickyHeader);
+  } else {
+    window.addEventListener('resize', setStickyTop);
+  }
+}
+
 // ----------------------------------------------------------------- demo presence
 // A demo page keeps the sandbox alive: the server lets the demo's other guildmates act
 // only while at least one demo page is open, and this is how it knows. Nothing is sent
