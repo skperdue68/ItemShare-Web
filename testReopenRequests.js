@@ -57,6 +57,10 @@ function expiredRow(over = {}) {
     inventory_id: 7,
     inventory_count: 5,
     offer_id: null,
+    // The offer's own numbers, when the row is a standing offer: the file has to say what
+    // is held beyond the reserve before a copy can be promised.
+    offer_held: null,
+    offer_reserve: 0,
     requester_email: 'ghost@example.com',
     ...over,
   };
@@ -350,6 +354,7 @@ await tAsync('a standing offer already asked for is skipped', async () => {
         inventory_id: null,
         always_share_id: 9,
         offer_id: 9,
+        offer_held: 1,
         quantity: 1,
         item_name: 'Ring of the Twice-Born Star',
       }),
@@ -363,7 +368,7 @@ await tAsync('a standing offer already asked for is skipped', async () => {
   assert.equal(connection.updates.length, 0);
 });
 
-await tAsync('a standing offer that is free comes back as one copy', async () => {
+await tAsync('a standing offer whose place holds more than the reserve comes back as one copy', async () => {
   const connection = fakeConnection({
     rows: [
       expiredRow({
@@ -372,6 +377,8 @@ await tAsync('a standing offer that is free comes back as one copy', async () =>
         inventory_id: null,
         always_share_id: 9,
         offer_id: 9,
+        offer_held: 4,
+        offer_reserve: 3,
         quantity: 3,
         item_name: 'Ring of the Twice-Born Star',
       }),
@@ -381,6 +388,51 @@ await tAsync('a standing offer that is free comes back as one copy', async () =>
 
   assert.equal(report.reopened[0].quantity, 1);
   assert.deepEqual(connection.updates[0].params, [1, 1, 128]);
+});
+
+await tAsync('a standing offer whose file wrote no count is not reopened as one copy', async () => {
+  const connection = fakeConnection({
+    rows: [
+      expiredRow({
+        item_kind: 'offer',
+        shared_item_id: null,
+        inventory_id: null,
+        always_share_id: 9,
+        offer_id: 9,
+        offer_held: null,
+        quantity: 1,
+        item_name: 'Ring of the Twice-Born Star',
+      }),
+    ],
+  });
+  const report = await reopenExpiredRequests(connection, {});
+
+  assert.equal(report.reopened.length, 0, 'nothing is promised from an unknown number');
+  assert.match(report.skipped[0].reason, /does not say how many/);
+  assert.equal(connection.updates.length, 0);
+});
+
+await tAsync('a standing offer with every copy kept back is not reopened either', async () => {
+  const connection = fakeConnection({
+    rows: [
+      expiredRow({
+        item_kind: 'offer',
+        shared_item_id: null,
+        inventory_id: null,
+        always_share_id: 9,
+        offer_id: 9,
+        offer_held: 3,
+        offer_reserve: 3,
+        quantity: 1,
+        item_name: 'Ring of the Twice-Born Star',
+      }),
+    ],
+  });
+  const report = await reopenExpiredRequests(connection, {});
+
+  assert.equal(report.reopened.length, 0);
+  assert.match(report.skipped[0].reason, /nothing left to hand over/);
+  assert.equal(connection.updates.length, 0);
 });
 
 // ------------------------------------------------------------- what the operator reads

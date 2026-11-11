@@ -657,16 +657,18 @@ claimed plus whatever is already in your own basket, never more than the raw `it
 so two people can never be promised the same five. What is picked there is the total you
 want to hold, so the same item stays one row in the basket.
 
-A standing offer is a count too: **OFFERED** is what the owner holds less the amount they
-keep back, and **AVAILABLE** is that less whatever a request already stands on. A request
-button appears only while both are above zero - one copy per press - so an offer whose
-stock is all kept back, or whose copies are all spoken for, is not a row to ask from at
-all. It is not hidden while the owner has nothing in a bag, because the file no longer
-says: schema 4 keeps an always-shared item out of `sharedItems`, so the offer itself is the
-only evidence that the owner wants to hand it out. An offer whose file never wrote a count
-still means the one copy it always did, while a file that writes 0 means the owner holds
-none and shows no row at all. The server refuses more requests than there are
-copies, so two people cannot be promised the same handover.
+A standing offer is a count, not a guess: **OFFERED** is what the owner holds in the place
+they marked it, less the amount they keep back there, and **AVAILABLE** is that less
+whatever a request already stands on. A row is drawn - and a request button appears - only
+while the file says how many are held and that number is above the reserve: one copy per
+press. An offer whose stock is all kept back, whose copies are all spoken for, or whose
+count the file never wrote is not a row to ask from at all. Nothing is assumed in its
+place: a missing count used to read as one copy, which is how an emptied bag went on
+showing *Offered 1*. The count and the place come from the addon, so an upload from 1.11.10
+or later is what puts an offer on the list; a file from an older build carries no count for
+its offers, and they are not shown until the next upload. A file that writes 0 is an answer
+too: the owner holds none. The server refuses what the list will not draw, and reopening an
+expired request follows the same rule, so two people cannot be promised the same handover.
 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
@@ -919,7 +921,9 @@ handled by one process would otherwise never reach sockets held by another.
 `itemshare_shared_items` and `itemshare_always_share` both carry `held_quantity` and
 `reserve_quantity`: what was in the bag and what the owner keeps back. `item_count` stays
 what is actually on offer, so every OFFERED/RESERVED/AVAILABLE calculation is unaffected by
-a reserve.
+a reserve. On a standing offer `held_quantity` is nullable, and null means the upload never
+said how many are held in the place the offer was marked: it is not read as zero, and not
+read as one copy either - the offer is simply not offered.
 
 A guild id and its world are the stable identity; names are display only, because names
 are neither unique nor stable.

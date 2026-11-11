@@ -46,13 +46,15 @@ landed on `main`.
 
 ### Fixed
 
-- **A standing offer now offers what its owner actually has.** *Offered* is the copies they
-  hold less the amount they keep back, and *Available* is that less whatever a request is
-  already standing on. A request button only appears while both are above zero, so an offer
-  whose stock is all kept back, or whose copies are all spoken for, is not a row to ask from
-  at all. An offer whose file never wrote a count still means the one copy it always did,
-  while a file that writes 0 means the owner holds none: the two are stored apart, so an
-  emptied bag stops reading as one copy on offer.
+- **A standing offer now offers what its owner actually has, and never a guess.** *Offered*
+  is the copies they hold in the place they marked, less the amount they keep back there,
+  and *Available* is that less whatever a request is already standing on. A row is drawn,
+  and a request button appears, only while the file says how many are held and that number
+  is above the reserve: an offer whose stock is all kept back, whose copies are all spoken
+  for, or whose count the file never wrote is not a row to ask from. Nothing is assumed in
+  its place - a missing count used to read as one copy, which is how an emptied bag went on
+  offering one - so offers appear once an upload from addon 1.11.10 or later carries the
+  count and the place it was marked in. Reopening an expired request applies the same rule.
 
 - **An item's age is counted from a real UTC instant.** The elapsed time in **Added** came
   from a timestamp MariaDB had already converted into the database host's own time zone,
