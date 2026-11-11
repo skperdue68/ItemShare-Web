@@ -73,6 +73,12 @@ landed on `main`.
 
 ### Changed
 
+- **The line above the tabs names the account whose guildmates are listed.** It reads
+  *<n> items shared by members of @evainefaye's guilds*: the count is plural for anything
+  but one, zero included, and "guild" is singular only when the browsed-as account is in a
+  single guild. "different" and "other members" are gone, and a visitor with no account to
+  name still reads *shared by members of the guilds they share with*.
+
 - **The empty My Requests tab says where to ask.** It reads *You have no pending requests.
   Use the "Others Inventory" tab to request items*, centred with a little air above it like
   the other empty lists, instead of naming a tab that does not exist by that name.
