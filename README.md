@@ -1167,9 +1167,12 @@ real in the database, one at a time:
   a handover instead of asking for ever
 - **cancelling** - either a request already waiting, or one taken back out of the basket
 - **timing out** - the basket's deadline is pushed past, and the site's own sweeper runs
-- **re-saving** - items move between bags, bank and furnishing vault, stacks change and
-  pending requests are re-settled against the new file; logged as `<name> Inventory
-  Refreshed` with where each item landed
+- **re-saving** - items move between bags, bank, furnishing vault and the houses they are
+  placed in, stacks change and pending requests are re-settled against the new file;
+  logged as `<name> Inventory Refreshed` with where each item landed. Some of what these
+  people share stands in a house, written `Placed (Mournoth Keep)` the way a real file
+  writes it, so a row whose count only a `/ishare scan` can correct turns up without
+  waiting for one in game
 
 | Flag | Meaning |
 | --- | --- |
