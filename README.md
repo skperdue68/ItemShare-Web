@@ -449,10 +449,10 @@ as* control above the tabs picks it, and the choice is stored on the person
 signing out and follows you to another device. With a single account it is a label
 instead of a choice.
 
-The chosen account decides what **Request** shows: only items offered to guilds *that
-account* belongs to. **Offering** deliberately spans every linked account and names the
+The chosen account decides what **Others Inventory** shows: only items offered to guilds *that
+account* belongs to. **My Inventory** deliberately spans every linked account and names the
 account and character holding each item, so a second account never hides what the first
-one shares. **Your requests** covers everything you have asked for, from any account.
+one shares. **My Requests** covers everything you have asked for, from any account.
 
 The line under every item name carries the pieces that tell one copy from another, in
 the order a reader checks them: level, trait, crafting style, enchantment. Only the level
@@ -463,15 +463,15 @@ have is skipped rather than shown blank. A champion-point item shows its CP as t
 level - `Level CP160`, not the 50 every character has long passed. Two Briarheart daggers share a name, a
 set and a colour, so seeing that one is level 50 and *Precise* and the other level 10 and
 *Sharpened* should not mean scanning across to a column: the pieces sit where the name
-is, on **Request**, on **Offering** and on the owner's *Requests for your items* page.
+is, on **Others Inventory**, on **My Inventory** and on the owner's *Requests for your items* page.
 Every row also shows the owning account and quantity. `Location` is a column
-on **Offering** only, where it reads `Inventory (Character Name)` and the character is not
+on **My Inventory** only, where it reads `Inventory (Character Name)` and the character is not
 repeated beside the account: which bag a copy is in is the question the person handing it
-over has to answer, and nothing the person asking is helped by. **Request** leaves the
+over has to answer, and nothing the person asking is helped by. **Others Inventory** leaves the
 column out altogether, so the copy's whereabouts stay on the owner's side of the site.
 
-Three tabs keep the split obvious, so no row needs a "You" tag: **Request** (other
-people's items), **Offering** (your own), and **Your requests**.
+Three tabs keep the split obvious, so no row needs a "You" tag: **Others Inventory** (other
+people's items), **My Inventory** (your own), and **My Requests**.
 
 Rows sit under their item type, alphabetical inside each group, until you turn that off.
 The switch above the table reads **Grouped by type** or **One list** and flips between
@@ -482,7 +482,7 @@ to the whole list. A sort never moves a heading: **Added** newest-first puts the
 weapon first under Weapons, and Weapons is still where W falls in the alphabet.
 
 Every heading that has something to order by sorts: **Item**, **Added**, **Type**,
-**Trait**, **Location** (on **Offering**, where the column is drawn) and **Offered by**.
+**Trait**, **Location** (on **My Inventory**, where the column is drawn) and **Offered by**.
 Each cycles through three states on repeated clicks: ascending, descending, then off. As
 on the owner's requests page, several can be on at once. A press joins that column to the
 end of a queue, and each active heading carries its place as a small superscript before
@@ -497,7 +497,7 @@ so both survive a reload without ever appearing in the URL.
 On the row above the table, beside **Grouped by type**, **Search this list** narrows what is
 already on the page, and a cross at the end of the box empties it and puts the list back. It
 applies about a second after the last keystroke rather than on every letter, so a word is
-finished before the table redraws around it. Request and Offering each have their own box and
+finished before the table redraws around it. Others Inventory and My Inventory each have their own box and
 their own word: typing on one leaves the other list untouched, and switching tabs brings
 back that tab's word with the rows it narrows. Matching is partial and ignores case, and looks at everything a row says:
 the name, its type and trait, its enchantment, style and set, the storage place, and who
@@ -506,7 +506,7 @@ they take no part in the matching: a heading stays while any row under it matche
 when none do, until the search is cleared. Its count follows the search too, reading
 `(4 of 12)` while a term is narrowing the group and `(12)` again once it is cleared, so a
 heading never claims twelve rows above the four that are on screen. The search belongs to the lists of things on
-offer, so the box is not drawn while **Your requests** is open.
+offer, so the box is not drawn while **My Requests** is open.
 
 The owner's *Requests for your items* table sorts differently, because its four columns
 answer different questions and one order cannot serve all of them. `Item`, `Stored at`,
@@ -538,7 +538,7 @@ wherever the database host's own clock is set - and each reader still sees the c
 in their own time zone. Request times, `LAST CHANCE` and the *Added* windows measure from
 the same instant, as they always did.
 
-On **Offering**, `Location` is where the owner's copy was the last time they saved: `Bank`,
+On **My Inventory**, `Location` is where the owner's copy was the last time they saved: `Bank`,
 `Inventory (Character Name)`, `Furnishing Vault (...)`. An upload rewrites it, so moving
 something in game and saving again updates it without anyone touching the site.
 
@@ -642,33 +642,36 @@ already belongs to another sign-in, the request is refused rather than filed und
 somebody else's character.
 
 The two tabs that only make sense for somebody with items and requests of their own
-(**Offering** and **Your requests**) are not drawn for a visitor, so the page offers the
+(**My Inventory** and **My Requests**) are not drawn for a visitor, so the page offers the
 one list that applies. Nothing is hidden for effect: the list is real, and reading it is
 the reason the sign-in card sits above it rather than in front of it.
 
-The overlap is resolved per list: for the account you browse as in *Request*, and across
-every linked account in *Offering*.
+The overlap is resolved per list: for the account you browse as in *Others Inventory*, and across
+every linked account in *My Inventory*.
 
 ## Asking for something
 
-Every row in *Request* has a **Request** button that asks one of two things: **Request 1**,
+Every row in *Others Inventory* has a **Request** button that asks one of two things: **Request 1**,
 or **Request stack (N)** where N is everything still unclaimed. N is the copies nobody has
 claimed plus whatever is already in your own basket, never more than the raw `item_count`,
 so two people can never be promised the same five. What is picked there is the total you
 want to hold, so the same item stays one row in the basket.
 
-A standing offer has no count behind it, so it always means one copy, one at a time: it is
-listed as **Offered 1** until that copy is claimed, and then it leaves the list. It is not
-hidden while the owner has nothing in a bag, because the file no longer says: schema 4
-keeps an always-shared item out of `sharedItems`, so the offer itself is the only evidence
-that the owner wants to hand it out. The server refuses a second request for the same
-offer either way, so two people cannot be promised the same handover.
+A standing offer is a count too: **OFFERED** is what the owner holds less the amount they
+keep back, and **AVAILABLE** is that less whatever a request already stands on. A request
+button appears only while both are above zero - one copy per press - so an offer whose
+stock is all kept back, or whose copies are all spoken for, is not a row to ask from at
+all. It is not hidden while the owner has nothing in a bag, because the file no longer
+says: schema 4 keeps an always-shared item out of `sharedItems`, so the offer itself is the
+only evidence that the owner wants to hand it out, and a file that reports neither count
+still means the one copy it always did. The server refuses more requests than there are
+copies, so two people cannot be promised the same handover.
 
 When only one copy can be given, the button sends that request straight away rather than
 opening a dialog whose only answer is "one".
 
 The email that reaches the owner says which item, how many, and **where that copy was
-believed to be** - the same `Location` the Offering list shows, taken from the owner's own saved
+believed to be** - the same `Location` the My Inventory list shows, taken from the owner's own saved
 file at the moment the request was made. It is a place to look rather than a promise: an
 owner who moves the stack and saves again does not rewrite requests that are already
 waiting, and a standing offer carries no location to name.
@@ -720,7 +723,7 @@ picked rather than from the moment it is sent:
   cancelled with a sentence the requester can read: "Ghost Bane now has 2 of Briarheart
   Dagger, which does not cover the 3 you asked for." A row that merely moved is
   re-pointed by `item_key_hash` instead of being cancelled.
-- *Your requests* holds the basket and, below it, **Already sent**: only the requests
+- *My Requests* holds the basket and, below it, **Already sent**: only the requests
   that actually stand, newest first. A request that timed out or was cancelled is
   dropped rather than sitting in the list looking live; when a live update brings back a
   cancellation the page still says so in a toast, once.
@@ -1389,7 +1392,7 @@ kept - so a database dump is the whole backup.
 
 **After deploying, check:** the page loads over https, a sign-in round trip completes, an
 upload lands, the Request tab shows items, picking one shows the basket clock, sending it
-appears in *Your requests* with a send time, and
+appears in *My Requests* with a send time, and
 `SELECT filename FROM itemshare_schema_migrations;` lists migrations through `019`, an owner
 answers their request email, and the requester's list says what was handed over.
 

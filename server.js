@@ -813,7 +813,7 @@ async function viewerAccountNames(req, connection, user) {
 
         // Request is fetched twice on purpose: once for the chosen account, whose
         // guilds are the only ones its list may show, and once across every account
-        // for Offering, where nothing a second account shares should disappear.
+        // for My Inventory, where nothing a second account shares should disappear.
         const requestScope = data.browsingAccount ? [data.browsingAccount] : accountNames;
 
         // The basket note on a row is read by person, not by the account the row belongs
@@ -1693,7 +1693,7 @@ app.get('/owner/requests', async (req, res) => {
     );
   } catch (error) {
     sendPage(req, res, 500, {
-      heading: 'Your requests could not be loaded',
+      heading: 'My Requests could not be loaded',
       message: error.message,
       details: 'Nothing was changed. Try again in a moment.',
       tone: 'error',

@@ -83,19 +83,80 @@ await test('a live read for an old browsing account cannot cancel the newly sele
   assert(!queries.some(sql=>sql.includes('UPDATE itemshare_requests')));
 });
 
-await test('Your requests counts unsent drafts without submitted or cancelled history',()=>{
+await test('My Requests counts unsent drafts without submitted or cancelled history',()=>{
   const region=renderListRegion({...base,
     basketRows:[{id:1,status:'draft',quantity:1},{id:2,status:'cancelled',quantity:8}],
     requests:[{id:3,status:'pending'},{id:4,status:'fulfilled'},{id:5,status:'cancelled'}],
     requestHistory:{page:1,totalPages:3,total:12},
     filters:{search:'Briarheart'},
   });
-  assert.match(region,/id="tabMine"[\s\S]*?Your requests <span class="tab-count">1<\/span>/);
+  assert.match(region,/id="tabMine"[\s\S]*?My Requests <span class="tab-count">1<\/span>/);
   assert(!region.includes('Newest first, and only what you actually sent'));
   assert.match(region,/data-request-history-pages/);
   assert.match(region,/historyPage=2/);
   assert.match(region,/q=Briarheart/);
   assert(!region.includes('search=Briarheart'));
+});
+
+// ------------------------------------------- what a standing offer can hand over
+
+const guildBase={...base,accounts:[{accountName:'@fresh',guildCount:1,guilds:[{id:1}]}]};
+
+const offerRow=(extra)=>({
+  id:31,item_key_hash:'offer-hash',item_name:'Perfect Roe',item_id:60213,
+  account_name:'@owner',item_type_name:'Material',quality:4,...extra,
+});
+
+await test('an offer offers what its owner holds beyond the reserve',()=>{
+  const region=renderListRegion({...guildBase,requestOffers:[offerRow({held_quantity:8,reserve_quantity:3,reserved:2})]});
+  assert.match(region,/<td class="num">5<\/td>/,'offered is held less the reserve');
+  assert.match(region,/<td class="num held-cell">2<\/td>/,'reserved is what a request stands on');
+  assert.match(region,/<td class="num">3<\/td>/,'available is what is left of the offered');
+  assert.match(region,/data-request data-kind="offer" data-id="31"/);
+  assert.match(region,/Others Inventory <span class="tab-count">1<\/span>/);
+});
+
+await test('an offer with nothing left to hand over is not a row to ask from',()=>{
+  for(const extra of [{held_quantity:3,reserved:3},{held_quantity:5,reserve_quantity:5}]){
+    const region=renderListRegion({...guildBase,requestOffers:[offerRow(extra)]});
+    assert(!region.includes('Perfect Roe'),JSON.stringify(extra));
+    assert(!region.includes('data-kind="offer" data-id="31"'),JSON.stringify(extra));
+  }
+});
+
+await test('an offer whose file reports no counts still means one copy',()=>{
+  const region=renderListRegion({...guildBase,requestOffers:[offerRow()]});
+  assert.match(region,/data-request data-kind="offer" data-id="31"/);
+  assert.match(region,/<td class="num">1<\/td>/);
+});
+
+const offerTarget=(extra)=>({
+  id:34,account_name:'@owner',item_name:'Perfect Roe',item_id:60213,item_key_hash:'h',
+  icon_key:'',quality:4,item_type_name:'Material',trait:'',enchant_name:'',style_name:'',
+  required_level:0,required_cp:0,...extra,
+});
+
+await test('the server refuses an offer with nothing to hand over, before it writes',async()=>{
+  const queries=[];
+  const connection={execute:async(sql)=>{queries.push(sql);
+    if(/FROM itemshare_always_share a/.test(sql))return [[offerTarget({held_quantity:5,reserve_quantity:5})],[]];
+    return [[],[]];}};
+  await assert.rejects(
+    store.createRequest(connection,{userId:7,requesterAccounts:['@mine'],itemKind:'offer',itemId:34,quantity:1}),
+    (error)=>error.statusCode===409
+  );
+  assert(!queries.some((sql)=>sql.includes('INSERT INTO itemshare_requests')),'nothing is written');
+});
+
+await test('the server refuses more requests than an offer has copies',async()=>{
+  const connection={execute:async(sql)=>{
+    if(/FROM itemshare_always_share a/.test(sql))return [[offerTarget({held_quantity:3,reserve_quantity:0})],[]];
+    if(/itemshare_requests/.test(sql)&&/SUM/i.test(sql))return [[{reserved:3,total:3,n:3,quantity:3,sum:3}],[]];
+    return [[],[]];}};
+  await assert.rejects(
+    store.createRequest(connection,{userId:7,requesterAccounts:['@mine'],itemKind:'offer',itemId:34,quantity:1}),
+    (error)=>error.statusCode===409
+  );
 });
 
 await test('sent history has five rows per page, ordered by most recent completion/cancellation',async()=>{
