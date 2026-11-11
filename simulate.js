@@ -61,7 +61,22 @@ const warn = (text) => console.warn(`${LABEL}${stamp()} ${text}`);
 const fail = (text) => console.error(`${LABEL}${stamp()} ${text}`);
 
 const HOLD_MINUTES = 5;
-const LOCATIONS = ['Inventory', 'Bank', 'Furnishing Vault', 'Craft Bag'];
+// Where a simulated copy can stand. The two houses are here on purpose: a furnishing
+// placed in one is in no bag at all, so it is written as "Placed (Mournoth Keep)" and the
+// site cannot recount it - which is the label the answered-row notice keys off. Without a
+// house in this list nothing the simulation wrote ever carried one.
+//
+// The first house sits third rather than last so somebody's shelf holds a placed item from
+// the first save: the rotation is by round, and a house at the end of the list would only
+// reach the shorter catalogues after several rounds.
+const LOCATIONS = [
+  'Inventory',
+  'Bank',
+  'Placed (Mournoth Keep)',
+  'Furnishing Vault',
+  'Craft Bag',
+  "Placed (Autumn's Gate)",
+];
 
 // Three people, deliberately different: one has a lot of one thing, one has single
 // copies, one mostly hoards materials. What they hold changes between rounds.
