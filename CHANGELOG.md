@@ -73,6 +73,13 @@ landed on `main`.
 
 ### Changed
 
+- **Answering a placed furnishing says to rescan the house.** A share that stands in a
+  house - `Placed (Mournoth Keep)` - is invisible to every bag, so the site's count is only
+  as good as the last `/ishare scan`. The first time in a session that somebody fulfils one,
+  a dialog names the house and says to walk into it, run `/ishare scan`, then save and
+  upload their saved variables file, because that upload is what puts the new count on the
+  site. Once per tab, not once per row.
+
 - **The line above the tabs names the account whose guildmates are listed.** It reads
   *<n> items shared by members of @evainefaye's guilds*: the count is plural for anything
   but one, zero included, and "guild" is singular only when the browsed-as account is in a

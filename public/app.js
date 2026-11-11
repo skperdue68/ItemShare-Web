@@ -2181,6 +2181,14 @@ async function answerOwnerRequest(form, submitter = null) {
       showToast(recorded.textContent.trim(), 'ok');
     }
 
+    // The card names the house when the item just answered stands in one, where no bag can
+    // recount it; the first such answer in a session says what to do about it.
+    const placed = card ? card.querySelector('[data-house-rescan]') : null;
+
+    if (placed) {
+      noteHouseRescan(placed.getAttribute('data-house-rescan'));
+    }
+
     refreshAfterChange();
   } catch (error) {
     buttons.forEach((button) => {
@@ -2228,6 +2236,103 @@ document.addEventListener('submit', (event) => {
   event.preventDefault();
   answerOwnerRequest(form, event.submitter || null);
 });
+
+// ------------------------------------------- placed furnishings, once a session
+// A placed furnishing is not in any bag, so nothing on this site can count it: the row
+// reads "Placed (Mournoth Keep)" and its number stays what the last scan found, however
+// many copies have been picked up since. Answering one is therefore a handover whose
+// other half happens in the game, and the count of what is left has to come from a new
+// scan. The first answer of a session for a placed item says so, once, not once per row.
+const HOUSE_RESCAN_KEY = 'itemshare:house-rescan-notice';
+let houseRescanNotice = null;
+
+function closeHouseRescanNotice() {
+  if (houseRescanNotice) {
+    houseRescanNotice.remove();
+    houseRescanNotice = null;
+  }
+
+  document.removeEventListener('keydown', onHouseRescanKey);
+}
+
+function onHouseRescanKey(event) {
+  if (event.key === 'Escape') {
+    closeHouseRescanNotice();
+  }
+}
+
+function showHouseRescanNotice(where) {
+  closeHouseRescanNotice();
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="houseRescanTitle">
+      <h2 id="houseRescanTitle">Scan that house again</h2>
+      <p class="muted">
+        <strong data-house-where></strong> stands in a house rather than in a bag, so this
+        site cannot count it: the number here is still the one your last scan found.
+      </p>
+      <p class="muted">
+        Walk into that house and run <strong>/ishare scan</strong>, then save and upload your
+        saved variables file. That upload is what puts the new count on the site - until it
+        arrives, copies that are already gone are still being offered.
+      </p>
+      <div class="modal-actions">
+        <button class="primary-button" type="button" data-close-house-rescan>Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  houseRescanNotice = backdrop;
+  document.addEventListener('keydown', onHouseRescanKey);
+
+  // Written as text after the dialog is on the page: the name comes from a saved-variables
+  // file, so it is data, not markup.
+  const named = backdrop.querySelector('[data-house-where]');
+
+  if (named) {
+    named.textContent = String(where || '');
+  }
+
+  backdrop.addEventListener('click', (event) => {
+    if (
+      event.target === backdrop ||
+      (event.target.closest && event.target.closest('[data-close-house-rescan]'))
+    ) {
+      closeHouseRescanNotice();
+    }
+  });
+
+  const button = backdrop.querySelector('[data-close-house-rescan]');
+
+  if (button) {
+    button.focus();
+  }
+}
+
+/**
+ * Says it once per session. The session is the tab's: a second placed answer in the same
+ * tab is the same person already told, while a new tab is somebody starting again.
+ * Storage that refuses to be written - a private window - still gets the notice, because
+ * being told twice is better than never being told at all.
+ */
+function noteHouseRescan(where) {
+  if (!where) {
+    return;
+  }
+
+  try {
+    if (window.sessionStorage.getItem(HOUSE_RESCAN_KEY) === '1') {
+      return;
+    }
+
+    window.sessionStorage.setItem(HOUSE_RESCAN_KEY, '1');
+  } catch (error) {
+    // Nothing to remember it with, so say it and move on.
+  }
+
+  showHouseRescanNotice(where);
+}
 
 // ------------------------------------------------------------ leaving the page
 // The browser's own beforeunload dialog cannot be styled, so the prompt here is a
