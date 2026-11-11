@@ -2205,12 +2205,24 @@ let leavePrompt = null;
 let leaveConfirmed = false;
 let internalNavigation = false;
 
-// The inline onchange submits directly, which does not fire a submit event.
-// Capture the change before it runs: this switch keeps the same server-side bag.
+// Choosing an account posts the form from script, which does not fire a submit event, so
+// both things happen here: the navigation is marked as internal - the switch keeps the
+// same server-side bag - and the form is sent, taking the page back scoped to the account
+// that was picked.
 document.addEventListener('change', (event) => {
-  if (event.target.matches?.('#browsingAccount') &&
-      event.target.form?.getAttribute('action') === '/browsing-account') {
-    internalNavigation = true;
+  if (
+    !event.target.matches?.('[data-browsing-account]') ||
+    event.target.form?.getAttribute('action') !== '/browsing-account'
+  ) {
+    return;
+  }
+
+  internalNavigation = true;
+
+  const picked = event.target.closest?.('[data-browsing-account]');
+
+  if (picked && picked.form) {
+    picked.form.submit();
   }
 }, true);
 
@@ -2219,6 +2231,16 @@ document.addEventListener('submit', (event) => {
     internalNavigation = true;
   }
 }, true);
+
+// A <details> only closes from its own summary, so the picker's menu is closed by a click
+// anywhere else - the way the filter menus above the list behave.
+document.addEventListener('click', (event) => {
+  const open = document.querySelector('details[data-browsing-menu][open]');
+
+  if (open && !open.contains(event.target)) {
+    open.open = false;
+  }
+});
 
 function closeLeavePrompt() {
   if (leavePrompt) {
