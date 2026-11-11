@@ -33,7 +33,9 @@ function item(id, name, type, extra = {}) {
     item_name: name,
     item_type_name: type,
     item_count: 1,
-    held_quantity: 0,
+    // A standing offer fixture stands for a file that wrote no count, which is the one-copy
+    // offer these checks were written against; a written 0 would mean the owner holds none.
+    held_quantity: null,
     reserve_quantity: 0,
     quality: 4,
     trait: '',

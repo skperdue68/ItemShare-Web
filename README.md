@@ -663,8 +663,9 @@ button appears only while both are above zero - one copy per press - so an offer
 stock is all kept back, or whose copies are all spoken for, is not a row to ask from at
 all. It is not hidden while the owner has nothing in a bag, because the file no longer
 says: schema 4 keeps an always-shared item out of `sharedItems`, so the offer itself is the
-only evidence that the owner wants to hand it out, and a file that reports neither count
-still means the one copy it always did. The server refuses more requests than there are
+only evidence that the owner wants to hand it out. An offer whose file never wrote a count
+still means the one copy it always did, while a file that writes 0 means the owner holds
+none and shows no row at all. The server refuses more requests than there are
 copies, so two people cannot be promised the same handover.
 
 When only one copy can be given, the button sends that request straight away rather than

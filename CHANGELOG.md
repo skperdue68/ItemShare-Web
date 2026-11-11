@@ -50,8 +50,9 @@ landed on `main`.
   hold less the amount they keep back, and *Available* is that less whatever a request is
   already standing on. A request button only appears while both are above zero, so an offer
   whose stock is all kept back, or whose copies are all spoken for, is not a row to ask from
-  at all. A file that reports neither count for its standing offers still means the one copy
-  it always did, rather than quietly losing the offer.
+  at all. An offer whose file never wrote a count still means the one copy it always did,
+  while a file that writes 0 means the owner holds none: the two are stored apart, so an
+  emptied bag stops reading as one copy on offer.
 
 - **An item's age is counted from a real UTC instant.** The elapsed time in **Added** came
   from a timestamp MariaDB had already converted into the database host's own time zone,
