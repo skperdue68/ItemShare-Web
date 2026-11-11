@@ -73,6 +73,23 @@ landed on `main`.
 
 ### Changed
 
+- **The upload box stands out.** The one place the file goes is tinted blue with a brighter
+  dashed edge instead of being another dark panel, so the first step on the page is the
+  thing the eye lands on.
+- **A standing offer holding nothing stays on My Inventory**, with **0** in OFFERED and
+  AVAILABLE. An offer that has run dry used to disappear from both lists; now its owner can
+  see it is still standing, while *Others Inventory* goes on leaving it out - nothing is
+  there to ask for. A count the file never wrote is still not a row.
+- **Standing offers carry the place they are offered from**, and are drawn with the
+  inventory table's own columns: TYPE, TRAIT and LOCATION join ADDED, OFFERED, RESERVED,
+  AVAILABLE and OFFERED BY, in the same order and at the same widths, so a column of offers
+  lines up under the column above it. The addon that records an offer's count also records
+  the place it was marked in (1.11.10); a file from an older build leaves that cell blank.
+- **The line of tabs pins to the top** once a list is long enough to scroll, so My
+  Inventory and Others Inventory stay reachable from anywhere down the page. Reaching the
+  standing offers hands the pinned row to that heading, and the tabs come back when the
+  section has passed.
+
 - **The account picker is the filter menu now.** *Browsing as* was a native dropdown, and
   the list a browser draws for one is not the site's to style: no dark card, no row that
   lightens under the pointer, no rounded corners - which is why it never looked like the

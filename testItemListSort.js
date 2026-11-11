@@ -172,10 +172,11 @@ t('rows the queue cannot separate keep a stable order', () => {
   assert.match(orderFor('i', []), /i\.item_name ASC, i\.account_name ASC, i\.id ASC$/);
 });
 
-t('the offering table can be ordered without a location column', () => {
-  const sql = orderFor('a', queue(['name', 'asc']).filter((entry) => entry.field !== 'location'));
+t('the offering table is ordered by location too, now that it draws the column', () => {
+  const sql = orderFor('a', queue(['location', 'asc'], ['name', 'desc']));
 
-  assert.match(sql, /a\.item_name ASC/);
+  assert.match(sql, /a\.location_label ASC/);
+  assert.match(sql, /a\.item_name DESC/);
 });
 
 // ------------------------------------------------------------- the headings
@@ -241,10 +242,63 @@ t('Request can be found by the same things, minus the storage place', () => {
   assert.doesNotMatch(html, /data-search="[^"]*Bank 3[^"]*"/);
 });
 
-t('a standing offer has no location to be found by', () => {
+t('an offer of your own can be found by the bag it counts', () => {
+  const html = offerTable(rows, { mine: true, filters: {} });
+
+  assert.match(html, /data-search="Briarheart Dagger Weapons Sharpened Bank 3 @eva"/);
+});
+
+t('somebody else’s offer keeps their storage out of the search', () => {
   const html = offerTable(rows, { mine: false, filters: {} });
 
   assert.match(html, /data-search="Briarheart Dagger Weapons Sharpened @eva"/);
+  assert.doesNotMatch(html, /data-search="[^"]*Bank 3[^"]*"/);
+});
+
+t('the closing table carries the list’s headings, in its order', () => {
+  const headings = (html) => [...html.matchAll(/<th\b/g)].length;
+  const sortable = (html) => [...html.matchAll(/data-sort="([a-z]+)"/g)].map((match) => match[1]);
+
+  for (const mine of [false, true]) {
+    const inventory = inventoryTable(rows, { mine, filters: {} });
+    const offers = offerTable(rows, { mine, filters: {} });
+
+    assert.equal(headings(offers), headings(inventory), `same number of columns, mine=${mine}`);
+    assert.deepEqual(sortable(offers), sortable(inventory), `same headings, mine=${mine}`);
+  }
+
+  assert.deepEqual(sortable(offerTable(rows, { mine: true, filters: {} })), [
+    'name', 'added', 'type', 'trait', 'location', 'owner',
+  ]);
+  assert.deepEqual(sortable(offerTable(rows, { mine: false, filters: {} })), [
+    'name', 'added', 'type', 'trait', 'owner',
+  ]);
+});
+
+t('both tables are cut to the same widths', () => {
+  const columns = (html) => (html.match(/<colgroup>[\s\S]*?<\/colgroup>/) || [''])[0];
+
+  for (const mine of [false, true]) {
+    assert.equal(
+      columns(offerTable(rows, { mine, filters: {} })),
+      columns(inventoryTable(rows, { mine, filters: {} })),
+      `the same <colgroup>, mine=${mine}`
+    );
+  }
+
+  assert.doesNotMatch(columns(offerTable(rows, { mine: false, filters: {} })), /col-location/);
+  assert.match(columns(offerTable(rows, { mine: true, filters: {} })), /col-location/);
+});
+
+t('a standing offer row fills every column its headings name', () => {
+  for (const mine of [false, true]) {
+    const html = offerTable([rows[0]], { mine, filters: {} });
+    const columns = [...html.matchAll(/<th\b/g)].length;
+    const body = html.slice(html.indexOf('<tbody>'));
+    const cells = [...body.slice(0, body.indexOf('</tr>')).matchAll(/<td\b/g)].length;
+
+    assert.equal(cells, columns, `mine=${mine}`);
+  }
 });
 
 t('the heading row holds a search box with a cross to clear it', () => {
