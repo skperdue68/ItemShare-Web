@@ -533,9 +533,10 @@ The age beside it is counted from a real UTC instant. Every connection is put in
 (`useUtcSession` in `lib/database.js`, and `timezone: '+00:00'` so the driver reads a date
 column as the same instant rather than as the server's own clock), and the lists ask for
 `UNIX_TIMESTAMP(first_seen_at)`
-rather than formatting the column, so an item offered a minute ago reads as a minute
+rather than formatting the column, so an item offered a minute ago reads as `01m 00s`
 wherever the database host's own clock is set - and each reader still sees the count run
-in their own time zone. Request times, `LAST CHANCE` and the *Added* windows measure from
+in their own time zone. The seconds stay in the count at every age, written as `00s` on a
+whole minute, so the field does not drop out and come back as the count rolls over. Request times, `LAST CHANCE` and the *Added* windows measure from
 the same instant, as they always did.
 
 On **My Inventory**, `Location` is where the owner's copy was the last time they saved: `Bank`,

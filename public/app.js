@@ -2641,10 +2641,12 @@ function animatePanelHeights(root, heights) {
 //
 // Units are counted the way a person counts: years and months first, anchored on the
 // original date so a month-end does not skip a month, then days, hours, minutes, seconds.
-// A unit that is zero is left out, because zero is not news: "12s", "08m 41s",
-// "01y 04mo 19d 07h 33m 05s". Every unit that is shown keeps two digits, so a column
-// right-aligns and the older rows never shift sideways as a count goes from one digit to
-// two. One timer drives every cell on the page, and a cell whose text has not changed is
+// Every unit but the seconds is left out when it is zero, because zero is not news:
+// "12s", "08m 41s", "01y 04mo 19d 07h 33m 05s". The seconds are written every time, as
+// 00s at a whole minute: the cell is rewritten each second, and a field that vanished and
+// came back read as a flicker rather than a count. Every unit shown keeps two digits, so a
+// column right-aligns and the older rows never shift sideways as a count goes from one
+// digit to two. One timer drives every cell on the page, and a cell whose text has not changed is
 // not written to, so a long list costs only the arithmetic per tick.
 const RELATIVE_TICK_MS = 1000;
 const MINUTE_MS = 60 * 1000;
@@ -2706,7 +2708,8 @@ function relativeUnits(from, to) {
 }
 
 /**
- * "01y 04mo 19d 07h 33m 05s", skipping the units that are zero, and "just now" at zero.
+ * "01y 04mo 19d 07h 33m 05s", skipping the units that are zero except the seconds, and
+ * "just now" at zero.
  *
  * Each unit is two digits wide for the same reason a clock is: the countdown is read as a
  * column, and "1m" growing to "10m" must not push the rest of the row along with it.
@@ -2721,9 +2724,14 @@ function relativeText(from, to) {
   if (units.days) parts.push(`${pad(units.days)}d`);
   if (units.hours) parts.push(`${pad(units.hours)}h`);
   if (units.minutes) parts.push(`${pad(units.minutes)}m`);
-  if (units.seconds) parts.push(`${pad(units.seconds)}s`);
 
-  return parts.length > 0 ? parts.join(' ') : 'just now';
+  // Seconds are the one field that is always written, even as 00s. The cell is rewritten
+  // once a second, and a unit that disappeared at a whole minute and came back a second
+  // later made the count flicker instead of tick.
+  const nothingYet = parts.length === 0 && units.seconds === 0;
+  if (!nothingYet) parts.push(`${pad(units.seconds)}s`);
+
+  return nothingYet ? 'just now' : parts.join(' ');
 }
 
 /** Rewrites every countdown under `root`, and puts the exact local time in its tooltip. */
