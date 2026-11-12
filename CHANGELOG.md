@@ -73,6 +73,11 @@ landed on `main`.
 
 ### Changed
 
+- **The search and the grouping switch stay put.** They pin under the tab bar the way the
+  tabs pin under the site header, so scrolling a long list no longer costs you the box you
+  narrow it with or the switch that decides whether it is cut into types. The column
+  headings move down to sit under them, so the first row of data never rides up between the
+  two bars.
 - **The Added count keeps its seconds.** They are written as `00s` on a whole minute
   rather than being left out, so the last field no longer disappears for a moment and comes
   back a second later - the count ticks instead of flickering.

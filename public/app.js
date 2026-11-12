@@ -22,22 +22,39 @@ function refreshAfterChange() {
 }
 
 // ------------------------------------------------------------------ sticky bars
-// The line of tabs and the column headings under it pin to the top of the window as one
-// block, so a long list keeps both which list it is and what each column is. Neither offset
-// can live in the stylesheet: the site header is as tall as the account line and the basket
-// bar make it, and the tab row is as tall as the tabs in it. Both are measured here and
-// published as custom properties for the stylesheet to add up.
+// The line of tabs, the search row under it and the column headings under that pin to the
+// top of the window as one block, so a long list keeps which list it is, what is in it and
+// what each column is. None of the three offsets can live in the stylesheet: the site header
+// is as tall as the account line and the basket bar make it, the tab row is as tall as the
+// tabs in it, and the search row is as tall as the box in it (and is not there at all on a
+// table that carries no search). All three are measured here and published as custom
+// properties for the stylesheet to add up.
 function measureStickyBars() {
   const root = document.documentElement;
 
+  const publishPixels = (name, pixels) => {
+    const value = `${Math.round(pixels)}px`;
+    if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+  };
+
   const publish = (name, element) => {
     if (!element) return;
-    const value = `${Math.round(element.getBoundingClientRect().height)}px`;
-    if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+    publishPixels(name, element.getBoundingClientRect().height);
   };
 
   publish('--sticky-top', document.querySelector('.top-bar'));
   publish('--list-head-h', document.querySelector('.list-head'));
+
+  // The tallest search row on the page, because a card can hold two tables that each carry
+  // one and the headings have to clear whichever stands over them. Nothing on the page means
+  // 0px, which leaves the headings exactly where they were.
+  publishPixels(
+    '--list-tools-h',
+    [...document.querySelectorAll('.list-tools')].reduce(
+      (tallest, bar) => Math.max(tallest, bar.getBoundingClientRect().height),
+      0
+    )
+  );
 }
 
 measureStickyBars();
