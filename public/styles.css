@@ -783,6 +783,13 @@ th {
   z-index: 11;
 }
 
+/* A table with the search row above it pins its headings under that row as well, or the
+   first row of data rides up between the two bars. Only the tables that carry the row: the
+   closing offers table without a search of its own has no bar to clear. */
+.list-tools + .table-shell .list-table thead th {
+  top: calc(var(--sticky-top, 0px) + var(--list-head-h, 0px) + var(--list-tools-h, 0px));
+}
+
 tbody tr:hover {
   background: rgba(37, 99, 235, 0.08);
 }
@@ -2961,12 +2968,27 @@ th.action-cell {
 /* ------------------------------------------------------------ grouping the list */
 /* Above the table: one small switch for how the whole list is read - under type
    headings, or flat in whatever order the columns were asked for. */
+/* The search and the grouping switch pin under the tab bar, the way the tab bar pins under
+   the site header: a list long enough to scroll should never cost you the box you narrow it
+   with, or the switch that decides whether it is cut into types. --list-tools-h is this
+   bar's own height, measured in app.js, because the column headings pin directly under it
+   and a number guessed here would leave a strip of scrolling rows between the two bars. */
 .list-tools {
+  position: sticky;
+  top: calc(var(--sticky-top, 0px) + var(--list-head-h, 0px));
+  /* Above the column headings it pins over, below the subhead that takes the pinned row over
+     further down the page. */
+  z-index: 13;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  margin: 0 0 10px;
+  /* The space below is padding rather than margin, for the same reason the tab bar's is. */
+  margin: 0;
+  padding: 0 0 10px;
+  background: rgba(9, 20, 45, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .group-toggle {
