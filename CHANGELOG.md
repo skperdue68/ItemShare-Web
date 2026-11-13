@@ -53,6 +53,15 @@ landed on `main`.
 
 ### Fixed
 
+- **A share keeps the date it was first added.** An upload that matched an item already on
+  the table rewrote the whole row, the moment it arrived included, so an item handed out
+  and shared again - or the same item shared from a second character on the account - took
+  the later date and read as new. Everything else about the row is still refreshed: the
+  count, the place it sits, the last time it was seen. Only the arrival date is held, and
+  when two files disagree about it the older one wins; a row still goes when a scan no
+  longer finds the item, and coming back after that is a fresh arrival. Standing offers
+  keep their own first date the same way.
+
 - **A standing offer now offers what its owner actually has, and never a guess.** *Offered*
   is the copies they hold in the place they marked, less the amount they keep back there,
   and *Available* is that less whatever a request is already standing on. A row is drawn,
