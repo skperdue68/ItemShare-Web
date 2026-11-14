@@ -53,11 +53,21 @@ landed on `main`.
 
 ### Fixed
 
-- **The date an item was first offered is read from where the addon keeps it now.** 1.11.39
-  moved it off each share row and onto the item itself, once per item link, so the same
-  thing standing in the bank and again in a house carries one date instead of two that could
-  disagree. Files written before that still read their row copy, and a link with no date in
-  either place is stored as 0 rather than guessed at.
+- **The date an item was first offered is read from the item, not the row.** 1.11.39 keeps
+  one date per item link in `itemFirstDumped`, beside the item list, and clears the copy it
+  used to write on every share row. So one thing standing in the bank and again in a house
+  reports one date, and the addon's own LAST CHANCE badge and this list finally measure the
+  same day. A row whose link has no date in that table is stored as 0 rather than borrowing
+  another row's.
+- **A share keeps the date it was first added.** An upload that matched an item already on
+  the table rewrote the whole row, the moment it arrived included, so an item handed out
+  and shared again - or the same item shared from a second character on the account - took
+  the later date and read as new. Everything else about the row is still refreshed: the
+  count, the place it sits, the last time it was seen. Only the arrival date is held, and
+  when two files disagree about it the older one wins; a row still goes when a scan no
+  longer finds the item, and coming back after that is a fresh arrival. Standing offers
+  keep their own first date the same way.
+
 - **A standing offer now offers what its owner actually has, and never a guess.** *Offered*
   is the copies they hold in the place they marked, less the amount they keep back there,
   and *Available* is that less whatever a request is already standing on. A row is drawn,
@@ -78,6 +88,11 @@ landed on `main`.
 
 ### Changed
 
+- **The search and the grouping switch stay put.** They pin under the tab bar the way the
+  tabs pin under the site header, so scrolling a long list no longer costs you the box you
+  narrow it with or the switch that decides whether it is cut into types. The column
+  headings move down to sit under them, so the first row of data never rides up between the
+  two bars.
 - **The Added count keeps its seconds.** They are written as `00s` on a whole minute
   rather than being left out, so the last field no longer disappears for a moment and comes
   back a second later - the count ticks instead of flickering.
