@@ -53,6 +53,11 @@ landed on `main`.
 
 ### Fixed
 
+- **The date an item was first offered is read from where the addon keeps it now.** 1.11.39
+  moved it off each share row and onto the item itself, once per item link, so the same
+  thing standing in the bank and again in a house carries one date instead of two that could
+  disagree. Files written before that still read their row copy, and a link with no date in
+  either place is stored as 0 rather than guessed at.
 - **A standing offer now offers what its owner actually has, and never a guess.** *Offered*
   is the copies they hold in the place they marked, less the amount they keep back there,
   and *Available* is that less whatever a request is already standing on. A row is drawn,

@@ -99,6 +99,74 @@ t('a nonsense expireDays is clamped rather than trusted', () => {
   );
 });
 
+// ------------------------------------------------------- where the date lives now
+
+// 1.11.39 keeps the date once per item link, beside the item list, and clears the copy on
+// the row. Two places keeping the same item are one offer, so both rows report one day.
+function fileWithTable(tableBody) {
+  return `ItemShareSavedVars =
+{
+    ["Default"] =
+    {
+        ["@Tester"] =
+        {
+            ["$AccountWide"] =
+            {
+                ["platformRaw"] = 2,
+                ["worldName"] = "NA Megaserver",
+                ["itemFirstDumped"] = { ${tableBody} },
+                ["sharedItems"] =
+                {
+                    [1] =
+                    {
+                        ["itemName"] = "Ring of the Gorethief",
+                        ["itemLink"] = "|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h",
+                        ["locationKey"] = "bank",
+                        ["count"] = 1,
+                    },
+                    [2] =
+                    {
+                        ["itemName"] = "Ring of the Gorethief",
+                        ["itemLink"] = "|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h",
+                        ["locationKey"] = "house",
+                        ["sharedFrom"] = "Placed (Mournoth Keep)",
+                        ["count"] = 1,
+                    },
+                },
+            },
+        },
+    },
+}
+`;
+}
+
+t('every row of a link reports the day the item was first offered', () => {
+  const link = extractShareData(file('')).items[0].itemLink;
+  const parsed = extractShareData(fileWithTable(`["${link}"] = 1700000000,`));
+
+  assert.equal(parsed.items.length, 2, 'both places were read');
+  assert.deepEqual(
+    parsed.items.map((row) => row.firstDumpedAt),
+    [1700000000, 1700000000],
+    'the bank copy and the house copy agree, and neither is 0'
+  );
+});
+
+t('a file that still carries the date only on the row is read from the row', () => {
+  const parsed = extractShareData(file(''));
+
+  assert.equal(parsed.items[0].firstDumpedAt, 1794000000);
+});
+
+t('a zero in the table is not an answer, so the row copy is used', () => {
+  const link = extractShareData(file('')).items[0].itemLink;
+  const parsed = extractShareData(
+    file(`\n                ["itemFirstDumped"] = { ["${link}"] = 0 },`)
+  );
+
+  assert.equal(parsed.items[0].firstDumpedAt, 1794000000);
+});
+
 // ------------------------------------------------------------------ the row
 
 t('an expiring row carries the pill and its tooltip', () => {
