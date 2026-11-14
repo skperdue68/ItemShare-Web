@@ -36,7 +36,11 @@ function file(scopeExtra) {
             ["$AccountWide"] =
             {
                 ["platformRaw"] = 2,
-                ["worldName"] = "NA Megaserver",${scopeExtra}
+                ["worldName"] = "NA Megaserver",
+                ["itemFirstDumped"] =
+                {
+                    ["|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h"] = 1794000000,
+                },${scopeExtra}
                 ["sharedItems"] =
                 {
                     [1] =
@@ -45,7 +49,6 @@ function file(scopeExtra) {
                         ["itemLink"] = "|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h",
                         ["itemTypeName"] = "Apparel",
                         ["count"] = 1,
-                        ["firstDumpedAt"] = 1794000000,
                         ["lastDumpedAt"] = 1794000000,
                     },
                 },
@@ -97,6 +100,91 @@ t('a nonsense expireDays is clamped rather than trusted', () => {
     extractShareData(file('\n                ["expireDays"] = 999999,')).accountExpiryDays.get('@Tester'),
     3650
   );
+});
+
+// ------------------------------------------------------- where the date lives now
+
+// 1.11.39 keeps the date once per item link, beside the item list, and clears the copy on
+// the row. Two places keeping the same item are one offer, so both rows report one day -
+// and a row whose link is not in the table reports nothing rather than borrowing a date.
+function fileWithTable(tableBody) {
+  return `ItemShareSavedVars =
+{
+    ["Default"] =
+    {
+        ["@Tester"] =
+        {
+            ["$AccountWide"] =
+            {
+                ["platformRaw"] = 2,
+                ["worldName"] = "NA Megaserver",
+                ["itemFirstDumped"] = { ${tableBody} },
+                ["sharedItems"] =
+                {
+                    [1] =
+                    {
+                        ["itemName"] = "Ring of the Gorethief",
+                        ["itemLink"] = "|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h",
+                        ["locationKey"] = "bank",
+                        ["count"] = 1,
+                    },
+                    [2] =
+                    {
+                        ["itemName"] = "Ring of the Gorethief",
+                        ["itemLink"] = "|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h",
+                        ["locationKey"] = "house",
+                        ["sharedFrom"] = "Placed (Mournoth Keep)",
+                        ["count"] = 1,
+                    },
+                },
+            },
+        },
+    },
+}
+`;
+}
+
+t('every row of a link reports the day the item was first offered', () => {
+  const link = extractShareData(file('')).items[0].itemLink;
+  const parsed = extractShareData(fileWithTable(`["${link}"] = 1700000000,`));
+
+  assert.equal(parsed.items.length, 2, 'both places were read');
+  assert.deepEqual(
+    parsed.items.map((row) => row.firstDumpedAt),
+    [1700000000, 1700000000],
+    'the bank copy and the house copy agree, and neither is 0'
+  );
+});
+
+t('the date comes from the table, not from a copy left on the row', () => {
+  const parsed = extractShareData(file(''));
+  const link = parsed.items[0].itemLink;
+
+  assert.equal(parsed.items[0].firstDumpedAt, 1794000000, 'read from the table');
+
+  const without = extractShareData(file('').replace(link, '|H1:item:999:0|h|h'));
+
+  assert.equal(
+    without.items[0].firstDumpedAt,
+    0,
+    'a link the table does not name is not given another row\'s date'
+  );
+});
+
+t('the Added cell shows the date the owner\'s file gave the item', () => {
+  const html = inventoryTable(
+    [item({ added_at_iso: '2025-03-04T05:06:07Z' })],
+    { mine: false, filters: {} }
+  );
+
+  assert.match(html, /datetime="2025-03-04T05:06:07Z"/, 'the item\'s own date, not today');
+  assert.doesNotMatch(html, /datetime="2026-10-01T10:00:00Z"/, 'not the day it reached us');
+});
+
+t('a row with no date from the file still shows the day the site saw it', () => {
+  const html = inventoryTable([item({})], { mine: false, filters: {} });
+
+  assert.match(html, /datetime="2026-10-01T10:00:00Z"/);
 });
 
 // ------------------------------------------------------------------ the row

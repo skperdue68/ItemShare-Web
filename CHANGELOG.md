@@ -53,6 +53,12 @@ landed on `main`.
 
 ### Fixed
 
+- **The date an item was first offered is read from the item, not the row.** 1.11.39 keeps
+  one date per item link in `itemFirstDumped`, beside the item list, and clears the copy it
+  used to write on every share row. So one thing standing in the bank and again in a house
+  reports one date, and the addon's own LAST CHANCE badge and this list finally measure the
+  same day. A row whose link has no date in that table is stored as 0 rather than borrowing
+  another row's.
 - **A share keeps the date it was first added.** An upload that matched an item already on
   the table rewrote the whole row, the moment it arrived included, so an item handed out
   and shared again - or the same item shared from a second character on the account - took
@@ -82,6 +88,13 @@ landed on `main`.
 
 ### Changed
 
+- **ADDED means the day the item was added, not the day it reached this site.** The column,
+  the countdown under it, the day filters, the LAST CHANCE pill and the ADDED sort are all
+  measured from the date the owner's own file carries for that item - `firstDumpedAt`, kept
+  once per item link since 1.11.39 - so an item shared again after a handover, or shared
+  from a second character, reads as old instead of looking new. A row whose file carried no
+  date at all still falls back to the day this site first saw it, which is what every row
+  showed before this.
 - **The search and the grouping switch stay put.** They pin under the tab bar the way the
   tabs pin under the site header, so scrolling a long list no longer costs you the box you
   narrow it with or the switch that decides whether it is cut into types. The column
