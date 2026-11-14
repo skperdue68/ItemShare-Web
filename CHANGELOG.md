@@ -88,6 +88,13 @@ landed on `main`.
 
 ### Changed
 
+- **ADDED means the day the item was added, not the day it reached this site.** The column,
+  the countdown under it, the day filters, the LAST CHANCE pill and the ADDED sort are all
+  measured from the date the owner's own file carries for that item - `firstDumpedAt`, kept
+  once per item link since 1.11.39 - so an item shared again after a handover, or shared
+  from a second character, reads as old instead of looking new. A row whose file carried no
+  date at all still falls back to the day this site first saw it, which is what every row
+  showed before this.
 - **The search and the grouping switch stay put.** They pin under the tab bar the way the
   tabs pin under the site header, so scrolling a long list no longer costs you the box you
   narrow it with or the switch that decides whether it is cut into types. The column

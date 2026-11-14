@@ -36,7 +36,11 @@ function file(scopeExtra) {
             ["$AccountWide"] =
             {
                 ["platformRaw"] = 2,
-                ["worldName"] = "NA Megaserver",${scopeExtra}
+                ["worldName"] = "NA Megaserver",
+                ["itemFirstDumped"] =
+                {
+                    ["|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h"] = 1794000000,
+                },${scopeExtra}
                 ["sharedItems"] =
                 {
                     [1] =
@@ -45,7 +49,6 @@ function file(scopeExtra) {
                         ["itemLink"] = "|H1:item:12345:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0|h|h",
                         ["itemTypeName"] = "Apparel",
                         ["count"] = 1,
-                        ["firstDumpedAt"] = 1794000000,
                         ["lastDumpedAt"] = 1794000000,
                     },
                 },
@@ -102,7 +105,8 @@ t('a nonsense expireDays is clamped rather than trusted', () => {
 // ------------------------------------------------------- where the date lives now
 
 // 1.11.39 keeps the date once per item link, beside the item list, and clears the copy on
-// the row. Two places keeping the same item are one offer, so both rows report one day.
+// the row. Two places keeping the same item are one offer, so both rows report one day -
+// and a row whose link is not in the table reports nothing rather than borrowing a date.
 function fileWithTable(tableBody) {
   return `ItemShareSavedVars =
 {
@@ -152,19 +156,35 @@ t('every row of a link reports the day the item was first offered', () => {
   );
 });
 
-t('a file that still carries the date only on the row is read from the row', () => {
+t('the date comes from the table, not from a copy left on the row', () => {
   const parsed = extractShareData(file(''));
+  const link = parsed.items[0].itemLink;
 
-  assert.equal(parsed.items[0].firstDumpedAt, 1794000000);
+  assert.equal(parsed.items[0].firstDumpedAt, 1794000000, 'read from the table');
+
+  const without = extractShareData(file('').replace(link, '|H1:item:999:0|h|h'));
+
+  assert.equal(
+    without.items[0].firstDumpedAt,
+    0,
+    'a link the table does not name is not given another row\'s date'
+  );
 });
 
-t('a zero in the table is not an answer, so the row copy is used', () => {
-  const link = extractShareData(file('')).items[0].itemLink;
-  const parsed = extractShareData(
-    file(`\n                ["itemFirstDumped"] = { ["${link}"] = 0 },`)
+t('the Added cell shows the date the owner\'s file gave the item', () => {
+  const html = inventoryTable(
+    [item({ added_at_iso: '2025-03-04T05:06:07Z' })],
+    { mine: false, filters: {} }
   );
 
-  assert.equal(parsed.items[0].firstDumpedAt, 1794000000);
+  assert.match(html, /datetime="2025-03-04T05:06:07Z"/, 'the item\'s own date, not today');
+  assert.doesNotMatch(html, /datetime="2026-10-01T10:00:00Z"/, 'not the day it reached us');
+});
+
+t('a row with no date from the file still shows the day the site saw it', () => {
+  const html = inventoryTable([item({})], { mine: false, filters: {} });
+
+  assert.match(html, /datetime="2026-10-01T10:00:00Z"/);
 });
 
 // ------------------------------------------------------------------ the row
